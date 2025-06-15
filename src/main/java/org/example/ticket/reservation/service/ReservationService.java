@@ -77,7 +77,6 @@ public class ReservationService {
                 .orElseThrow(() -> new EntityNotFoundException("예약 정보를 확인할 수 없습니다."));
 
 
-
         if(!reservation.getReservationStatus().equals(ReservationStatus.PENDING_PAYMENT)) {
             throw new EntityNotFoundException("결제 정보를 확인할 수 없거나 , 결제가 완료된 티켓입니다."); // custom Exception
         }

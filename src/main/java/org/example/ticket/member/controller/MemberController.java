@@ -2,7 +2,7 @@ package org.example.ticket.member.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.member.dto.request.RegisterRequest;
+import org.example.ticket.member.request.RegisterRequest;
 import org.example.ticket.member.service.AuthenticationService;
 import org.example.ticket.member.service.MemberService;
 import org.springframework.http.ResponseEntity;

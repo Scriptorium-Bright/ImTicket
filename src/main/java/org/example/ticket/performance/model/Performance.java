@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.example.ticket.member.model.Organizer;
 import org.example.ticket.util.constant.VenueType;
 import org.example.ticket.performance.dto.request.PerformanceDetailRequest;
 
@@ -43,6 +44,10 @@ public class Performance {
 
     @Column(name = "performance_end_date")
     private LocalDate endDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "organizer_id")
+    public Organizer organizer;
 
     @OneToMany(mappedBy = "performance",  cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PerformanceTime> performanceTimes = new ArrayList<>();

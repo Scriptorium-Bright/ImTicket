@@ -18,6 +18,8 @@ public class ReservationSuccessResponse {
     private String nickname;
     private Integer totalPrice;
     private String title;
+    private String organizerWallet;
+    private String memberWallet;
 
     private List<SeatResponse> responses;
 
@@ -27,6 +29,11 @@ public class ReservationSuccessResponse {
                 .nickname(reservation.getMember().getNickname())
                 .totalPrice(reservation.getTotalPrice())
                 .title(performance.getTitle())
+                .memberWallet(reservation.getMember().getWalletAddress())
+                .organizerWallet(reservation
+                        .getReservedSeats().getFirst().getSeat()
+                        .getPerformanceTime().getPerformance().getOrganizer()
+                        .getWalletAddress())
                 .responses(
                         reservation.getReservedSeats().stream().map(
                                         reservedSeat -> new SeatResponse(reservedSeat.getSeat())

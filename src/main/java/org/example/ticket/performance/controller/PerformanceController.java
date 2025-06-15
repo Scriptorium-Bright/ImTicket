@@ -13,6 +13,7 @@ import org.example.ticket.performance.service.PerformanceTimeService;
 import org.example.ticket.performance.service.SeatPriceService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,6 +34,7 @@ public class PerformanceController {
     private final PerformanceTimeService performanceTimeService;
 
     @PostMapping("/enter")
+//    @PreAuthorize("hasrole('ORGANIZER')")
     public ResponseEntity<Void> registerPerformance(@Validated @RequestPart("details") PerformanceDetailRequest detailsRequest,
                                                     @Validated @RequestPart("image") MultipartFile file) throws IOException {
 
@@ -48,6 +50,7 @@ public class PerformanceController {
     }
 
     @PostMapping("/enter/{performanceId}/prices")
+//    @PreAuthorize("hasrole('ORGANIZER')")
     public ResponseEntity<?> registerSeatPrice(@PathVariable Long performanceId, @RequestBody List<SeatPriceRequest> seatPriceRequestList) {
         log.info("저장 완료");
         seatPriceService.setSeatPrice(seatPriceRequestList, performanceId);
@@ -56,6 +59,7 @@ public class PerformanceController {
     }
 
     @PostMapping("/enter/{performanceId}/times")
+//    @PreAuthorize("hasrole('ORGANIZER')")
     public ResponseEntity<?> registerPerformanceTime(@PathVariable Long performanceId, @RequestBody List<PerformanceTimeRequest> requests) {
         List<PerformanceTimeResponse> performanceTimeResponses = performanceTimeService.allocatePerformanceTime(requests, performanceId);
         return ResponseEntity.ok(performanceTimeResponses);

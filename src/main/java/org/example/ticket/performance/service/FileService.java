@@ -53,6 +53,6 @@ public class FileService {
 
 
 
-        return "/uploads/picture/" + imageName;
+        return "/picture/" + imageName;
     }
 }

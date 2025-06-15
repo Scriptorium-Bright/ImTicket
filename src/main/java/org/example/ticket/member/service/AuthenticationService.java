@@ -2,23 +2,12 @@ package org.example.ticket.member.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.member.dto.request.RegisterRequest;
+import org.example.ticket.member.request.RegisterRequest;
 import org.example.ticket.member.signature.model.dto.SignatureVerifyRequest;
 import org.example.ticket.member.signature.service.SignatureService;
-import org.example.ticket.security.provider.JwtTokenProvider;
 import org.example.ticket.sms.service.SMSService;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor

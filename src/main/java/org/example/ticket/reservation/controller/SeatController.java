@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.reservation.response.SeatResponse;
 import org.example.ticket.reservation.service.SeatService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,6 +18,7 @@ public class SeatController {
     private final SeatService seatService;
 
     @PostMapping("{performanceTimeId}")
+//    @PreAuthorize("hasrole('ORGANIZER')")
     public void registerSeats(@PathVariable Long performanceTimeId) {
         seatService.preprocessSeatData(performanceTimeId);
     }

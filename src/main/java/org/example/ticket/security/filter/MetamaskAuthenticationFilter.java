@@ -10,6 +10,7 @@ import org.example.ticket.security.LoginRequestDto;
 import org.example.ticket.security.provider.JwtTokenProvider;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
 import org.example.ticket.security.util.MetamaskUserDetails;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -58,6 +59,14 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
             throw new BadCredentialsException("Invalid request body format");
         }
 
+        MetamaskAuthenticationToken authRequest = getMetamaskAuthenticationToken(loginRequestDto);
+        authRequest.setDetails(this.authenticationDetailsSource.buildDetails(request));
+
+        return this.getAuthenticationManager().authenticate(authRequest);
+    }
+
+    @NotNull
+    private static MetamaskAuthenticationToken getMetamaskAuthenticationToken(LoginRequestDto loginRequestDto) {
         String walletAddress = loginRequestDto.getWalletAddress();
         String signature = loginRequestDto.getSignature();
 
@@ -68,10 +77,7 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
             throw new BadCredentialsException("Signature is NULL or empty");
         }
 
-        MetamaskAuthenticationToken authRequest = new MetamaskAuthenticationToken(walletAddress, signature);
-        authRequest.setDetails(this.authenticationDetailsSource.buildDetails(request));
-
-        return this.getAuthenticationManager().authenticate(authRequest);
+        return new MetamaskAuthenticationToken(walletAddress, signature);
     }
 
     @Override
@@ -83,7 +89,8 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
 
         Collection<? extends GrantedAuthority> authorities = authResult.getAuthorities();
         Iterator<? extends GrantedAuthority> iterator = authorities.iterator();
-        String role = "ROLE_USER"; // 기본값 또는 첫 번째 권한 사용
+
+        String role = ""; // 기본값 또는 첫 번째 권한 사용
 
         if (iterator.hasNext()) {
             GrantedAuthority auth = iterator.next();

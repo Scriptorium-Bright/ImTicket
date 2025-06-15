@@ -9,6 +9,7 @@ import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.response.ReservationCreateResponse;
 import org.example.ticket.reservation.response.ReservationSuccessResponse;
 import org.example.ticket.reservation.service.ReservationService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
