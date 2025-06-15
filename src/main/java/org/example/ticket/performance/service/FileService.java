@@ -50,9 +50,6 @@ public class FileService {
             throw new IOException("Invalid file path constructed (potential path traversal attempt).");
         }
 
-
-
-
         return "/picture/" + imageName;
     }
 }
