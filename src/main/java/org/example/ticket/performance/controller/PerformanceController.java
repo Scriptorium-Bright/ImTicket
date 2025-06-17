@@ -74,6 +74,12 @@ public class PerformanceController {
     @GetMapping("/intro")
     public ResponseEntity<?> retrieveEventOverview() {
         List<PerformanceOverviewResponse> overviewList = performanceService.viewPerformanceIntro();
+
+        overviewList.forEach(e -> {
+            log.info(String.valueOf(e.getEndDate()));
+            log.info("image = {}", e.getImageUrl());
+        });
+
         return ResponseEntity.ok(overviewList);
     }
 
