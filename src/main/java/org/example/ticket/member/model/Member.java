@@ -31,11 +31,17 @@ public class Member {
     @Column(name = "identify_name", unique = true)
     private String nickname;
 
+    @OneToOne(mappedBy = "member")
+    private Organizer organizer;
+
     public String makeReservationCode() {
         return UUID.randomUUID().toString();
     }
 
     public void updateNonce(Integer newNonce) { this.nonce = newNonce; }
 
+    public void changeMembersRole(String role) {
+        this.role = role;
+    }
 
 }

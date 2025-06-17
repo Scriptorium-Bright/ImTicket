@@ -1,5 +1,6 @@
 package org.example.ticket.security.provider;
 
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.model.Member;
@@ -8,13 +9,11 @@ import org.example.ticket.member.signature.model.dto.SignatureVerifyRequest;
 import org.example.ticket.member.signature.service.SignatureService;
 import org.example.ticket.security.util.MetamaskUserDetails;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
-import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.authentication.dao.AbstractUserDetailsAuthenticationProvider;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.web3j.crypto.Keys;
@@ -23,10 +22,7 @@ import org.web3j.utils.Numeric;
 
 import java.math.BigInteger;
 import java.security.SignatureException;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
@@ -35,6 +31,7 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
 
     private final SignatureService signatureService;
     private final MemberRepository repository;
+
     @Override
     public void additionalAuthenticationChecks(UserDetails userDetails, UsernamePasswordAuthenticationToken authentication) throws AuthenticationException {
         MetamaskAuthenticationToken token = (MetamaskAuthenticationToken) authentication;
@@ -57,49 +54,31 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
         return SignatureVerifyRequest.builder()
                 .walletAddress(token.getAddress())
                 .signature(authentication.getCredentials().toString())
-                .message(String.valueOf(metamaskUserDetails.getNonce()))
+                .message(String.valueOf(metamaskUserDetails.member().getNonce()))
                 .build();
     }
 
     @Override
     public UserDetails retrieveUser(String username, UsernamePasswordAuthenticationToken authentication) throws AuthenticationException {
 
-        Collection<GrantedAuthority> authorities = new ArrayList<>();
-
         MetamaskAuthenticationToken auth = (MetamaskAuthenticationToken) authentication;
-        Optional<Member> byWalletAddress = repository.findByWalletAddress(auth.getAddress());
 
-        MetamaskUserDetails walletAddress1 = fetchUsersData(byWalletAddress, auth, authorities);
+        Member member = repository.findByWalletAddress(auth.getAddress())
+                .orElseThrow(EntityNotFoundException::new);
 
-        if (walletAddress1 != null) {
-            log.info("나와야 하는 로그 : {}", walletAddress1);
-            return walletAddress1;
-        }
+        MetamaskUserDetails metamaskUserDetails
+                = fetchUsersData(member);
 
-        log.info("나오면 안되는 로그 : {}", (Object) null);
-        throw new BadCredentialsException("address is NULL !");
+        log.info("나와야 하는 로그 : {}", metamaskUserDetails);
+        return metamaskUserDetails;
+
     }
 
-    @Nullable
-    private static MetamaskUserDetails fetchUsersData(Optional<Member> byWalletAddress, MetamaskAuthenticationToken auth, Collection<GrantedAuthority> authorities) {
+    @NotNull
+    private static MetamaskUserDetails fetchUsersData(Member byWalletAddress) {
 
-        Integer nonce;
-        String signature;
-        String walletAddress;
-        String role;
+        return new MetamaskUserDetails(byWalletAddress);
 
-        if(byWalletAddress.isPresent()) {
-
-            walletAddress = auth.getAddress();
-            signature = auth.getSignature();
-            nonce = byWalletAddress.get().getNonce();
-            role = byWalletAddress.get().getRole();
-
-            authorities.add(new SimpleGrantedAuthority(role));
-            return new MetamaskUserDetails(walletAddress, signature, nonce, authorities);
-        }
-
-        return null;
     }
 
     @Override

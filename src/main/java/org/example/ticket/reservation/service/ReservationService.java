@@ -85,7 +85,7 @@ public class ReservationService {
                 .map(ReservedSeat::getSeat)
                 .toList();
 
-        Performance performance = reservation.getReservedSeats().getFirst().getSeat().getPerformanceTime().getPerformance();
+        Performance performance = reservationRepository.findByPerformance(reservationId);
         IamportResponse<Payment> paymentIamportResponse = paymentService.verifyPayment(request, reservation.getTotalPrice());
 
         if(paymentIamportResponse == null) {
@@ -97,8 +97,9 @@ public class ReservationService {
 
         reservation.completeSuccessPayment(payment);
         seatService.changeSeatsState(seats);
+        String byWalletAddressByOrganizer = reservationRepository.findByWalletAddressByOrganizer(reservationId);
 
-        return ReservationSuccessResponse.from(reservation, performance);
+        return ReservationSuccessResponse.from(reservation, performance, byWalletAddressByOrganizer);
     }
 
     public void checkSeatsAvailability(List<Seat> seats) {

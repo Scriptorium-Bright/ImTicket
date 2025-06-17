@@ -3,7 +3,7 @@ package org.example.ticket.venue.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.venue.dto.request.*;
-import org.example.ticket.venue.dto.response.ShowPlace;
+import org.example.ticket.venue.dto.request.ShowPlace;
 import org.example.ticket.venue.dto.response.VenueHallResponse;
 import org.example.ticket.venue.dto.response.VenueResponse;
 import org.example.ticket.venue.service.VenueHallService;

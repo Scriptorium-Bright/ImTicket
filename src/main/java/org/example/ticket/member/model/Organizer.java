@@ -6,7 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.example.ticket.performance.model.Performance;
-import org.example.ticket.util.constant.organizerType;
+import org.example.ticket.util.constant.OrganizerType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,13 +24,10 @@ public class Organizer {
 
     @Enumerated(value = EnumType.STRING)
     @Column(name = "organizer_type")
-    private organizerType organizerType;
+    private OrganizerType organizerType;
 
     @Column(name = "organizer_name", unique = true)
     private String organizerName;
-
-    @Column(name = "organizer_wallet_address", unique = true)
-    private String walletAddress;
 
     @Column(name = "company_address")
     private String address;
@@ -41,8 +38,10 @@ public class Organizer {
     @Column(name = "company_business_number", nullable = false)
     private String businessNumber;
 
-    @Column(name = "organizer_phone_number")
-    private String contactPhone;
+
+    @OneToOne(fetch = FetchType.LAZY, orphanRemoval = true, cascade = CascadeType.ALL)
+    @JoinColumn(name = "member_id")
+    private Member member;
 
     @OneToMany(mappedBy = "organizer")
     private List<Performance> performances = new ArrayList<>();

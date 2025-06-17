@@ -60,9 +60,12 @@ public class MemberService {
                 .build();
     }
 
-    public Integer getUserNonce(String walletAddress) {
-        Optional<Member> byWalletAddress = memberRepository.findByWalletAddress(walletAddress);
-        return byWalletAddress.map(Member::getNonce).orElse(null);
+    public String fetchUsersNickname(String walletAddress) {
+        return memberRepository.findByNicknameWithWalletAddress(walletAddress);
+    }
+
+    public String fetchUsersWalletAddress(String nickname) {
+        return memberRepository.findByWalletAddressWithNickname(nickname);
     }
 
     public Integer createNonce() {

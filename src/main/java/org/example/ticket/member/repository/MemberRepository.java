@@ -3,6 +3,7 @@ package org.example.ticket.member.repository;
 import org.example.ticket.member.model.Member;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.Optional;
 
@@ -14,4 +15,9 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     boolean existsMemberByPhoneNumber(String phoneNumber);
     Member findByNickname(String nickname);
 
+    @Query("SELECT m.nickname FROM Member m WHERE m.walletAddress = :walletAddress")
+    String findByNicknameWithWalletAddress(String walletAddress);
+
+    @Query("SELECT m.walletAddress FROM Member m WHERE m.nickname = :nickname")
+    String findByWalletAddressWithNickname(String nickname);
 }

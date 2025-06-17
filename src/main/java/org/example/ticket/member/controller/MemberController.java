@@ -43,4 +43,16 @@ public class MemberController {
         return ResponseEntity.ok().body(nickname);
     }
 
+    @PostMapping("/nickname")
+    public ResponseEntity<String> fetchNickname(@RequestBody String walletAddress) {
+        String nickname = memberService.fetchUsersNickname(walletAddress);
+        return ResponseEntity.ok(nickname);
+    }
+
+    @PostMapping("/walletAddress")
+    public ResponseEntity<String> fetchWalletAddress(@RequestBody String nickname) {
+        String walletAddress = memberService.fetchUsersWalletAddress(nickname);
+        return ResponseEntity.ok(walletAddress);
+    }
+
 }

@@ -113,16 +113,16 @@ public class Nft extends Contract {
     public RemoteFunctionCall<TransactionReceipt> approve(String to, BigInteger tokenId) {
         final Function function = new Function(
                 FUNC_APPROVE, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, to), 
-                new org.web3j.abi.datatypes.generated.Uint256(tokenId)), 
+                Arrays.<Type>asList(new Address(160, to),
+                new Uint256(tokenId)),
                 Collections.<TypeReference<?>>emptyList());
         return executeRemoteCallTransaction(function);
     }
 
     public List<ApprovalEventResponse> getApprovalEvents(TransactionReceipt transactionReceipt) {
-        List<Contract.EventValuesWithLog> valueList = extractEventParametersWithLog(APPROVAL_EVENT, transactionReceipt);
+        List<EventValuesWithLog> valueList = extractEventParametersWithLog(APPROVAL_EVENT, transactionReceipt);
         ArrayList<ApprovalEventResponse> responses = new ArrayList<ApprovalEventResponse>(valueList.size());
-        for (Contract.EventValuesWithLog eventValues : valueList) {
+        for (EventValuesWithLog eventValues : valueList) {
             ApprovalEventResponse typedResponse = new ApprovalEventResponse();
             typedResponse.log = eventValues.getLog();
             typedResponse.owner = (String) eventValues.getIndexedValues().get(0).getValue();
@@ -137,7 +137,7 @@ public class Nft extends Contract {
         return web3j.ethLogFlowable(filter).map(new io.reactivex.functions.Function<Log, ApprovalEventResponse>() {
             @Override
             public ApprovalEventResponse apply(Log log) {
-                Contract.EventValuesWithLog eventValues = extractEventParametersWithLog(APPROVAL_EVENT, log);
+                EventValuesWithLog eventValues = extractEventParametersWithLog(APPROVAL_EVENT, log);
                 ApprovalEventResponse typedResponse = new ApprovalEventResponse();
                 typedResponse.log = log;
                 typedResponse.owner = (String) eventValues.getIndexedValues().get(0).getValue();
@@ -155,9 +155,9 @@ public class Nft extends Contract {
     }
 
     public List<ApprovalForAllEventResponse> getApprovalForAllEvents(TransactionReceipt transactionReceipt) {
-        List<Contract.EventValuesWithLog> valueList = extractEventParametersWithLog(APPROVALFORALL_EVENT, transactionReceipt);
+        List<EventValuesWithLog> valueList = extractEventParametersWithLog(APPROVALFORALL_EVENT, transactionReceipt);
         ArrayList<ApprovalForAllEventResponse> responses = new ArrayList<ApprovalForAllEventResponse>(valueList.size());
-        for (Contract.EventValuesWithLog eventValues : valueList) {
+        for (EventValuesWithLog eventValues : valueList) {
             ApprovalForAllEventResponse typedResponse = new ApprovalForAllEventResponse();
             typedResponse.log = eventValues.getLog();
             typedResponse.owner = (String) eventValues.getIndexedValues().get(0).getValue();
@@ -172,7 +172,7 @@ public class Nft extends Contract {
         return web3j.ethLogFlowable(filter).map(new io.reactivex.functions.Function<Log, ApprovalForAllEventResponse>() {
             @Override
             public ApprovalForAllEventResponse apply(Log log) {
-                Contract.EventValuesWithLog eventValues = extractEventParametersWithLog(APPROVALFORALL_EVENT, log);
+                EventValuesWithLog eventValues = extractEventParametersWithLog(APPROVALFORALL_EVENT, log);
                 ApprovalForAllEventResponse typedResponse = new ApprovalForAllEventResponse();
                 typedResponse.log = log;
                 typedResponse.owner = (String) eventValues.getIndexedValues().get(0).getValue();
@@ -192,8 +192,8 @@ public class Nft extends Contract {
     public RemoteFunctionCall<TransactionReceipt> mintNFT(String to, String _tokenURI) {
         final Function function = new Function(
                 FUNC_MINTNFT, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, to), 
-                new org.web3j.abi.datatypes.Utf8String(_tokenURI)), 
+                Arrays.<Type>asList(new Address(160, to),
+                new Utf8String(_tokenURI)),
                 Collections.<TypeReference<?>>emptyList());
         return executeRemoteCallTransaction(function);
     }
@@ -201,9 +201,9 @@ public class Nft extends Contract {
     public RemoteFunctionCall<TransactionReceipt> safeTransferFrom(String from, String to, BigInteger tokenId) {
         final Function function = new Function(
                 FUNC_safeTransferFrom, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, from), 
-                new org.web3j.abi.datatypes.Address(160, to), 
-                new org.web3j.abi.datatypes.generated.Uint256(tokenId)), 
+                Arrays.<Type>asList(new Address(160, from),
+                new Address(160, to),
+                new Uint256(tokenId)),
                 Collections.<TypeReference<?>>emptyList());
         return executeRemoteCallTransaction(function);
     }
@@ -211,9 +211,9 @@ public class Nft extends Contract {
     public RemoteFunctionCall<TransactionReceipt> safeTransferFrom(String from, String to, BigInteger tokenId, byte[] data) {
         final Function function = new Function(
                 FUNC_safeTransferFrom, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, from), 
-                new org.web3j.abi.datatypes.Address(160, to), 
-                new org.web3j.abi.datatypes.generated.Uint256(tokenId), 
+                Arrays.<Type>asList(new Address(160, from),
+                new Address(160, to),
+                new Uint256(tokenId),
                 new org.web3j.abi.datatypes.DynamicBytes(data)), 
                 Collections.<TypeReference<?>>emptyList());
         return executeRemoteCallTransaction(function);
@@ -222,16 +222,16 @@ public class Nft extends Contract {
     public RemoteFunctionCall<TransactionReceipt> setApprovalForAll(String operator, Boolean approved) {
         final Function function = new Function(
                 FUNC_SETAPPROVALFORALL, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, operator), 
-                new org.web3j.abi.datatypes.Bool(approved)), 
+                Arrays.<Type>asList(new Address(160, operator),
+                new Bool(approved)),
                 Collections.<TypeReference<?>>emptyList());
         return executeRemoteCallTransaction(function);
     }
 
     public List<TransferEventResponse> getTransferEvents(TransactionReceipt transactionReceipt) {
-        List<Contract.EventValuesWithLog> valueList = extractEventParametersWithLog(TRANSFER_EVENT, transactionReceipt);
+        List<EventValuesWithLog> valueList = extractEventParametersWithLog(TRANSFER_EVENT, transactionReceipt);
         ArrayList<TransferEventResponse> responses = new ArrayList<TransferEventResponse>(valueList.size());
-        for (Contract.EventValuesWithLog eventValues : valueList) {
+        for (EventValuesWithLog eventValues : valueList) {
             TransferEventResponse typedResponse = new TransferEventResponse();
             typedResponse.log = eventValues.getLog();
             typedResponse.from = (String) eventValues.getIndexedValues().get(0).getValue();
@@ -246,7 +246,7 @@ public class Nft extends Contract {
         return web3j.ethLogFlowable(filter).map(new io.reactivex.functions.Function<Log, TransferEventResponse>() {
             @Override
             public TransferEventResponse apply(Log log) {
-                Contract.EventValuesWithLog eventValues = extractEventParametersWithLog(TRANSFER_EVENT, log);
+                EventValuesWithLog eventValues = extractEventParametersWithLog(TRANSFER_EVENT, log);
                 TransferEventResponse typedResponse = new TransferEventResponse();
                 typedResponse.log = log;
                 typedResponse.from = (String) eventValues.getIndexedValues().get(0).getValue();
@@ -266,30 +266,30 @@ public class Nft extends Contract {
     public RemoteFunctionCall<TransactionReceipt> transferFrom(String from, String to, BigInteger tokenId) {
         final Function function = new Function(
                 FUNC_TRANSFERFROM, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, from), 
-                new org.web3j.abi.datatypes.Address(160, to), 
-                new org.web3j.abi.datatypes.generated.Uint256(tokenId)), 
+                Arrays.<Type>asList(new Address(160, from),
+                new Address(160, to),
+                new Uint256(tokenId)),
                 Collections.<TypeReference<?>>emptyList());
         return executeRemoteCallTransaction(function);
     }
 
     public RemoteFunctionCall<BigInteger> balanceOf(String owner) {
         final Function function = new Function(FUNC_BALANCEOF, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, owner)), 
+                Arrays.<Type>asList(new Address(160, owner)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Uint256>() {}));
         return executeRemoteCallSingleValueReturn(function, BigInteger.class);
     }
 
     public RemoteFunctionCall<String> getApproved(BigInteger tokenId) {
         final Function function = new Function(FUNC_GETAPPROVED, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.generated.Uint256(tokenId)), 
+                Arrays.<Type>asList(new Uint256(tokenId)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Address>() {}));
         return executeRemoteCallSingleValueReturn(function, String.class);
     }
 
     public RemoteFunctionCall<Tuple2<List<BigInteger>, List<String>>> getNftTokens(String _nftTokenOwner) {
         final Function function = new Function(FUNC_GETNFTTOKENS, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, _nftTokenOwner)), 
+                Arrays.<Type>asList(new Address(160, _nftTokenOwner)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<DynamicArray<Uint256>>() {}, new TypeReference<DynamicArray<Utf8String>>() {}));
         return new RemoteFunctionCall<Tuple2<List<BigInteger>, List<String>>>(function,
                 new Callable<Tuple2<List<BigInteger>, List<String>>>() {
@@ -305,8 +305,8 @@ public class Nft extends Contract {
 
     public RemoteFunctionCall<Boolean> isApprovedForAll(String owner, String operator) {
         final Function function = new Function(FUNC_ISAPPROVEDFORALL, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, owner), 
-                new org.web3j.abi.datatypes.Address(160, operator)), 
+                Arrays.<Type>asList(new Address(160, owner),
+                new Address(160, operator)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Bool>() {}));
         return executeRemoteCallSingleValueReturn(function, Boolean.class);
     }
@@ -320,7 +320,7 @@ public class Nft extends Contract {
 
     public RemoteFunctionCall<String> ownerOf(BigInteger tokenId) {
         final Function function = new Function(FUNC_OWNEROF, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.generated.Uint256(tokenId)), 
+                Arrays.<Type>asList(new Uint256(tokenId)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Address>() {}));
         return executeRemoteCallSingleValueReturn(function, String.class);
     }
@@ -341,29 +341,29 @@ public class Nft extends Contract {
 
     public RemoteFunctionCall<BigInteger> tokenByIndex(BigInteger index) {
         final Function function = new Function(FUNC_TOKENBYINDEX, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.generated.Uint256(index)), 
+                Arrays.<Type>asList(new Uint256(index)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Uint256>() {}));
         return executeRemoteCallSingleValueReturn(function, BigInteger.class);
     }
 
     public RemoteFunctionCall<BigInteger> tokenOfOwnerByIndex(String owner, BigInteger index) {
         final Function function = new Function(FUNC_TOKENOFOWNERBYINDEX, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.Address(160, owner), 
-                new org.web3j.abi.datatypes.generated.Uint256(index)), 
+                Arrays.<Type>asList(new Address(160, owner),
+                new Uint256(index)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Uint256>() {}));
         return executeRemoteCallSingleValueReturn(function, BigInteger.class);
     }
 
     public RemoteFunctionCall<String> tokenURI(BigInteger _tokenId) {
         final Function function = new Function(FUNC_TOKENURI, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.generated.Uint256(_tokenId)), 
+                Arrays.<Type>asList(new Uint256(_tokenId)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Utf8String>() {}));
         return executeRemoteCallSingleValueReturn(function, String.class);
     }
 
     public RemoteFunctionCall<String> tokenURIs(BigInteger param0) {
         final Function function = new Function(FUNC_TOKENURIS, 
-                Arrays.<Type>asList(new org.web3j.abi.datatypes.generated.Uint256(param0)), 
+                Arrays.<Type>asList(new Uint256(param0)),
                 Arrays.<TypeReference<?>>asList(new TypeReference<Utf8String>() {}));
         return executeRemoteCallSingleValueReturn(function, String.class);
     }

@@ -23,17 +23,14 @@ public class ReservationSuccessResponse {
 
     private List<SeatResponse> responses;
 
-    public static ReservationSuccessResponse from(Reservation reservation, Performance performance) {
+    public static ReservationSuccessResponse from(Reservation reservation, Performance performance, String byWalletAddressByOrganizer) {
 
         return ReservationSuccessResponse.builder()
                 .nickname(reservation.getMember().getNickname())
                 .totalPrice(reservation.getTotalPrice())
                 .title(performance.getTitle())
                 .memberWallet(reservation.getMember().getWalletAddress())
-                .organizerWallet(reservation
-                        .getReservedSeats().getFirst().getSeat()
-                        .getPerformanceTime().getPerformance().getOrganizer()
-                        .getWalletAddress())
+                .organizerWallet(byWalletAddressByOrganizer)
                 .responses(
                         reservation.getReservedSeats().stream().map(
                                         reservedSeat -> new SeatResponse(reservedSeat.getSeat())
