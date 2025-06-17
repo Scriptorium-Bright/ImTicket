@@ -50,7 +50,7 @@ public class MemberController {
     }
 
     @GetMapping("/walletAddress")
-    public ResponseEntity<String> fetchWalletAddress(@RequestBody String nickname) {
+    public ResponseEntity<String> fetchWalletAddress(@RequestParam("nickname")  String nickname) {
         String walletAddress = memberService.fetchUsersWalletAddress(nickname);
         return ResponseEntity.ok(walletAddress);
     }
