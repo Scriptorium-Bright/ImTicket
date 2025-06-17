@@ -1,4 +1,4 @@
-package org.example.ticket.security.config;
+package org.example.ticket.util.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;

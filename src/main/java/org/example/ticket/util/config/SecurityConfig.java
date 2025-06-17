@@ -1,4 +1,4 @@
-package org.example.ticket.security.config;
+package org.example.ticket.util.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;

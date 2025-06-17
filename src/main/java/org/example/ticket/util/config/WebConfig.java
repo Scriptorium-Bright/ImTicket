@@ -1,4 +1,4 @@
-package org.example.ticket.security.config;
+package org.example.ticket.util.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +19,7 @@ public class WebConfig implements WebMvcConfigurer {
             resourcePath += "/";
         }
 
-        registry.addResourceHandler("/uploads/**")
+        registry.addResourceHandler("/pathForPhoto/**")
                 .addResourceLocations(resourcePath);
     }
 }
