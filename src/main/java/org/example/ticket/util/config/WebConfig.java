@@ -5,6 +5,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 
@@ -13,13 +16,11 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String resourcePath = "file:" + uploadDir;
+        Path path = Paths.get(uploadDir);
 
-        if (!uploadDir.endsWith("/") && !uploadDir.endsWith("\\")) {
-            resourcePath += "/";
-        }
+        String resourcePath = path.toUri().toString();
 
-        registry.addResourceHandler("/pathForPhoto/**")
+        registry.addResourceHandler("/picture/**")
                 .addResourceLocations(resourcePath);
     }
 }
