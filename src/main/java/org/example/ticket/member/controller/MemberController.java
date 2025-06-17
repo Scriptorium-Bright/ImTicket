@@ -38,18 +38,18 @@ public class MemberController {
     }
 
     @PutMapping("/myPage/nickname")
-    public ResponseEntity<String> changeNickname(@RequestBody String nickname) {
+    public ResponseEntity<String> changeNickname(@RequestParam("nickname") String nickname) {
         memberService.changeUsersNickname(nickname);
         return ResponseEntity.ok().body(nickname);
     }
 
-    @PostMapping("/nickname")
-    public ResponseEntity<String> fetchNickname(@RequestBody String walletAddress) {
+    @GetMapping("/nickname")
+    public ResponseEntity<String> fetchNickname(@RequestParam("walletAddress") String walletAddress) {
         String nickname = memberService.fetchUsersNickname(walletAddress);
         return ResponseEntity.ok(nickname);
     }
 
-    @PostMapping("/walletAddress")
+    @GetMapping("/walletAddress")
     public ResponseEntity<String> fetchWalletAddress(@RequestBody String nickname) {
         String walletAddress = memberService.fetchUsersWalletAddress(nickname);
         return ResponseEntity.ok(walletAddress);
