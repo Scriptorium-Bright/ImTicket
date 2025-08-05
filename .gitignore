@@ -6,6 +6,7 @@ build/
 !**/src/test/**/build/
 .DS_Store
 
+
 ### STS ###
 .apt_generated
 .classpath
@@ -14,12 +15,13 @@ build/
 .settings
 .springBeans
 .sts4-cache
-.properties
+
 bin/
 !**/src/main/**/bin/
 !**/src/test/**/bin/
 
 ### IntelliJ IDEA ###
+application.properties
 .idea
 *.iws
 *.iml
