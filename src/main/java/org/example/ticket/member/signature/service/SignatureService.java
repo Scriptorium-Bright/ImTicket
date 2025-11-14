@@ -1,7 +1,7 @@
 package org.example.ticket.member.signature.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.member.signature.model.dto.SignatureVerifyRequest;
+import org.example.ticket.member.signature.request.SignatureVerifyRequest;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.ECDSASignature;
 import org.web3j.crypto.Hash;

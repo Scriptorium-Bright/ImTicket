@@ -22,6 +22,13 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
     @Query("select s from Seat s where s.id IN :id")
     List<Seat> findByIdsForUpdate(List<Long> id);
 
+    @Query("select s from Seat s where s.id IN :id")
+    List<Seat> findByIdsForUpdateWithDistribution(List<Long> id);
+
+    @Lock(LockModeType.OPTIMISTIC)
+    @Query("select s from Seat s where s.id IN :id")
+    List<Seat> findByIdsForUpdateWithOptimistic(List<Long> id);
+
     @Query("select s.isReservation from Seat s where s.id = :id")
     Boolean findByIsReservation(Seat seat);
 
@@ -34,5 +41,7 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
             "FROM Seat s " +
             "WHERE s.performanceTime.id = :performanceTimeId")
     List<SeatResponse> findByEmptySeat(@Param("performanceTimeId") Long performanceTimeId);
+
+    List<Seat> findAllByPerformanceTimeId(Long performanceTimeId);
 
 }

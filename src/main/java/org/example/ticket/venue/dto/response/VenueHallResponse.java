@@ -8,6 +8,12 @@ import lombok.Getter;
 public class VenueHallResponse {
 
     private Long hallId;
-    private String name;
+    private String hallName;
+    private String venueName;
 
+    public VenueHallResponse(Long hallId, String hallName, String venueName) {
+        this.hallId = hallId;
+        this.hallName = hallName;
+        this.venueName = venueName;
+    }
 }

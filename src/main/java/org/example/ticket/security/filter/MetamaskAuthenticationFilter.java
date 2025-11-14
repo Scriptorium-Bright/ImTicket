@@ -7,6 +7,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.security.LoginRequestDto;
+import org.example.ticket.security.handler.LoginFailureHandler;
+import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.provider.JwtTokenProvider;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
 import org.example.ticket.security.util.MetamaskUserDetails;
@@ -28,21 +30,17 @@ import java.util.Map;
 @Slf4j
 public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessingFilter {
 
-    private static final String SPRING_SECURITY_USER_WALLET_ADDRESS = "walletAddress";
-    private static final String SPRING_SECURITY_USER_SIGNATURE = "signature";
     private static final String SPRING_WEB_LOGIN_URI = "/api/user/signature/verify";
     private static final String HTTP_METHOD_TYPE = "POST";
 
-    private final JwtTokenProvider jwtTokenProvider; // JWT 생성을 위해 주입
     private final ObjectMapper objectMapper; // JSON 응답 작성을 위해 주입
-
     // 생성자에서 의존성 주입
     public MetamaskAuthenticationFilter(AuthenticationManager authenticationManager,
                                         JwtTokenProvider jwtTokenProvider,
-                                        ObjectMapper objectMapper) {
+                                        ObjectMapper objectMapper, LoginSuccessHandler loginSuccessHandler, LoginFailureHandler loginFailureHandler) {
         super(new AntPathRequestMatcher(SPRING_WEB_LOGIN_URI, HTTP_METHOD_TYPE), authenticationManager);
-
-        this.jwtTokenProvider = jwtTokenProvider;
+        setAuthenticationSuccessHandler(loginSuccessHandler);
+        setAuthenticationFailureHandler(loginFailureHandler);
         this.objectMapper = objectMapper;
     }
 
@@ -50,7 +48,6 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
             throws AuthenticationException, IOException { // IOException 추가
 
-        // JSON Body를 DTO로 변환
         LoginRequestDto loginRequestDto;
         try {
             loginRequestDto = objectMapper.readValue(request.getInputStream(), LoginRequestDto.class);
@@ -80,41 +77,4 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
         return new MetamaskAuthenticationToken(walletAddress, signature);
     }
 
-    @Override
-    protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response, FilterChain chain,
-                                            Authentication authResult) throws IOException, ServletException {
-
-        MetamaskUserDetails metamaskUserDetails = (MetamaskUserDetails) authResult.getPrincipal();
-        String walletAddress = metamaskUserDetails.getAddress(); // 또는 authResult.getName()
-
-        Collection<? extends GrantedAuthority> authorities = authResult.getAuthorities();
-        Iterator<? extends GrantedAuthority> iterator = authorities.iterator();
-
-        String role = ""; // 기본값 또는 첫 번째 권한 사용
-
-        if (iterator.hasNext()) {
-            GrantedAuthority auth = iterator.next();
-            role = auth.getAuthority();
-        }
-
-        log.info("MetamaskAuthenticationFilter: Authentication successful for {}. Issuing JWT.", walletAddress);
-
-        // JwtTokenProvider를 사용하여 JWT 및 관련 정보가 담긴 Map 생성
-        Map<String, String> jwtMap = jwtTokenProvider.provideJwt(walletAddress, role);
-
-        log.info("wallet address = {}", walletAddress);
-        log.info("role = {}", role);
-
-        response.setStatus(HttpStatus.OK.value());
-        response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write(objectMapper.writeValueAsString(jwtMap));
-        response.getWriter().flush();
-    }
-
-    @Override
-    protected void unsuccessfulAuthentication(HttpServletRequest request, HttpServletResponse response,
-                                              AuthenticationException failed) throws IOException, ServletException {
-        log.warn("MetamaskAuthenticationFilter: Authentication failed for remote IP {}: {}", request.getRemoteAddr(), failed.getMessage());
-        super.unsuccessfulAuthentication(request, response, failed);
-    }
 }

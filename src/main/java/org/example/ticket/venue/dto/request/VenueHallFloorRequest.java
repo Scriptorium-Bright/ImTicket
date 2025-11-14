@@ -17,6 +17,6 @@ public class VenueHallFloorRequest {
     @Min(1)
     private Integer floor;
 
-    private List<VenueSectionRequest> section;
+    private List<VenueHallSectionRequest> section;
 
 }

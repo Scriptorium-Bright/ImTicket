@@ -12,8 +12,14 @@ import java.util.List;
 @NoArgsConstructor
 public class ReservationRequest {
 
+    private Long performanceTimeId;
+
     @NotEmpty
     @JsonProperty("seatIds")
     private List<Long> seatIds;
 
+    public ReservationRequest(Long performanceTimeId, List<Long> seatIds) {
+        this.performanceTimeId = performanceTimeId;
+        this.seatIds = seatIds;
+    }
 }

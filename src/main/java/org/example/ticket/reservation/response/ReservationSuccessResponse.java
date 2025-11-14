@@ -28,7 +28,7 @@ public class ReservationSuccessResponse {
         return ReservationSuccessResponse.builder()
                 .nickname(reservation.getMember().getNickname())
                 .totalPrice(reservation.getTotalPrice())
-                .title(performance.getTitle())
+//                .title(performance.getTitle())
                 .memberWallet(reservation.getMember().getWalletAddress())
                 .organizerWallet(byWalletAddressByOrganizer)
                 .responses(

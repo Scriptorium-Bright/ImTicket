@@ -3,20 +3,11 @@ package org.example.ticket.performance.service;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.performance.dto.request.PerformanceTimeRequest;
-import org.example.ticket.performance.dto.request.SeatPriceRequest;
-import org.example.ticket.performance.dto.response.PerformanceDetailsResponse;
-import org.example.ticket.performance.dto.response.PerformanceTimeResponse;
-import org.example.ticket.performance.dto.response.SeatPriceResponse;
+import org.example.ticket.performance.response.PerformanceDetailsResponse;
 import org.example.ticket.performance.model.Performance;
-import org.example.ticket.performance.dto.request.PerformanceDetailRequest;
-import org.example.ticket.performance.dto.response.PerformanceOverviewResponse;
-import org.example.ticket.performance.model.PerformanceTime;
-import org.example.ticket.performance.model.SeatPrice;
-import org.example.ticket.venue.model.VenueHall;
+import org.example.ticket.performance.request.PerformanceDetailRequest;
+import org.example.ticket.performance.response.PerformanceOverviewResponse;
 import org.example.ticket.performance.repository.PerformanceRepository;
-import org.example.ticket.performance.repository.PerformanceTimeRepository;
-import org.example.ticket.performance.repository.SeatPriceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -33,16 +24,17 @@ public class PerformanceService {
     private final PerformanceRepository performanceRepository;
     private final FileService fileService;
 
+    @Transactional
     public Long registerPerformance(PerformanceDetailRequest detailsRequest, MultipartFile file) throws IOException {
 
-        String dbFilePath = fileService.saveImages(file);
+//        String dbFilePath = fileService.saveImages(file);
 
         Performance performance =
                 Performance.builder()
                         .ageLimit(detailsRequest.getAge())
                         .description(detailsRequest.getDescription())
                         .title(detailsRequest.getTitle())
-                        .imageUrl(dbFilePath)
+                        .imageUrl("hello World!")
                         .startDate(detailsRequest.getStartDate())
                         .endDate(detailsRequest.getEndDate())
                         .venueType(detailsRequest.getVenueType())
@@ -52,8 +44,8 @@ public class PerformanceService {
     }
 
     public PerformanceDetailsResponse viewPerformanceDetails(Long pathId) {
-        Optional<Performance> performanceDetails = performanceRepository.findById(pathId);
-        return performanceDetails.map(PerformanceDetailsResponse::from).orElse(null);
+        Performance performanceDetails = performanceRepository.findByIdWithDetails(pathId).orElseThrow(() -> new EntityNotFoundException("해당 공연을 찾을 수 없습니다."));
+        return PerformanceDetailsResponse.from(performanceDetails);
     }
 
     @Transactional(readOnly = true)

@@ -3,7 +3,7 @@ package org.example.ticket.member.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.request.RegisterRequest;
-import org.example.ticket.member.signature.model.dto.SignatureVerifyRequest;
+import org.example.ticket.member.signature.request.SignatureVerifyRequest;
 import org.example.ticket.member.signature.service.SignatureService;
 import org.example.ticket.sms.service.SMSService;
 import org.springframework.security.authentication.BadCredentialsException;

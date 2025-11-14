@@ -2,11 +2,9 @@ package org.example.ticket.sms.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.nurigo.sdk.message.model.Message;
-import net.nurigo.sdk.message.request.SingleMessageSendingRequest;
 import net.nurigo.sdk.message.service.DefaultMessageService;
 import org.example.ticket.member.repository.MemberRepository;
-import org.example.ticket.sms.model.dto.SmsRequest;
+import org.example.ticket.sms.request.SmsRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -57,7 +55,8 @@ public class SMSService {
     public boolean verifiedCode(String phoneNumber, String code) {
         String usersKey = SMS_KEY + phoneNumber;
         String storedCode = redisTemplate.opsForValue().get(usersKey);
-
+        log.info(storedCode);
+        log.info(usersKey);
         if (code != null && code.equals(storedCode)) {
             redisTemplate.delete(usersKey);
             return true;

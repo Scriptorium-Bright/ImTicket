@@ -33,7 +33,7 @@ public class VenueResponse {
                     .address(venueDTO.getAddress())
                     .phoneNumber(venueDTO.getPhoneNumber())
                     .venueHallResponseList(
-                            venueDTO.getVenueHalls().stream().map(e -> new VenueHallResponse(e.getId(), e.getName())
+                            venueDTO.getVenueHalls().stream().map(e -> new VenueHallResponse(e.getId(), e.getName(), venueDTO.getName())
                             ).toList()
                     )
                     .build();

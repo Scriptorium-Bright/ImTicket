@@ -21,7 +21,7 @@ public class Venue {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "performance_venue_name", nullable = false)
+    @Column(name = "performance_venue_name", nullable = false, unique = true)
     private String name;
 
     @Column(name = "performance_place_address", nullable = false)
@@ -29,7 +29,13 @@ public class Venue {
 
     private String phoneNumber;
 
+    @Builder.Default
     @OneToMany(mappedBy = "venue", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<VenueHall> venueHalls = new ArrayList<>();
+
+    public void addHall(VenueHall hall) {
+        this.venueHalls.add(hall);
+        hall.setVenue(this); // 자식에게도 부모(나 자신)를 설정하여 양쪽 관계를 모두 설정
+    }
 
 }

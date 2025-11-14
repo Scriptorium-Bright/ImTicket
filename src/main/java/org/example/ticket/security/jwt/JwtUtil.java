@@ -1,5 +1,6 @@
 package org.example.ticket.security.jwt;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,19 +26,23 @@ public class JwtUtil {
         this.secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), Jwts.SIG.HS256.key().build().getAlgorithm());
     }
 
-    public String getUsername(String token) {
-
-        return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload().get("walletAddress", String.class);
+    public Claims parseClaims(String token) {
+        return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload();
     }
 
-    public String getRole(String token) {
+    public String getUsername(Claims claim) {
 
-        return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload().get("role", String.class);
+        return claim.get("walletAddress", String.class);
     }
 
-    public Boolean isExpired(String token) {
+    public String getRole(Claims claim) {
 
-        return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload().getExpiration().before(new Date());
+        return claim.get("role", String.class);
+    }
+
+    public Boolean isExpired(Claims claim) {
+
+        return claim.getExpiration().before(new Date());
     }
 
 

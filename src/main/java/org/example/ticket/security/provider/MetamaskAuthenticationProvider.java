@@ -1,11 +1,10 @@
 package org.example.ticket.security.provider;
 
-import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
-import org.example.ticket.member.signature.model.dto.SignatureVerifyRequest;
+import org.example.ticket.member.signature.request.SignatureVerifyRequest;
 import org.example.ticket.member.signature.service.SignatureService;
 import org.example.ticket.security.util.MetamaskUserDetails;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
@@ -15,14 +14,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.authentication.dao.AbstractUserDetailsAuthenticationProvider;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
-import org.web3j.crypto.Keys;
-import org.web3j.crypto.Sign;
-import org.web3j.utils.Numeric;
-
-import java.math.BigInteger;
-import java.security.SignatureException;
-import java.util.Arrays;
 
 @Component
 @RequiredArgsConstructor
@@ -40,14 +33,10 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
         SignatureVerifyRequest request =
                 initSignatureVerifyRequest(authentication, token, metamaskUserDetails);
 
-        log.info("add : {} \n sig : {} \n mes : {}", request.getWalletAddress(), request.getSignature(), request.getMessage());
-
-        if (!isSignatureValid(request)) {
-            log.info("request : {}", request);
+        if (!signatureService.verifySignature(request)) {
             throw new BadCredentialsException("Signature is not valid");
         }
 
-        log.info("request : {}", request);
     }
 
     private static SignatureVerifyRequest initSignatureVerifyRequest(UsernamePasswordAuthenticationToken authentication, MetamaskAuthenticationToken token, MetamaskUserDetails metamaskUserDetails) {
@@ -64,7 +53,7 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
         MetamaskAuthenticationToken auth = (MetamaskAuthenticationToken) authentication;
 
         Member member = repository.findByWalletAddress(auth.getAddress())
-                .orElseThrow(EntityNotFoundException::new);
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with address : " + auth.getAddress()));
 
         MetamaskUserDetails metamaskUserDetails
                 = fetchUsersData(member);
@@ -85,7 +74,7 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
     public boolean supports(Class<?> authentication) {
         return authentication.equals(MetamaskAuthenticationToken.class);
     }
-
+/*
     public boolean isSignatureValid(SignatureVerifyRequest request) {
         // Compose the message with nonce
         String message = "Signing a message to login: %s".formatted(request.getMessage());
@@ -112,5 +101,5 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
         // Get recovered address and compare with the initial address
         String recoveredAddress = "0x" + Keys.getAddress(publicKey);
         return request.getWalletAddress().equalsIgnoreCase(recoveredAddress);
-    }
+    }*/
 }

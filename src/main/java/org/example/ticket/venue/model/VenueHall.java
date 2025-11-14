@@ -1,16 +1,14 @@
 package org.example.ticket.venue.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
 @Getter
+@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -20,7 +18,7 @@ public class VenueHall {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "venuehall_name", nullable = false, unique = true)
+    @Column(name = "venuehall_name", nullable = false)
     private String name;
 
     @Column(name = "venuehall_total_seats")
@@ -30,6 +28,7 @@ public class VenueHall {
     @JoinColumn(name = "venue_id")
     private Venue venue;
 
+    @Builder.Default
     @OneToMany(mappedBy = "venueHall", cascade = CascadeType.ALL)
     private List<VenueHallFloor> floorList = new ArrayList<>();
 }

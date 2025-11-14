@@ -1,0 +1,63 @@
+spring:
+  # MySQL 데이터베이스 설정
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # URL의 데이터베이스 이름을 방금 생성한 'capstone_test'로 변경
+    url: jdbc:mysql://127.0.0.1:10046/capstone?useSSL=false&useUnicode=true&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
+    username: capstone
+    password: cider123
+    # 테스트 환경에서는 커넥션 풀을 너무 크게 잡을 필요가 없습니다.
+    hikari:
+      maximum-pool-size: 3500
+
+  jpa:
+    # 'create-drop'은 'capstone_test' DB에 대해서만 적용되므로 안전합니다.
+    hibernate:
+      ddl-auto: create-drop
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 30
+        # MySQL용 Dialect를 명시적으로 지정해주는 것이 좋습니다.
+        dialect: org.hibernate.dialect.MySQLDialect
+        show_sql: true
+        format_sql: true
+        use_sql_comments: true
+    generate-ddl: true
+
+  # JWT 시크릿 키 (테스트용)
+  jwt:
+    secret: 66c22d185f45958d97fe02c81d0e5ed3fbae56ea3e1df3fc4ba6cefd3c9540361c147a6d43defddadb4238afb13989ae9f22640dc271b0f0425bdcd152ab3017
+
+  # Redis 설정
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+  # 파일 업로드 설정
+  servlet:
+    multipart:
+      enabled: true
+      location: /Users/jeonjeonghyeon/bootPhoto
+      max-request-size: 10MB
+      max-file-size: 1MB
+
+# 로깅 레벨 설정
+logging:
+  level:
+    org:
+      springframework:
+        security: debug
+      hibernate:
+        type:
+          descriptor:
+            sql: trace
+    #... (필요에 따라 다른 로깅 레벨 추가)
+
+# 커스텀 프로퍼티
+ticket:
+  upload:
+    path: /Users/jeonjeonghyeon/bootPhoto/uploads

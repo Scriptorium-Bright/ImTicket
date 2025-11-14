@@ -2,13 +2,14 @@ package org.example.ticket.performance.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.example.ticket.performance.dto.request.SeatPriceRequest;
-import org.example.ticket.performance.dto.response.SeatPriceResponse;
+import org.example.ticket.performance.request.SeatPriceRequest;
+import org.example.ticket.performance.response.SeatPriceResponse;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.model.SeatPrice;
 import org.example.ticket.performance.repository.PerformanceRepository;
 import org.example.ticket.performance.repository.SeatPriceRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -19,9 +20,9 @@ public class SeatPriceService {
     private final PerformanceRepository performanceRepository;
     private final SeatPriceRepository seatPriceRepository;
 
-
-    public List<SeatPriceResponse> setSeatPrice(List<SeatPriceRequest> seatPriceRequestList,
-                                                 Long performanceId) {
+    @Transactional
+    public void setSeatPrice(List<SeatPriceRequest> seatPriceRequestList,
+                             Long performanceId) {
 
         Performance performance = performanceRepository.findById(performanceId)
                 .orElseThrow(() -> new EntityNotFoundException("공연 정보를 찾을 수 없습니다."));
@@ -30,17 +31,19 @@ public class SeatPriceService {
                 .stream()
                 .map(
                         dto -> {
-                            return SeatPrice.builder()
+                            SeatPrice seatPrice = SeatPrice.builder()
                                     .performance(performance)
                                     .price(dto.getPrice())
                                     .seatInfo(dto.getSeatInfo())
                                     .build();
+                            performance.addPrice(seatPrice);
+                            return seatPrice;
                         }
                 ).toList();
 
         seatPriceRepository.saveAll(seatPrices);
 
-        return SeatPriceResponse.from(seatPrices);
+        SeatPriceResponse.from(seatPrices);
     }
 
 

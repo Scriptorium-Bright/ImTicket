@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.security.filter.JwtFilter;
 import org.example.ticket.security.filter.MetamaskAuthenticationFilter;
+import org.example.ticket.security.handler.LoginFailureHandler;
+import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.jwt.JwtUtil;
 import org.example.ticket.security.provider.JwtTokenProvider;
 import org.springframework.boot.web.servlet.FilterRegistrationBean; // Import 추가
@@ -45,11 +47,23 @@ public class SecurityConfig {
     private final AuthenticationConfiguration authenticationConfiguration;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Bean
     public AuthenticationManager authManager() throws Exception {
         return authenticationConfiguration.getAuthenticationManager();
     }
+
+    @Bean
+    public LoginSuccessHandler loginSuccessHandler() {
+        return new LoginSuccessHandler(jwtTokenProvider, objectMapper);
+    }
+
+    @Bean
+    public LoginFailureHandler loginFailureHandler() {
+        return new LoginFailureHandler(objectMapper);
+    }
+
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, MetamaskAuthenticationFilter metamaskAuthenticationFilter)
@@ -87,35 +101,8 @@ public class SecurityConfig {
     public MetamaskAuthenticationFilter metamaskAuthenticationFilter(AuthenticationManager authenticationManager,
                                                                      JwtTokenProvider jwtTokenProvider,
                                                                      ObjectMapper objectMapper) {
-        MetamaskAuthenticationFilter filter = new MetamaskAuthenticationFilter(authenticationManager, jwtTokenProvider, objectMapper);
-        filter.setAuthenticationFailureHandler(metamaskAuthenticationFailureHandler()); // 커스텀 실패 핸들러 사용
+        MetamaskAuthenticationFilter filter = new MetamaskAuthenticationFilter(authenticationManager, jwtTokenProvider, objectMapper, loginSuccessHandler(), loginFailureHandler());
         return filter;
-    }
-
-
-    public AuthenticationFailureHandler metamaskAuthenticationFailureHandler() {
-        return new AuthenticationFailureHandler() {
-            // SecurityConfig에 이미 ObjectMapper 빈이 있다면 주입받아 사용하거나, 여기서 새로 생성
-            private final ObjectMapper objectMapper = new ObjectMapper();
-
-            @Override
-            public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
-                                                AuthenticationException exception) throws IOException, ServletException {
-                log.warn("Metamask Authentication Failed: {}", exception.getMessage());
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.setContentType("application/json;charset=UTF-8");
-
-                Map<String, Object> data = new HashMap<>();
-                data.put("timestamp", System.currentTimeMillis());
-                data.put("status", HttpServletResponse.SC_UNAUTHORIZED);
-                data.put("error", "Unauthorized");
-                // 실제 예외 메시지를 포함시켜 프론트엔드에서 참고할 수 있도록 함
-                data.put("message", "certified failed: " + exception.getLocalizedMessage());
-                data.put("path", request.getRequestURI());
-
-                response.getOutputStream().println(objectMapper.writeValueAsString(data));
-            }
-        };
     }
 
     @Bean
