@@ -16,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
+
 @Slf4j
 public class JwtFilter extends OncePerRequestFilter {
 
@@ -28,47 +29,58 @@ public class JwtFilter extends OncePerRequestFilter {
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
 
         String authorization = request.getHeader(AUTHORIZATION_HEADER);
 
-        log.info("authorization = {}", authorization);
-
-        if(!certifiedHeader(authorization, request, response, filterChain)) return;
-
-        String token = authorization.split(" ")[1];
-        Claims claims = jwtUtil.parseClaims(token);
-
-        if (jwtUtil.isExpired(claims)) {
-            filterChain.doFilter(request, response);
+        // authorization check
+        if (!certifiedHeader(authorization, request, response, filterChain))
             return;
+
+        try {
+            String[] parts = authorization.split(" ");
+            if (parts.length != 2) {
+                log.warn("Invalid Authorization header format");
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            String token = parts[1];
+            Claims claims = jwtUtil.parseClaims(token);
+
+            String walletAddress = jwtUtil.getUsername(claims);
+            String role = jwtUtil.getRole(claims);
+
+            log.info("Authenticated user: {}, role: {}", walletAddress, role);
+
+            Member member = Member.builder()
+                    .walletAddress(walletAddress)
+                    .role(role)
+                    .build();
+
+            MetamaskUserDetails userDetails = new MetamaskUserDetails(member);
+
+            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                    userDetails,
+                    null,
+                    Collections.singletonList(new SimpleGrantedAuthority(role)));
+
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        } catch (Exception e) {
+            log.error("JWT Authentication failed: {}", e.getMessage());
+            // SecurityContext is cleared/empty, relying on SecurityConfig to handle
+            // unauthorized access
+            // Optionally responses can be handled here directly, but logging is sufficient
+            // for filter chain continuation
         }
 
-        String walletAddress = jwtUtil.getUsername(claims);
-        String role = jwtUtil.getRole(claims);
-
-        log.info("wallet address : {}, role = {}", walletAddress, role);
-
-        Member member = Member.builder()
-                .walletAddress(walletAddress)
-                .role(role)
-                .build();
-
-        MetamaskUserDetails userDetails = new MetamaskUserDetails(member);
-
-        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                userDetails,
-                null,
-                Collections.singletonList(new SimpleGrantedAuthority(role))
-        );
-
-        SecurityContextHolder.getContext().setAuthentication(authToken);
-
-        log.info("jwt success");
         filterChain.doFilter(request, response);
     }
 
-    public boolean certifiedHeader(String authorization, HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    public boolean certifiedHeader(String authorization, HttpServletRequest request, HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
         if (authorization == null || !authorization.startsWith(AUTHORIZATION_HEADER_CERTIFIED)) {
             filterChain.doFilter(request, response);
             return false;

@@ -127,7 +127,7 @@ public class SeatService {
                 .build();
     }
 
-        @Transactional
+    @Transactional
     public void preprocessSeatDataWithNoAsync(Long performanceTimeId) {
 
         List<Seat> unreservationSeat = new ArrayList<>();

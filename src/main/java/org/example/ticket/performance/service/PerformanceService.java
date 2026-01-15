@@ -11,6 +11,8 @@ import org.example.ticket.performance.repository.PerformanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.redis.core.RedisTemplate;
+import java.util.concurrent.TimeUnit;
 
 import java.io.IOException;
 import java.util.List;
@@ -23,28 +25,29 @@ public class PerformanceService {
 
     private final PerformanceRepository performanceRepository;
     private final FileService fileService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Transactional
     public Long registerPerformance(PerformanceDetailRequest detailsRequest, MultipartFile file) throws IOException {
 
-//        String dbFilePath = fileService.saveImages(file);
+        // String dbFilePath = fileService.saveImages(file);
 
-        Performance performance =
-                Performance.builder()
-                        .ageLimit(detailsRequest.getAge())
-                        .description(detailsRequest.getDescription())
-                        .title(detailsRequest.getTitle())
-                        .imageUrl("hello World!")
-                        .startDate(detailsRequest.getStartDate())
-                        .endDate(detailsRequest.getEndDate())
-                        .venueType(detailsRequest.getVenueType())
-                        .build();
+        Performance performance = Performance.builder()
+                .ageLimit(detailsRequest.getAge())
+                .description(detailsRequest.getDescription())
+                .title(detailsRequest.getTitle())
+                .imageUrl("hello World!")
+                .startDate(detailsRequest.getStartDate())
+                .endDate(detailsRequest.getEndDate())
+                .venueType(detailsRequest.getVenueType())
+                .build();
 
         return performanceRepository.save(performance).getId();
     }
 
     public PerformanceDetailsResponse viewPerformanceDetails(Long pathId) {
-        Performance performanceDetails = performanceRepository.findByIdWithDetails(pathId).orElseThrow(() -> new EntityNotFoundException("해당 공연을 찾을 수 없습니다."));
+        Performance performanceDetails = performanceRepository.findByIdWithDetails(pathId)
+                .orElseThrow(() -> new EntityNotFoundException("해당 공연을 찾을 수 없습니다."));
         return PerformanceDetailsResponse.from(performanceDetails);
     }
 
@@ -53,10 +56,19 @@ public class PerformanceService {
         return performanceRepository.findByIntro();
     }
 
+    public PerformanceDetailsResponse viewPerformanceDetailsCached(Long pathId) {
+        String key = "performance:details:" + pathId;
+        PerformanceDetailsResponse cached = (PerformanceDetailsResponse) redisTemplate.opsForValue().get(key);
 
+        if (cached != null) {
+            log.info("Cache Hit for performance id: {}", pathId);
+            return cached;
+        }
 
-
-
-
+        log.info("Cache Miss for performance id: {}", pathId);
+        PerformanceDetailsResponse response = viewPerformanceDetails(pathId);
+        redisTemplate.opsForValue().set(key, response, 10, TimeUnit.MINUTES);
+        return response;
+    }
 
 }

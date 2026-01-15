@@ -16,6 +16,9 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
+    public static final String CLAIM_WALLET_ADDRESS = "walletAddress";
+    public static final String CLAIM_ROLE = "role";
+
     private final SecretKey secretKey;
 
     public JwtUtil(@Value("${spring.jwt.secret}") String secret) {
@@ -23,7 +26,8 @@ public class JwtUtil {
         if (secret == null) {
             throw new IllegalArgumentException("JWT secret key is null");
         }
-        this.secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), Jwts.SIG.HS256.key().build().getAlgorithm());
+        this.secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),
+                Jwts.SIG.HS256.key().build().getAlgorithm());
     }
 
     public Claims parseClaims(String token) {
@@ -31,31 +35,21 @@ public class JwtUtil {
     }
 
     public String getUsername(Claims claim) {
-
-        return claim.get("walletAddress", String.class);
+        return claim.get(CLAIM_WALLET_ADDRESS, String.class);
     }
 
     public String getRole(Claims claim) {
-
-        return claim.get("role", String.class);
+        return claim.get(CLAIM_ROLE, String.class);
     }
-
-    public Boolean isExpired(Claims claim) {
-
-        return claim.getExpiration().before(new Date());
-    }
-
 
     public String createJwt(String walletAddress, String role, Long expiredMs) {
-
-        log.info("create JWT process");
 
         if (secretKey == null) {
             throw new IllegalStateException("Secret key is not initialized");
         }
         return Jwts.builder()
-                .claim("walletAddress", walletAddress)
-                .claim("role", role)
+                .claim(CLAIM_WALLET_ADDRESS, walletAddress)
+                .claim(CLAIM_ROLE, role)
                 .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + expiredMs))
                 .signWith(secretKey)

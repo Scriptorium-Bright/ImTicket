@@ -3,6 +3,7 @@ package org.example.ticket.reservation.model;
 import jakarta.persistence.*;
 import lombok.*;
 import org.example.ticket.member.model.Member;
+//import org.example.ticket.payment.model.Settlement;
 import org.example.ticket.util.constant.ReservationStatus;
 import org.hibernate.annotations.CurrentTimestamp;
 
@@ -43,7 +44,6 @@ public class Reservation {
     @Column(name = "reservation_expired_time")
     private LocalDateTime expiredTime;
 
-
     @Builder.Default
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL)
     private List<ReservedSeat> reservedSeats = new ArrayList<>();
@@ -51,9 +51,15 @@ public class Reservation {
     public void changeReservationStatus(ReservationStatus reservationStatus) {
         this.reservationStatus = reservationStatus;
     }
+/*
 
-//    public void completeSuccessPayment(Settlement payment) {
-//        this.payment = payment;
-//    }
+    @OneToOne
+    @JoinColumn(name = "settlement_id")
+    private Settlement payment;
+
+    public void completeSuccessPayment(Settlement payment) {
+        this.payment = payment;
+    }
+*/
 
 }
