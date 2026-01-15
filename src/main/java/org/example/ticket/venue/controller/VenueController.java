@@ -23,7 +23,6 @@ public class VenueController {
     private final VenueService venueService;
     private final VenueHallService venueHallService;
 
-
     @PostMapping("/enter")
     public ResponseEntity<?> registerVenue(@RequestBody ShowPlace showPlace) {
 
@@ -32,27 +31,35 @@ public class VenueController {
         return ResponseEntity.ok().build();
     }
 
-
     @PostMapping("/enter/{hallId}/seats")
-    public ResponseEntity<?> registerEmptySeats(@PathVariable Long hallId, @RequestBody List<VenueHallFloorRequest> requestList) {
+    public ResponseEntity<?> registerEmptySeats(@PathVariable Long hallId,
+            @RequestBody List<VenueHallFloorRequest> requestList,
+            @RequestParam(defaultValue = "async") String type) {
 
-        venueHallService.allocateEmptySeatTemplate(hallId, requestList);
+        if ("stream".equalsIgnoreCase(type)) {
+            venueHallService.allocateEmptySeatTemplateSync(hallId, requestList);
+        } else {
+            venueHallService.allocateEmptySeatTemplate(hallId, requestList);
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 
-/*    @GetMapping("/halls")
-    public List<VenueResponse> viewVenueList() {
-        List<VenueResponse> venueResponses = venueService.viewVenueList();
-
-        for (VenueResponse venueRespons : venueResponses) {
-            log.info(venueRespons.getAddress());
-            log.info(venueRespons.getName());
-            log.info(venueRespons.getVenueHallResponseList().stream().map(VenueHallResponse::getHallId).toString());
-        }
-
-        return venueResponses;
-    }*/
+    /*
+     * @GetMapping("/halls")
+     * public List<VenueResponse> viewVenueList() {
+     * List<VenueResponse> venueResponses = venueService.viewVenueList();
+     * 
+     * for (VenueResponse venueRespons : venueResponses) {
+     * log.info(venueRespons.getAddress());
+     * log.info(venueRespons.getName());
+     * log.info(venueRespons.getVenueHallResponseList().stream().map(
+     * VenueHallResponse::getHallId).toString());
+     * }
+     * 
+     * return venueResponses;
+     * }
+     */
 
     @GetMapping("/halls")
     public List<VenueHallResponse> viewVenueHallList() {

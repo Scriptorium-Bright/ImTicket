@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.security.LoginRequestDto;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
-import org.example.ticket.security.provider.JwtTokenProvider;
+
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
 import org.example.ticket.security.util.MetamaskUserDetails;
 import org.jetbrains.annotations.NotNull;
@@ -35,9 +35,11 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
 
     private final ObjectMapper objectMapper; // JSON 응답 작성을 위해 주입
     // 생성자에서 의존성 주입
+    // 생성자에서 의존성 주입
+
     public MetamaskAuthenticationFilter(AuthenticationManager authenticationManager,
-                                        JwtTokenProvider jwtTokenProvider,
-                                        ObjectMapper objectMapper, LoginSuccessHandler loginSuccessHandler, LoginFailureHandler loginFailureHandler) {
+            ObjectMapper objectMapper, LoginSuccessHandler loginSuccessHandler,
+            LoginFailureHandler loginFailureHandler) {
         super(new AntPathRequestMatcher(SPRING_WEB_LOGIN_URI, HTTP_METHOD_TYPE), authenticationManager);
         setAuthenticationSuccessHandler(loginSuccessHandler);
         setAuthenticationFailureHandler(loginFailureHandler);

@@ -11,7 +11,7 @@ import org.example.ticket.security.filter.MetamaskAuthenticationFilter;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.jwt.JwtUtil;
-import org.example.ticket.security.provider.JwtTokenProvider;
+
 import org.springframework.boot.web.servlet.FilterRegistrationBean; // Import 추가
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -47,7 +47,6 @@ public class SecurityConfig {
     private final AuthenticationConfiguration authenticationConfiguration;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
-    private final JwtTokenProvider jwtTokenProvider;
 
     @Bean
     public AuthenticationManager authManager() throws Exception {
@@ -56,14 +55,13 @@ public class SecurityConfig {
 
     @Bean
     public LoginSuccessHandler loginSuccessHandler() {
-        return new LoginSuccessHandler(jwtTokenProvider, objectMapper);
+        return new LoginSuccessHandler(jwtUtil, objectMapper);
     }
 
     @Bean
     public LoginFailureHandler loginFailureHandler() {
         return new LoginFailureHandler(objectMapper);
     }
-
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, MetamaskAuthenticationFilter metamaskAuthenticationFilter)
@@ -80,18 +78,17 @@ public class SecurityConfig {
                 .addFilterAt(metamaskAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtFilter(jwtUtil), MetamaskAuthenticationFilter.class);
 
-        http.authorizeHttpRequests(authorizeRequests ->
-                authorizeRequests
-                        .requestMatchers( // 인증 없이 접근 허용할 경로 명시
-                                "/api/user/nonce",          // Nonce 요청
-                                "/api/user/register",       // 회원가입 요청
-                                "/api/sms/certificate",     // SMS 인증 요청
-                                "/api/user/signature/verify", // 로그인 처리 자체 (필터에서 인증 담당)
-                                "/api/user/validate/{walletAddress}", // 지갑 주소 유효성 검사 (필요시)
-                                "/"
-                                // 다른 public API 경로가 있다면 추가
-                        ).permitAll() // 위 경로들은 인증 없이 허용
-                        .anyRequest().permitAll() // 그 외 모든 요청은 인증 필요
+        http.authorizeHttpRequests(authorizeRequests -> authorizeRequests
+                .requestMatchers( // 인증 없이 접근 허용할 경로 명시
+                        "/api/user/nonce", // Nonce 요청
+                        "/api/user/register", // 회원가입 요청
+                        "/api/sms/certificate", // SMS 인증 요청
+                        "/api/user/signature/verify", // 로그인 처리 자체 (필터에서 인증 담당)
+                        "/api/user/validate/{walletAddress}", // 지갑 주소 유효성 검사 (필요시)
+                        "/"
+                // 다른 public API 경로가 있다면 추가
+                ).permitAll() // 위 경로들은 인증 없이 허용
+                .anyRequest().permitAll() // 그 외 모든 요청은 인증 필요
         );
 
         return http.build();
@@ -99,9 +96,9 @@ public class SecurityConfig {
 
     @Bean
     public MetamaskAuthenticationFilter metamaskAuthenticationFilter(AuthenticationManager authenticationManager,
-                                                                     JwtTokenProvider jwtTokenProvider,
-                                                                     ObjectMapper objectMapper) {
-        MetamaskAuthenticationFilter filter = new MetamaskAuthenticationFilter(authenticationManager, jwtTokenProvider, objectMapper, loginSuccessHandler(), loginFailureHandler());
+            ObjectMapper objectMapper) {
+        MetamaskAuthenticationFilter filter = new MetamaskAuthenticationFilter(authenticationManager, objectMapper,
+                loginSuccessHandler(), loginFailureHandler());
         return filter;
     }
 

@@ -20,14 +20,16 @@ public class JwtUtil {
     public static final String CLAIM_ROLE = "role";
 
     private final SecretKey secretKey;
+    private final Long expiredMs;
 
-    public JwtUtil(@Value("${spring.jwt.secret}") String secret) {
+    public JwtUtil(@Value("${spring.jwt.secret}") String secret, @Value("${spring.jwt.expired.time}") Long expiredMs) {
         log.info("jwt Util process");
         if (secret == null) {
             throw new IllegalArgumentException("JWT secret key is null");
         }
         this.secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),
                 Jwts.SIG.HS256.key().build().getAlgorithm());
+        this.expiredMs = expiredMs;
     }
 
     public Claims parseClaims(String token) {
@@ -42,7 +44,7 @@ public class JwtUtil {
         return claim.get(CLAIM_ROLE, String.class);
     }
 
-    public String createJwt(String walletAddress, String role, Long expiredMs) {
+    public String createJwt(String walletAddress, String role) {
 
         if (secretKey == null) {
             throw new IllegalStateException("Secret key is not initialized");

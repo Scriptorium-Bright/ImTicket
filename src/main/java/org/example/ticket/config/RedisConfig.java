@@ -1,11 +1,20 @@
 package org.example.ticket.config;
 
+import org.example.ticket.venue.stream.SeatCreationConsumer;
+import org.example.ticket.venue.stream.SeatCreationProducer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.ReadOffset;
+import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.data.redis.stream.StreamMessageListenerContainer;
+import org.springframework.data.redis.stream.Subscription;
+
+import java.time.Duration;
 
 @Configuration
 public class RedisConfig {
@@ -24,5 +33,23 @@ public class RedisConfig {
         template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
 
         return template;
+    }
+
+    @Bean
+    public StreamMessageListenerContainer<String, MapRecord<String, String, String>> streamMessageListenerContainer(
+            RedisConnectionFactory connectionFactory) {
+        StreamMessageListenerContainer.StreamMessageListenerContainerOptions<String, MapRecord<String, String, String>> options = StreamMessageListenerContainer.StreamMessageListenerContainerOptions
+                .builder()
+                .pollTimeout(Duration.ofMillis(100))
+                .build();
+        return StreamMessageListenerContainer.create(connectionFactory, options);
+    }
+
+    @Bean
+    public Subscription seatCreationSubscription(
+            StreamMessageListenerContainer<String, MapRecord<String, String, String>> container,
+            SeatCreationConsumer consumer) {
+        container.start(); // Ensure container is started
+        return container.receive(StreamOffset.create(SeatCreationProducer.STREAM_KEY, ReadOffset.latest()), consumer);
     }
 }
