@@ -31,8 +31,9 @@ public class PerformanceController {
     private final PerformanceService performanceService;
 
     @PostMapping("/enter")
-    public ResponseEntity<Void> registerPerformance(@Validated @RequestPart("details") PerformanceDetailRequest detailsRequest,
-                                                    @Validated @RequestPart("image") MultipartFile file) throws IOException {
+    public ResponseEntity<Void> registerPerformance(
+            @Validated @RequestPart("details") PerformanceDetailRequest detailsRequest,
+            @Validated @RequestPart("image") MultipartFile file) throws IOException {
 
         Long performanceId = performanceService.registerPerformance(detailsRequest, file);
 
@@ -46,9 +47,15 @@ public class PerformanceController {
     }
 
     @GetMapping("/intro/{performanceId}")
-    public ResponseEntity<PerformanceDetailsResponse> retrieveEventDetails(@PathVariable Long performanceId) {
-        PerformanceDetailsResponse detailsRequest = performanceService.viewPerformanceDetails(performanceId);
-        return ResponseEntity.ok(detailsRequest);
+    public ResponseEntity<PerformanceDetailsResponse> retrieveEventDetails(@PathVariable Long performanceId,
+            @RequestParam(defaultValue = "false") boolean cache) {
+        PerformanceDetailsResponse response;
+        if (cache) {
+            response = performanceService.viewPerformanceDetailsCached(performanceId);
+        } else {
+            response = performanceService.viewPerformanceDetails(performanceId);
+        }
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/intro")

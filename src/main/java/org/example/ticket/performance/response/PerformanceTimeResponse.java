@@ -10,11 +10,15 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 
+import java.io.Serializable;
+
 @Builder
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class PerformanceTimeResponse {
+public class PerformanceTimeResponse implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     private Long id;
     private LocalDate showDate;

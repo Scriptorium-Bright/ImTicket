@@ -1,6 +1,5 @@
 package org.example.ticket.performance.response;
 
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -11,43 +10,44 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import java.io.Serializable;
+
 @Builder
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class PerformanceDetailsResponse {
+public class PerformanceDetailsResponse implements Serializable {
 
-    private Integer ageLimit;
-    private String imageUrl;
-    private LocalDate startDate;
-    private String description;
-    private String title;
+        private static final long serialVersionUID = 1L;
 
-    List<PerformanceTimeResponse> performanceTimes;
-    List<SeatPriceResponse> seatPrices;
+        private Integer ageLimit;
+        private String imageUrl;
+        private LocalDate startDate;
+        private String description;
+        private String title;
 
+        List<PerformanceTimeResponse> performanceTimes;
+        List<SeatPriceResponse> seatPrices;
 
-    public static PerformanceDetailsResponse from(Performance performance) {
+        public static PerformanceDetailsResponse from(Performance performance) {
 
-        return PerformanceDetailsResponse.builder()
-                .title(performance.getTitle())
-                .ageLimit(performance.getAgeLimit())
-                .description(performance.getDescription())
-                .imageUrl(performance.getImageUrl())
-                .startDate(performance.getStartDate())
+                return PerformanceDetailsResponse.builder()
+                                .title(performance.getTitle())
+                                .ageLimit(performance.getAgeLimit())
+                                .description(performance.getDescription())
+                                .imageUrl(performance.getImageUrl())
+                                .startDate(performance.getStartDate())
 
-                .seatPrices(
-                        performance.getSeatPrices().stream()
-                                .map(SeatPriceResponse::new)
-                                .collect(Collectors.toList())
-                )
-                .performanceTimes(
-                        performance.getPerformanceTimes().stream()
-                                .map(PerformanceTimeResponse::new)
-                                .collect(Collectors.toList())
-                )
-                .build();
+                                .seatPrices(
+                                                performance.getSeatPrices().stream()
+                                                                .map(SeatPriceResponse::new)
+                                                                .collect(Collectors.toList()))
+                                .performanceTimes(
+                                                performance.getPerformanceTimes().stream()
+                                                                .map(PerformanceTimeResponse::new)
+                                                                .collect(Collectors.toList()))
+                                .build();
 
-    }
+        }
 
 }

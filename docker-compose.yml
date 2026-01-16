@@ -8,9 +8,9 @@ services:
     ports:
       - "10080:10080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/capstone?useSSL=false&useUnicode=true&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: capstone
-      SPRING_DATASOURCE_PASSWORD: cider123
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL_DOCKER}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
 
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
@@ -44,10 +44,10 @@ services:
     ports:
       - "10047:3306" # Expose on 10047 to avoid conflict with local DB on 10046/3306
     environment:
-      MYSQL_DATABASE: capstone
-      MYSQL_USER: capstone
-      MYSQL_PASSWORD: cider123
-      MYSQL_ROOT_PASSWORD: rootroot
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql # Persist data
@@ -77,7 +77,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
     networks:
       - imticket-network
     depends_on:

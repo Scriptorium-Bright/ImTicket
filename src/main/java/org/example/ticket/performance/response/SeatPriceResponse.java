@@ -9,12 +9,15 @@ import org.example.ticket.util.constant.SeatInfo;
 
 import java.util.List;
 
+import java.io.Serializable;
+
 @Builder
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class SeatPriceResponse {
+public class SeatPriceResponse implements Serializable {
 
+    private static final long serialVersionUID = 1L;
 
     private Integer price;
     private SeatInfo seatInfo;

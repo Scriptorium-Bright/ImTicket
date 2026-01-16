@@ -45,8 +45,9 @@ public class PerformanceService {
         return performanceRepository.save(performance).getId();
     }
 
+    @Transactional(readOnly = true)
     public PerformanceDetailsResponse viewPerformanceDetails(Long pathId) {
-        Performance performanceDetails = performanceRepository.findByIdWithDetails(pathId)
+        Performance performanceDetails = performanceRepository.findById(pathId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 공연을 찾을 수 없습니다."));
         return PerformanceDetailsResponse.from(performanceDetails);
     }

@@ -22,6 +22,7 @@ bin/
 
 ### IntelliJ IDEA ###
 application.properties
+application.yml
 .idea
 *.iws
 *.iml
@@ -39,3 +40,10 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### k6 ###
+*.js
+*.html
+
+### Environment Variables ###
+.env
