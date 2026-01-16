@@ -23,10 +23,13 @@ jobs:
         distribution: 'temurin'
 
     - name: Create application.properties and .env
+      env:
+        APPLICATION_PROPERTIES: ${{ secrets.APPLICATION_PROPERTIES }}
+        ENV_FILE: ${{ secrets.ENV_FILE }}
       run: |
         mkdir -p src/main/resources
-        echo "${{ secrets.APPLICATION_PROPERTIES }}" > src/main/resources/application.properties
-        echo "${{ secrets.ENV_FILE }}" > .env
+        echo "$APPLICATION_PROPERTIES" > src/main/resources/application.properties
+        echo "$ENV_FILE" > .env
 
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
