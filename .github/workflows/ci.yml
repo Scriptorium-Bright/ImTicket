@@ -1,4 +1,4 @@
-name: Java CI with Gradle
+name: Java CI with Gradle & Docker Push
 
 on:
   push:
@@ -10,49 +10,30 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # Job 1: 코드 무결성 검증 (테스트 수행)
+  test:
     runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up JDK 21
-      uses: actions/setup-java@v4
-      with:
-        java-version: '21'
-        distribution: 'temurin'
-
-    - name: Create application.properties and .env
-      env:
-        APPLICATION_PROPERTIES: ${{ secrets.APPLICATION_PROPERTIES }}
-        ENV_FILE: ${{ secrets.ENV_FILE }}
-      run: |
-        mkdir -p src/main/resources
-        echo "$APPLICATION_PROPERTIES" > src/main/resources/application.properties
-        echo "$ENV_FILE" > .env
-
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-
-    - name: Build with Gradle Wrapper
-      run: ./gradlew clean build -x test 
-      # -x test is temporary if tests are failing, but ideally we should run tests.
-      # Given local test failure, I'll allow build to pass for now to enable Docker push.
-      # Ideally: ./gradlew clean build
-
-  docker:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' # Only push on main branch
-
     steps:
       - uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+      - name: Run Tests
+        run: ./gradlew test # 여기서 실패하면 배포 단계로 넘어가지 않음
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+  # Job 2: Docker 이미지 빌드 및 푸시 (테스트 통과 시에만 실행)
+  build-and-push:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -63,9 +44,15 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push
+      - name: Build and Push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/imticket-app:latest
+          # 태그 전략: latest와 고유 식별자(SHA) 동시 생성
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/imticket-app:latest
+            ${{ secrets.DOCKER_USERNAME }}/imticket-app:${{ github.sha }}
+          # GitHub Cache를 활용하여 빌드 속도 가속화
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
