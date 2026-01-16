@@ -59,6 +59,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Prometheus Service
+  prometheus:
+    image: prom/prometheus
+    container_name: imticket-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - imticket-network
+
+  # Grafana Service
+  grafana:
+    image: grafana/grafana
+    container_name: imticket-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - imticket-network
+    depends_on:
+      - prometheus
+
 networks:
   imticket-network:
     driver: bridge
