@@ -53,11 +53,9 @@ public class MemberService {
     }
 
     @Transactional
-    public void changeUsersNickname(String nickname) {
-        Member member = Member
-                .builder()
-                .nickname(nickname)
-                .build();
+    public void changeUsersNickname(String walletAddress, String nickname) {
+        Member member = memberRepository.findByWalletAddress(walletAddress).orElseThrow();
+        member.updateNickname(nickname);
     }
 
     public String fetchUsersNickname(String walletAddress) {

@@ -5,7 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.request.RegisterRequest;
 import org.example.ticket.member.service.AuthenticationService;
 import org.example.ticket.member.service.MemberService;
+import org.example.ticket.security.util.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collections;
@@ -37,10 +40,14 @@ public class MemberController {
         return ResponseEntity.ok().build();
     }
 
-    @PutMapping("/myPage/nickname")
-    public ResponseEntity<String> changeNickname(@RequestParam("nickname") String nickname) {
-        memberService.changeUsersNickname(nickname);
-        return ResponseEntity.ok().body(nickname);
+    @PatchMapping("/myPage/nickname")
+    public ResponseEntity<String> changeNickname(@RequestBody String username,
+                                                 @AuthenticationPrincipal MetamaskUserDetails userDetails) {
+
+        String walletAddress = userDetails.getAddress();
+        memberService.changeUsersNickname(walletAddress, username);
+
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/nickname")

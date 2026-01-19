@@ -53,12 +53,13 @@ public class RedisConfig {
         String consumerGroup = "seat-creation-group";
 
         try {
-            if (Boolean.FALSE.equals(redisTemplate.hasKey(streamKey))) {
+            if (!redisTemplate.hasKey(streamKey)) {
                 redisTemplate.opsForStream().createGroup(streamKey, consumerGroup);
             } else {
                 redisTemplate.opsForStream().createGroup(streamKey, consumerGroup);
             }
-        } catch (Exception e) {
+        } catch (Exception ignored) {
+
         }
 
         String consumerName = "consumer-" + UUID.randomUUID().toString().substring(0, 8);
