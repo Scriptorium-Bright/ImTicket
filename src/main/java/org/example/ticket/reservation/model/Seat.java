@@ -10,6 +10,9 @@ import org.example.ticket.util.constant.SeatStatus;
 import static org.example.ticket.util.constant.SeatStatus.LOCKED;
 
 @Entity
+@Table(indexes = {
+        @Index(name = "idx_seat_perf_status", columnList = "performance_time_id, seat_status")
+})
 @Builder
 @Getter
 @Setter
@@ -47,8 +50,10 @@ public class Seat {
     @Column(name = "seat_status")
     private SeatStatus seatStatus;
 
-/*    @Version
-    private Long version;*/
+    /*
+     * @Version
+     * private Long version;
+     */
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "performance_time_id")
