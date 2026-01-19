@@ -8,8 +8,11 @@ import org.example.ticket.member.model.Organizer;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.member.repository.OrganizerRepository;
 import org.example.ticket.member.request.OrganizerRequest;
+import org.example.ticket.util.constant.Role;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import static org.example.ticket.util.constant.Role.ORGANIZER;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +42,7 @@ public class OrganizerService {
     }
 
     private void changeRole(Organizer organizer) {
-        organizer.getMember().changeMembersRole("ROLE_ORGANIZER");
+        organizer.getMember().changeMembersRole(ORGANIZER.getRole());
     }
 
 }

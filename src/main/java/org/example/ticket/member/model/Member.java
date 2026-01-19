@@ -18,7 +18,7 @@ public class Member {
     private Long id;
     @Column(nullable = false, name = "wallet_address", unique = true)
     private String walletAddress;
-    @Column(nullable = false, name = "phone_number")
+    @Column(nullable = true, name = "phone_number")
     private String phoneNumber;
     @Column(nullable = false, name = "user_role")
     private String role;
@@ -38,7 +38,9 @@ public class Member {
         return UUID.randomUUID().toString();
     }
 
-    public void updateNonce(Integer newNonce) { this.nonce = newNonce; }
+    public void updateNonce(Integer newNonce) {
+        this.nonce = newNonce;
+    }
 
     public void changeMembersRole(String role) {
         this.role = role;

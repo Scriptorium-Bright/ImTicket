@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.util.Optional;
 
+import static org.example.ticket.util.constant.Role.USER;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -27,7 +29,12 @@ public class MemberService {
             member.updateNonce(newNonce);
             log.info("Updated nonce for existing user {}: {}", walletAddress, newNonce);
         } else {
-            log.info("Generated nonce for new/unfound user {}: {}", walletAddress, newNonce);
+            memberRepository.save(Member.builder()
+                    .walletAddress(walletAddress)
+                    .role(USER.getRole())
+                    .nonce(newNonce)
+                    .build());
+            log.info("Generated and SAVED nonce for new user {}: {}", walletAddress, newNonce);
         }
         return newNonce;
     }
@@ -43,7 +50,7 @@ public class MemberService {
                                 .nickname(nickname)
                                 .smsVerified(true)
                                 .walletVerified(true)
-                                .role("ROLE_USER")
+                                .role(USER.getRole())
                                 .nonce(nonce)
                                 .build()));
     }
@@ -59,17 +66,16 @@ public class MemberService {
     }
 
     public String fetchUsersNickname(String walletAddress) {
-        return memberRepository.findByNicknameWithWalletAddress(walletAddress);
+        return memberRepository.findNicknameByWalletAddress(walletAddress);
     }
 
     public String fetchUsersWalletAddress(String nickname) {
-        return memberRepository.findByWalletAddressWithNickname(nickname);
+        return memberRepository.findWalletAddressByNickname(nickname);
     }
 
     public Integer createNonce() {
         SecureRandom secureRandom = new SecureRandom();
         return secureRandom.nextInt();
     }
-
 
 }
