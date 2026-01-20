@@ -25,3 +25,6 @@
 5. 이벤트 등록: 이벤트 주최자
 6. 티켓 구매자 조회: 이벤트 주최자
 
+### Entity Relationship
+
+<img width="1165" height="465" alt="스크린샷 2026-01-20 오전 9 40 13" src="https://github.com/user-attachments/assets/ce68049c-219f-49f5-b8d9-b56bb991cd95" />
