@@ -26,17 +26,19 @@ public class PerformanceService {
     private final PerformanceRepository performanceRepository;
     private final FileService fileService;
     private final RedisTemplate<String, Object> redisTemplate;
+    public final static int CACHE_TIMEOUT = 10;
+    public final static TimeUnit MINUTES = TimeUnit.MINUTES;
 
     @Transactional
     public Long registerPerformance(PerformanceDetailRequest detailsRequest, MultipartFile file) throws IOException {
 
-        // String dbFilePath = fileService.saveImages(file);
+         String dbFilePath = fileService.saveImages(file);
 
         Performance performance = Performance.builder()
                 .ageLimit(detailsRequest.getAge())
                 .description(detailsRequest.getDescription())
                 .title(detailsRequest.getTitle())
-                .imageUrl("hello World!")
+                .imageUrl(dbFilePath)
                 .startDate(detailsRequest.getStartDate())
                 .endDate(detailsRequest.getEndDate())
                 .venueType(detailsRequest.getVenueType())
@@ -45,7 +47,6 @@ public class PerformanceService {
         return performanceRepository.save(performance).getId();
     }
 
-    @Transactional(readOnly = true)
     public PerformanceDetailsResponse viewPerformanceDetails(Long pathId) {
         Performance performanceDetails = performanceRepository.findById(pathId)
                 .orElseThrow(() -> new EntityNotFoundException("해당 공연을 찾을 수 없습니다."));
@@ -68,7 +69,7 @@ public class PerformanceService {
 
         log.info("Cache Miss for performance id: {}", pathId);
         PerformanceDetailsResponse response = viewPerformanceDetails(pathId);
-        redisTemplate.opsForValue().set(key, response, 10, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set(key, response, CACHE_TIMEOUT, MINUTES);
         return response;
     }
 

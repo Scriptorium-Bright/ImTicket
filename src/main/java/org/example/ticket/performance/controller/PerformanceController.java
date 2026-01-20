@@ -59,7 +59,7 @@ public class PerformanceController {
     }
 
     @GetMapping("/intro")
-    public ResponseEntity<?> retrieveEventOverview() {
+    public ResponseEntity<List<PerformanceOverviewResponse>> retrieveEventOverview() {
         List<PerformanceOverviewResponse> overviewList = performanceService.viewPerformanceIntro();
         return ResponseEntity.ok(overviewList);
     }
