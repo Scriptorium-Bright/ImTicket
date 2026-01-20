@@ -29,3 +29,7 @@
 
 <img width="1189" height="733" alt="스크린샷 2026-01-20 오전 9 57 39" src="https://github.com/user-attachments/assets/be49d619-b1f9-4844-ac92-db6e24f89700" />
 
+### Backend System Architecture
+
+<img width="1042" height="844" alt="image" src="https://github.com/user-attachments/assets/d1762fe6-626f-4aea-ad4e-9fb8ad67cdba" />
+
