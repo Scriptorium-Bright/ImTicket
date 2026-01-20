@@ -27,4 +27,5 @@
 
 ### Entity Relationship
 
-<img width="1165" height="465" alt="스크린샷 2026-01-20 오전 9 40 13" src="https://github.com/user-attachments/assets/ce68049c-219f-49f5-b8d9-b56bb991cd95" />
+<img width="1189" height="733" alt="스크린샷 2026-01-20 오전 9 57 39" src="https://github.com/user-attachments/assets/be49d619-b1f9-4844-ac92-db6e24f89700" />
+
