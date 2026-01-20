@@ -47,11 +47,6 @@ public class SeatService {
         return repository.findByIdsForUpdateWithOptimistic(seatId);
     }
 
-
-//    public void changeSeatState(List<Seat> seats) {
-//        seats.forEach(Seat::markAsReserved);
-//    }
-
     @Transactional
     public void changeSeatsState(List<Seat> seats, SeatStatus seatStatus) {
         seats.forEach(seat -> seat.markAsReserved(seatStatus));
@@ -75,12 +70,8 @@ public class SeatService {
 
         Map<SeatInfo, Integer> priceMap = getPriceInfo(performance);
 
- /*       for (SeatInfo seatInfo : priceMap.keySet()) {
-            log.info("seat info = {}", seatInfo);
-        }*/
-
         if(priceMap.isEmpty()) {
-            System.out.println("SeatService.preprocessSeatData");
+            log.debug("Seat Info is Empty");
         }
 
         List<VenueHallFloor> floorList = venueHall.getFloorList();
