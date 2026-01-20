@@ -38,16 +38,6 @@ public class SeatService {
     }
 
     @Transactional
-    public List<Seat> findAndLockSeatsByIdsWithDistribution(List<Long> seatId) {
-        return repository.findByIdsForUpdateWithDistribution(seatId);
-    }
-
-    @Transactional
-    public List<Seat> findAndLockSeatsByIdsWithOptimistic(List<Long> seatId) {
-        return repository.findByIdsForUpdateWithOptimistic(seatId);
-    }
-
-    @Transactional
     public void changeSeatsState(List<Seat> seats, SeatStatus seatStatus) {
         seats.forEach(seat -> seat.markAsReserved(seatStatus));
     }
@@ -117,55 +107,5 @@ public class SeatService {
                 .seatStatus(SeatStatus.AVAILABLE)
                 .build();
     }
-
-    @Transactional
-    public void preprocessSeatDataWithNoAsync(Long performanceTimeId) {
-
-        List<Seat> unreservationSeat = new ArrayList<>();
-
-        PerformanceTime performanceTime = performanceTimeRepository.findById(performanceTimeId)
-                .orElseThrow(() -> new EntityNotFoundException("해당 공연장(공연) 시간을 찾을 수 없습니다."));
-
-        VenueHall venueHall = performanceTime.getVenueHall();
-        Performance performance = performanceTime.getPerformance();
-
-        Map<SeatInfo, Integer> priceMap = performance.getSeatPrices()
-                .stream()
-                .collect(
-                        Collectors.toMap(
-                                SeatPrice::getSeatInfo,
-                                SeatPrice::getPrice
-                        )
-                );
-
-        if(priceMap.isEmpty()) {
-            System.out.println("SeatService.preprocessSeatData");
-        }
-
-        List<VenueHallFloor> floorList = venueHall.getFloorList();
-
-        floorList.forEach(floorDTO -> {
-            List<VenueHallSection> sections = floorDTO.getSections();
-            sections.forEach(sectionDTO -> {
-                List<VenueHallRow> rows = sectionDTO.getRows();
-                rows.forEach(rowsDTO -> {
-                    List<VenueHallSeat> seats = rowsDTO.getSeats();
-                    SeatInfo seatInfo = seats.getFirst().getSeatInfo();
-                    System.out.println("seatInfo = " + seatInfo);
-                    Integer price = priceMap.get(seatInfo);
-                    System.out.println("price = " + price);
-
-                    seats.forEach(seatTemplate -> {
-                        Seat seat = processSeat(floorDTO, sectionDTO, rowsDTO, seatTemplate, performanceTime, seatInfo, price);
-                        unreservationSeat.add(seat);
-                    });
-
-                });
-            });
-        });
-
-        repository.saveAll(unreservationSeat);
-    }
-
 
 }
