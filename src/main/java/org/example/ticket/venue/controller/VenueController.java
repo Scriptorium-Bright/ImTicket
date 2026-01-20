@@ -24,7 +24,7 @@ public class VenueController {
     private final VenueHallService venueHallService;
 
     @PostMapping("/enter")
-    public ResponseEntity<?> registerVenue(@RequestBody ShowPlace showPlace) {
+    public ResponseEntity<Void> registerVenue(@RequestBody ShowPlace showPlace) {
 
         venueService.insertVenue(showPlace.getRequest(), showPlace.getVenueHallRequest());
 
@@ -32,7 +32,7 @@ public class VenueController {
     }
 
     @PostMapping("/enter/{hallId}/seats")
-    public ResponseEntity<?> registerEmptySeats(@PathVariable Long hallId,
+    public ResponseEntity<Void> registerEmptySeats(@PathVariable Long hallId,
             @RequestBody List<VenueHallFloorRequest> requestList,
             @RequestParam(defaultValue = "async") String type) {
 
@@ -44,22 +44,6 @@ public class VenueController {
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
     }
-
-    /*
-     * @GetMapping("/halls")
-     * public List<VenueResponse> viewVenueList() {
-     * List<VenueResponse> venueResponses = venueService.viewVenueList();
-     * 
-     * for (VenueResponse venueRespons : venueResponses) {
-     * log.info(venueRespons.getAddress());
-     * log.info(venueRespons.getName());
-     * log.info(venueRespons.getVenueHallResponseList().stream().map(
-     * VenueHallResponse::getHallId).toString());
-     * }
-     * 
-     * return venueResponses;
-     * }
-     */
 
     @GetMapping("/halls")
     public List<VenueHallResponse> viewVenueHallList() {
