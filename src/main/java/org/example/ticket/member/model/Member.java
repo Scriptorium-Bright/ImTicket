@@ -42,6 +42,22 @@ public class Member {
         this.nonce = newNonce;
     }
 
+    public boolean isRegistered() {
+        return Boolean.TRUE.equals(smsVerified)
+                && Boolean.TRUE.equals(walletVerified)
+                && phoneNumber != null
+                && nickname != null;
+    }
+
+    public void completeRegistration(String phoneNumber, String nickname, String role, Integer nonce) {
+        this.phoneNumber = phoneNumber;
+        this.nickname = nickname;
+        this.smsVerified = true;
+        this.walletVerified = true;
+        this.role = role;
+        this.nonce = nonce;
+    }
+
     public void changeMembersRole(String role) {
         this.role = role;
     }

@@ -8,6 +8,7 @@ import org.example.ticket.security.filter.MetamaskAuthenticationFilter;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.jwt.JwtUtil;
+import org.example.ticket.member.service.MemberService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -36,6 +37,7 @@ public class SecurityConfig {
     private final AuthenticationConfiguration authenticationConfiguration;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+    private final MemberService memberService;
 
     @Bean
     public AuthenticationManager authManager() throws Exception {
@@ -44,7 +46,7 @@ public class SecurityConfig {
 
     @Bean
     public LoginSuccessHandler loginSuccessHandler() {
-        return new LoginSuccessHandler(jwtUtil, objectMapper);
+        return new LoginSuccessHandler(jwtUtil, objectMapper, memberService);
     }
 
     @Bean
