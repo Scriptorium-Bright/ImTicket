@@ -23,8 +23,8 @@ public class EntryLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reservation_id")
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reservation_id", nullable = false, unique = true)
     private Reservation reservation;
 
     @CreatedDate

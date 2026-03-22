@@ -6,6 +6,7 @@ import org.example.ticket.entry.repository.EntryLogRepository;
 import org.example.ticket.reservation.model.Reservation;
 import org.example.ticket.reservation.repository.ReservationRepository;
 import org.example.ticket.util.constant.ReservationStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,9 +27,13 @@ public class TicketEntryService {
     private static final String SECRET_KEY = "my-secret-entry-key-change-me-in-prod";
     private static final long TOKEN_VALIDITY_MS = 60000; // 1 minute validity for dynamic QR
 
-    public String generateEntryToken(Long reservationId) {
+    public String generateEntryToken(String walletAddress, Long reservationId) {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new IllegalArgumentException("Reservation not found"));
+
+        if (!reservation.getMember().getWalletAddress().equals(walletAddress)) {
+            throw new IllegalArgumentException("본인 티켓만 입장 토큰을 발급할 수 있습니다.");
+        }
 
         if (reservation.getReservationStatus() != ReservationStatus.SUCCESS) {
             throw new IllegalStateException("Ticket is not valid for entry (Status: " + reservation.getReservationStatus() + ")");
@@ -84,7 +89,11 @@ public class TicketEntryService {
                     .gateName(gateName)
                     .enteredAt(LocalDateTime.now())
                     .build();
-            entryLogRepository.save(entryLog);
+            try {
+                entryLogRepository.save(entryLog);
+            } catch (DataIntegrityViolationException e) {
+                throw new IllegalStateException("Already entered ticket");
+            }
 
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("Invalid token data");

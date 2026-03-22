@@ -2,7 +2,9 @@ package org.example.ticket.entry.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.example.ticket.entry.service.TicketEntryService;
+import org.example.ticket.security.util.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -15,9 +17,11 @@ public class TicketEntryController {
     private final TicketEntryService ticketEntryService;
 
     @GetMapping("/token/{reservationId}")
-    public ResponseEntity<?> getEntryToken(@PathVariable Long reservationId) {
+    public ResponseEntity<?> getEntryToken(
+            @AuthenticationPrincipal MetamaskUserDetails userDetails,
+            @PathVariable Long reservationId) {
         try {
-            String token = ticketEntryService.generateEntryToken(reservationId);
+            String token = ticketEntryService.generateEntryToken(userDetails.getAddress(), reservationId);
             return ResponseEntity.ok(Map.of("token", token));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
