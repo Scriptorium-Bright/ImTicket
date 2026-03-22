@@ -6,6 +6,7 @@ import org.example.ticket.entry.repository.EntryLogRepository;
 import org.example.ticket.reservation.model.Reservation;
 import org.example.ticket.reservation.repository.ReservationRepository;
 import org.example.ticket.util.constant.ReservationStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +24,9 @@ public class TicketEntryService {
     private final ReservationRepository reservationRepository;
     private final EntryLogRepository entryLogRepository;
 
-    // In a real app, this should be in properties
-    private static final String SECRET_KEY = "my-secret-entry-key-change-me-in-prod";
+    @Value("${ticket.entry.secret}")
+    private String secretKey;
+
     private static final long TOKEN_VALIDITY_MS = 60000; // 1 minute validity for dynamic QR
 
     public String generateEntryToken(String walletAddress, Long reservationId) {
@@ -103,7 +105,7 @@ public class TicketEntryService {
     private String sign(String data) {
         try {
             Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
-            SecretKeySpec secret_key = new SecretKeySpec(SECRET_KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            SecretKeySpec secret_key = new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
             sha256_HMAC.init(secret_key);
             return Base64.getEncoder().encodeToString(sha256_HMAC.doFinal(data.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {

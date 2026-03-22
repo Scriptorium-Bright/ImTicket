@@ -61,3 +61,7 @@ logging:
 ticket:
   upload:
     path: /Users/jeonjeonghyeon/bootPhoto/uploads
+  entry:
+    secret: test-entry-secret
+  sms:
+    allow-test-code: true
