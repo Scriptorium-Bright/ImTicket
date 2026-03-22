@@ -53,7 +53,8 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
         MetamaskAuthenticationToken auth = (MetamaskAuthenticationToken) authentication;
 
         Member member = repository.findByWalletAddress(auth.getAddress())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with address : " + auth.getAddress()));
+                .filter(Member::isRegistered)
+                .orElseThrow(() -> new UsernameNotFoundException("Registered user not found with address : " + auth.getAddress()));
 
         MetamaskUserDetails metamaskUserDetails
                 = fetchUsersData(member);

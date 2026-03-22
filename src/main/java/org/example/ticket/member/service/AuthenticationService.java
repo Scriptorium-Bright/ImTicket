@@ -31,7 +31,7 @@ public class AuthenticationService {
         String phoneNumber = request.getPhoneNumber();
         String nickname = request.getNickname();
 
-        if (memberService.existMemberWalletAddress(walletAddress)) {
+        if (memberService.isRegisteredMember(walletAddress)) {
             throw new BadCredentialsException("Wallet address already registered.");
         }
 

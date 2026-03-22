@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.example.ticket.member.service.MemberService;
 import org.example.ticket.security.dto.TokenResponse;
 import org.example.ticket.security.jwt.JwtUtil;
 import org.example.ticket.security.util.MetamaskUserDetails;
@@ -22,10 +23,12 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
+    private final MemberService memberService;
 
-    public LoginSuccessHandler(JwtUtil jwtUtil, ObjectMapper objectMapper) {
+    public LoginSuccessHandler(JwtUtil jwtUtil, ObjectMapper objectMapper, MemberService memberService) {
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
+        this.memberService = memberService;
     }
 
     @Override
@@ -39,6 +42,7 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
                 .orElse("");
 
         log.info("MetamaskAuthenticationFilter: Authentication successful for {}. Issuing JWT.", walletAddress);
+        memberService.rotateNonce(walletAddress);
 
         String token = jwtUtil.createJwt(walletAddress, role);
 

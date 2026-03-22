@@ -29,48 +29,66 @@ public class MemberService {
             member.updateNonce(newNonce);
             log.info("Updated nonce for existing user {}: {}", walletAddress, newNonce);
         } else {
-            memberRepository.save(Member.builder()
-                    .walletAddress(walletAddress)
-                    .role(USER.getRole())
-                    .nonce(newNonce)
-                    .build());
-            log.info("Generated and SAVED nonce for new user {}: {}", walletAddress, newNonce);
+            log.info("Generated nonce for unregistered wallet {}: {}", walletAddress, newNonce);
         }
         return newNonce;
     }
 
+    @Transactional
     public void register(String walletAddress, String phoneNumber, String nickname) {
         Integer nonce = createNonce();
 
         memberRepository.findByWalletAddress(walletAddress)
-                .orElseGet(() -> memberRepository.save(
-                        Member.builder()
-                                .walletAddress(walletAddress)
-                                .phoneNumber(phoneNumber)
-                                .nickname(nickname)
-                                .smsVerified(true)
-                                .walletVerified(true)
-                                .role(USER.getRole())
-                                .nonce(nonce)
-                                .build()));
+                .ifPresentOrElse(
+                        member -> member.completeRegistration(phoneNumber, nickname, USER.getRole(), nonce),
+                        () -> memberRepository.save(
+                                Member.builder()
+                                        .walletAddress(walletAddress)
+                                        .phoneNumber(phoneNumber)
+                                        .nickname(nickname)
+                                        .smsVerified(true)
+                                        .walletVerified(true)
+                                        .role(USER.getRole())
+                                        .nonce(nonce)
+                                        .build()
+                        )
+                );
     }
 
     public boolean existMemberWalletAddress(String walletAddress) {
-        return memberRepository.existsMemberByWalletAddress(walletAddress);
+        return isRegisteredMember(walletAddress);
     }
 
     @Transactional
     public void changeUsersNickname(String walletAddress, String nickname) {
-        Member member = memberRepository.findByWalletAddress(walletAddress).orElseThrow();
+        Member member = getRegisteredMember(walletAddress);
         member.updateNickname(nickname);
     }
 
     public String fetchUsersNickname(String walletAddress) {
-        return memberRepository.findNicknameByWalletAddress(walletAddress);
+        return getRegisteredMember(walletAddress).getNickname();
     }
 
     public String fetchUsersWalletAddress(String nickname) {
         return memberRepository.findWalletAddressByNickname(nickname);
+    }
+
+    public boolean isRegisteredMember(String walletAddress) {
+        return memberRepository.findByWalletAddress(walletAddress)
+                .map(Member::isRegistered)
+                .orElse(false);
+    }
+
+    @Transactional
+    public void rotateNonce(String walletAddress) {
+        Member member = getRegisteredMember(walletAddress);
+        member.updateNonce(createNonce());
+    }
+
+    public Member getRegisteredMember(String walletAddress) {
+        return memberRepository.findByWalletAddress(walletAddress)
+                .filter(Member::isRegistered)
+                .orElseThrow(() -> new IllegalArgumentException("등록된 사용자를 찾을 수 없습니다."));
     }
 
     public Integer createNonce() {
