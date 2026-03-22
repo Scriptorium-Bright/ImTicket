@@ -46,13 +46,16 @@ public class ReservationService {
 
 
     @Transactional
-    public ReservationSuccessResponse confirmReservation(ReservationCheckRequest request) {
+    public ReservationSuccessResponse confirmReservation(String walletAddress, ReservationCheckRequest request) {
 
         Reservation reservation = reservationRepository.findByIdWithDetails(request.getReservationId())
                 .orElseThrow(() -> new EntityNotFoundException("해당 예약을 찾을 수 없습니다."));
 
         List<Seat> seats = reservation.getReservedSeats().stream().map(ReservedSeat::getSeat).toList();
 
+        if (!reservation.getMember().getWalletAddress().equals(walletAddress)) {
+            throw new EntityNotFoundException("본인 예약만 확정할 수 있습니다.");
+        }
 
         if(reservation.getReservationStatus() != PENDING_PAYMENT) {
             throw new RuntimeException("예약 대기 상태가 아닙니다."); // custom Exception
@@ -66,8 +69,6 @@ public class ReservationService {
         reservation.setExpiredTime(null);
 
         Performance performance = reservation.getReservedSeats().getFirst().getSeat().getPerformanceTime().getPerformance();
-        String walletAddress = reservation.getMember().getWalletAddress();
-
         seatService.changeSeatsState(seats, RESERVED);
 
         return ReservationSuccessResponse.from(reservation, performance, walletAddress);
