@@ -34,58 +34,39 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String authorization = request.getHeader(AUTHORIZATION_HEADER);
 
-        // authorization check
-        if (!certifiedHeader(authorization, request, response, filterChain))
+        if (authorization == null || !authorization.startsWith(AUTHORIZATION_HEADER_CERTIFIED)) {
+            filterChain.doFilter(request, response);
             return;
+        }
 
         try {
-            String[] parts = authorization.split(" ");
-            if (parts.length != 2) {
-                log.warn("Invalid Authorization header format");
-                filterChain.doFilter(request, response);
-                return;
-            }
-
-            String token = parts[1];
+            String token = authorization.substring(7);
             Claims claims = jwtUtil.parseClaims(token);
 
             String walletAddress = jwtUtil.getUsername(claims);
             String role = jwtUtil.getRole(claims);
 
-            log.info("Authenticated user: {}, role: {}", walletAddress, role);
+            if (walletAddress != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                Member member = Member.builder()
+                        .walletAddress(walletAddress)
+                        .role(role)
+                        .build();
 
-            Member member = Member.builder()
-                    .walletAddress(walletAddress)
-                    .role(role)
-                    .build();
+                MetamaskUserDetails userDetails = new MetamaskUserDetails(member);
 
-            MetamaskUserDetails userDetails = new MetamaskUserDetails(member);
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails,
+                        null,
+                        Collections.singletonList(new SimpleGrantedAuthority(role)));
 
-            UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    userDetails,
-                    null,
-                    Collections.singletonList(new SimpleGrantedAuthority(role)));
-
-            SecurityContextHolder.getContext().setAuthentication(authToken);
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
 
         } catch (Exception e) {
-            log.error("JWT Authentication failed: {}", e.getMessage());
-            // SecurityContext is cleared/empty, relying on SecurityConfig to handle
-            // unauthorized access
-            // Optionally responses can be handled here directly, but logging is sufficient
-            // for filter chain continuation
+            log.error("Invalid JWT Token: {}", e.getMessage());
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);
     }
-
-    public boolean certifiedHeader(String authorization, HttpServletRequest request, HttpServletResponse response,
-            FilterChain filterChain) throws ServletException, IOException {
-        if (authorization == null || !authorization.startsWith(AUTHORIZATION_HEADER_CERTIFIED)) {
-            filterChain.doFilter(request, response);
-            return false;
-        }
-        return true;
-    }
-
 }

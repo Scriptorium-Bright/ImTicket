@@ -23,9 +23,12 @@ public class OrganizerService {
     private final MemberRepository memberRepository;
 
     @Transactional
-    public void registerOrganizer(Member member, OrganizerRequest request) {
+    public void registerOrganizer(String walletAddress, OrganizerRequest request) {
+        Member member = memberRepository.findByWalletAddress(walletAddress)
+                .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
 
         Organizer organizer = initializeOrganizer(member, request);
+        repository.save(organizer);
 
         changeRole(organizer);
     }
@@ -37,6 +40,7 @@ public class OrganizerService {
                 .organizerType(request.getOrganizerType())
                 .businessNumber(request.getBusinessNumber())
                 .address(request.getAddress())
+                .contactEmail(request.getContactEmail())
                 .member(member)
                 .build();
     }
