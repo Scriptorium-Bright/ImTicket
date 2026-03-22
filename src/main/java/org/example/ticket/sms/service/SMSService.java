@@ -25,6 +25,9 @@ public class SMSService {
     @Value("${coolsms.api.from}")
     private String from;
 
+    @Value("${ticket.sms.allow-test-code:false}")
+    private boolean allowTestCode;
+
     private final DefaultMessageService messageService;
     private final RedisTemplate<String, String> redisTemplate;
 
@@ -53,8 +56,7 @@ public class SMSService {
     }
 
     public boolean verifiedCode(String phoneNumber, String code) {
-        // Mock verification for cost saving
-        if ("000000".equals(code)) {
+        if (allowTestCode && "000000".equals(code)) {
             return true;
         }
 
