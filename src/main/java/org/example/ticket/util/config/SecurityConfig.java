@@ -1,9 +1,6 @@
 package org.example.ticket.util.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.security.filter.JwtFilter;
@@ -11,10 +8,9 @@ import org.example.ticket.security.filter.MetamaskAuthenticationFilter;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.jwt.JwtUtil;
-
-import org.springframework.boot.web.servlet.FilterRegistrationBean; // Import 추가
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -28,14 +24,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.AuthenticationFailureHandler;
-import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
-import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
@@ -74,21 +63,33 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http
-                // 주입받은 필터 인스턴스를 사용
                 .addFilterAt(metamaskAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtFilter(jwtUtil), MetamaskAuthenticationFilter.class);
 
         http.authorizeHttpRequests(authorizeRequests -> authorizeRequests
-                .requestMatchers( // 인증 없이 접근 허용할 경로 명시
-                        "/api/user/nonce", // Nonce 요청
-                        "/api/user/register", // 회원가입 요청
-                        "/api/sms/certificate", // SMS 인증 요청
-                        "/api/user/signature/verify", // 로그인 처리 자체 (필터에서 인증 담당)
-                        "/api/user/validate/{walletAddress}", // 지갑 주소 유효성 검사 (필요시)
-                        "/"
-                // 다른 public API 경로가 있다면 추가
-                ).permitAll() // 위 경로들은 인증 없이 허용
-                .anyRequest().permitAll() // 그 외 모든 요청은 인증 필요
+                .requestMatchers(
+                        "/",
+                        "/error",
+                        "/uploads/**",
+                        "/actuator/health",
+                        "/actuator/info",
+                        "/actuator/prometheus"
+                ).permitAll()
+                .requestMatchers(HttpMethod.GET,
+                        "/api/user/nonce",
+                        "/api/user/validate/**",
+                        "/api/performance/intro",
+                        "/api/performance/intro/**",
+                        "/api/venue/halls",
+                        "/api/seats/**"
+                ).permitAll()
+                .requestMatchers(HttpMethod.POST,
+                        "/api/user/register",
+                        "/api/user/signature/verify",
+                        "/api/sms/certificate",
+                        "/api/sms/verify"
+                ).permitAll()
+                .anyRequest().authenticated()
         );
 
         return http.build();
