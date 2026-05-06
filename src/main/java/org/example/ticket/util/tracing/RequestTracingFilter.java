@@ -21,6 +21,7 @@ public class RequestTracingFilter extends OncePerRequestFilter {
         String correlationId = resolveCorrelationId(request.getHeader(TracingConstants.CORRELATION_ID_HEADER));
 
         request.setAttribute(TracingConstants.CORRELATION_ID_REQUEST_ATTRIBUTE, correlationId);
+        response.setHeader(TracingConstants.CORRELATION_ID_HEADER, correlationId);
         MDC.put(TracingConstants.CORRELATION_ID_MDC_KEY, correlationId);
 
         try {
