@@ -9,15 +9,15 @@ import org.springframework.core.Ordered;
 public class TracingConfig {
 
     @Bean
-    public RequestTracingFilter requestTracingFilter() {
-        return new RequestTracingFilter();
+    public CorrelationIdFilter correlationIdFilter() {
+        return new CorrelationIdFilter();
     }
 
     @Bean
-    public FilterRegistrationBean<RequestTracingFilter> requestTracingFilterRegistration(
-            RequestTracingFilter requestTracingFilter) {
-        FilterRegistrationBean<RequestTracingFilter> registrationBean = new FilterRegistrationBean<>();
-        registrationBean.setFilter(requestTracingFilter);
+    public FilterRegistrationBean<CorrelationIdFilter> correlationIdFilterRegistration(
+            CorrelationIdFilter correlationIdFilter) {
+        FilterRegistrationBean<CorrelationIdFilter> registrationBean = new FilterRegistrationBean<>();
+        registrationBean.setFilter(correlationIdFilter);
         registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE);
         registrationBean.addUrlPatterns("/*");
         return registrationBean;
