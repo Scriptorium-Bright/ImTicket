@@ -35,6 +35,7 @@ class RequestTracingFilterTest {
 
         assertThat(requestAttribute.get()).isEqualTo("trace-123");
         assertThat(mdcValueInsideChain.get()).isEqualTo("trace-123");
+        assertThat(response.getHeader(TracingConstants.CORRELATION_ID_HEADER)).isEqualTo("trace-123");
         assertThat(MDC.get(TracingConstants.CORRELATION_ID_MDC_KEY)).isNull();
     }
 
@@ -54,6 +55,26 @@ class RequestTracingFilterTest {
 
         assertThat(UUID.fromString(requestAttribute.get())).isNotNull();
         assertThat(mdcValueInsideChain.get()).isEqualTo(requestAttribute.get());
+        assertThat(response.getHeader(TracingConstants.CORRELATION_ID_HEADER)).isEqualTo(requestAttribute.get());
+        assertThat(MDC.get(TracingConstants.CORRELATION_ID_MDC_KEY)).isNull();
+    }
+
+    @Test
+    void generatesAndReturnsCorrelationIdWhenInboundHeaderIsMissing() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        AtomicReference<String> requestAttribute = new AtomicReference<>();
+        AtomicReference<String> mdcValueInsideChain = new AtomicReference<>();
+
+        filter.doFilter(request, response, (req, res) -> {
+            requestAttribute.set((String) request.getAttribute(TracingConstants.CORRELATION_ID_REQUEST_ATTRIBUTE));
+            mdcValueInsideChain.set(MDC.get(TracingConstants.CORRELATION_ID_MDC_KEY));
+        });
+
+        assertThat(UUID.fromString(requestAttribute.get())).isNotNull();
+        assertThat(mdcValueInsideChain.get()).isEqualTo(requestAttribute.get());
+        assertThat(response.getHeader(TracingConstants.CORRELATION_ID_HEADER)).isEqualTo(requestAttribute.get());
         assertThat(MDC.get(TracingConstants.CORRELATION_ID_MDC_KEY)).isNull();
     }
 
