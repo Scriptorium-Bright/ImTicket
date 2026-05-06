@@ -22,7 +22,9 @@ public class SeatCreationProducer {
     public static final String STREAM_KEY = "seat-creation-stream";
 
     public void publishEvent(SeatCreationEvent event) {
-        log.info("Publishing SeatCreationEvent to Redis Stream: hallId={}", event.getHallId());
+        log.info("Publishing SeatCreationEvent to Redis Stream: hallId={}, correlationId={}",
+                event.getHallId(),
+                event.getCorrelationId());
 
         try {
             String jsonContent = objectMapper.writeValueAsString(event);

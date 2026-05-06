@@ -2,6 +2,9 @@ package org.example.ticket.venue.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.example.ticket.util.tracing.TracingConstants;
+import org.slf4j.MDC;
+import org.example.ticket.venue.dto.event.SeatCreationEvent;
 import org.example.ticket.venue.dto.request.*;
 import org.example.ticket.venue.dto.response.VenueHallResponse;
 import org.example.ticket.venue.model.*;
@@ -21,25 +24,6 @@ public class VenueHallService {
     private final VenueHallMapper venueHallMapper;
     private final org.example.ticket.venue.stream.SeatCreationProducer seatCreationProducer;
 
-    /*
-     * public void registerVenueHallInformation(Venue venue, List<VenueHallRequest>
-     * venueHallRequest) {
-     * 
-     * List<VenueHall> venueHallList = venueHallRequest.stream()
-     * .map(vq -> {
-     * return VenueHall.builder()
-     * .totalSeats(vq.getTotalSeats())
-     * .name(vq.getName())
-     * .venue(venue)
-     * .build();
-     * })
-     * .toList();
-     * 
-     * 
-     * venueHallRepository.saveAll(venueHallList);
-     * }
-     */
-
     public List<VenueHallResponse> viewVenueHallList() {
         return venueHallRepository.findAllAsVenueHallResponse();
     }
@@ -52,7 +36,11 @@ public class VenueHallService {
 
     public void allocateEmptySeatTemplateSync(Long hallId, List<VenueHallFloorRequest> floorRequestList) {
         seatCreationProducer
-                .publishEvent(new org.example.ticket.venue.dto.event.SeatCreationEvent(hallId, floorRequestList));
+                .publishEvent(SeatCreationEvent.builder()
+                        .hallId(hallId)
+                        .floorRequestList(floorRequestList)
+                        .correlationId(MDC.get(TracingConstants.CORRELATION_ID_MDC_KEY))
+                        .build());
     }
 
     @Transactional

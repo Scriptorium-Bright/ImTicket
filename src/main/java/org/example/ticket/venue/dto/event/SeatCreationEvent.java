@@ -15,4 +15,5 @@ import java.util.List;
 public class SeatCreationEvent {
     private Long hallId;
     private List<VenueHallFloorRequest> floorRequestList;
+    private String correlationId;
 }
