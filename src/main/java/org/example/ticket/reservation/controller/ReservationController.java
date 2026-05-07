@@ -10,6 +10,7 @@ import org.example.ticket.reservation.response.ReservationSuccessResponse;
 //import org.example.ticket.reservation.service.ReservationFacade;
 import org.example.ticket.reservation.service.ReservationService;
 import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.util.ratelimit.PreReserveGuard;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -21,13 +22,24 @@ import org.springframework.web.bind.annotation.*;
 public class ReservationController {
 
     private final ReservationService reservationService;
+    private final PreReserveGuard preReserveGuard;
 //    private final ReservationFacade reservationFacade;
 
     @PostMapping("/pre-reserve")
     public ReservationCreateResponse registerReservation(
             @AuthenticationPrincipal MetamaskUserDetails userDetails,
             @RequestBody ReservationRequest reservationRequest) {
-        return reservationService.createReservation(userDetails.getAddress(), reservationRequest);
+        try (PreReserveGuard.PreReserveExecution execution = preReserveGuard.begin(
+                userDetails.getAddress(),
+                reservationRequest
+        )) {
+            ReservationCreateResponse response = reservationService.createReservation(
+                    userDetails.getAddress(),
+                    reservationRequest
+            );
+            execution.markSuccess();
+            return response;
+        }
     }
 
 /*    @PostMapping("/pre-reserve/optimistic")

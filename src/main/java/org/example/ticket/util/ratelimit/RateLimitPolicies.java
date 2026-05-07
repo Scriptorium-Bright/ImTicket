@@ -92,6 +92,22 @@ public final class RateLimitPolicies {
             Duration.ofSeconds(30)
     );
 
+    public static final RateLimitPolicy PRE_RESERVE_WALLET_PERFORMANCE = new RateLimitPolicy(
+            "reservation.pre_reserve.wallet_performance",
+            "POST /api/reservation/pre-reserve",
+            "wallet_performance",
+            4,
+            Duration.ofSeconds(30)
+    );
+
+    public static final RateLimitPolicy PRE_RESERVE_DUPLICATE = new RateLimitPolicy(
+            "reservation.pre_reserve.duplicate",
+            "POST /api/reservation/pre-reserve",
+            "wallet_performance_seats",
+            1,
+            Duration.ofSeconds(10)
+    );
+
     private RateLimitPolicies() {
     }
 }
