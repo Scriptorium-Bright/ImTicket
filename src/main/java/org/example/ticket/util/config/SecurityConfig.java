@@ -9,6 +9,7 @@ import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.jwt.JwtUtil;
 import org.example.ticket.member.service.MemberService;
+import org.example.ticket.util.ratelimit.IngressRateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -55,7 +56,9 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, MetamaskAuthenticationFilter metamaskAuthenticationFilter)
+    public SecurityFilterChain filterChain(HttpSecurity http,
+            MetamaskAuthenticationFilter metamaskAuthenticationFilter,
+            IngressRateLimitFilter ingressRateLimitFilter)
             throws Exception {
         http
                 .cors(Customizer.withDefaults())
@@ -65,6 +68,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http
+                .addFilterBefore(ingressRateLimitFilter, JwtFilter.class)
                 .addFilterAt(metamaskAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtFilter(jwtUtil), MetamaskAuthenticationFilter.class);
 
