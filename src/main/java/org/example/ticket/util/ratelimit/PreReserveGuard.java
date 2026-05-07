@@ -20,6 +20,7 @@ public class PreReserveGuard {
     private final RedisFixedWindowRateLimiter rateLimiter;
     private final ClientIpResolver clientIpResolver;
     private final StringRedisTemplate stringRedisTemplate;
+    private final PreReserveAdmissionController preReserveAdmissionController;
 
     public PreReserveExecution begin(String walletAddress, ReservationRequest request) {
         String normalizedWallet = clientIpResolver.normalizeWallet(walletAddress);
@@ -45,7 +46,10 @@ public class PreReserveGuard {
             throw new RateLimitException(decision);
         }
 
-        return new PreReserveExecution(dedupeKey);
+        PreReserveAdmissionController.AdmissionLease admissionLease =
+                preReserveAdmissionController.acquire(performanceTimeId);
+
+        return new PreReserveExecution(dedupeKey, admissionLease);
     }
 
     private String buildDedupeKey(String normalizedWallet, Long performanceTimeId, List<Long> seatIds) {
@@ -59,10 +63,13 @@ public class PreReserveGuard {
     public final class PreReserveExecution implements AutoCloseable {
 
         private final String dedupeKey;
+        private final PreReserveAdmissionController.AdmissionLease admissionLease;
         private boolean success;
 
-        private PreReserveExecution(String dedupeKey) {
+        private PreReserveExecution(String dedupeKey,
+                PreReserveAdmissionController.AdmissionLease admissionLease) {
             this.dedupeKey = dedupeKey;
+            this.admissionLease = admissionLease;
         }
 
         public void markSuccess() {
@@ -71,6 +78,7 @@ public class PreReserveGuard {
 
         @Override
         public void close() {
+            preReserveAdmissionController.release(admissionLease);
             if (!success) {
                 stringRedisTemplate.delete(dedupeKey);
             }

@@ -108,6 +108,14 @@ public final class RateLimitPolicies {
             Duration.ofSeconds(10)
     );
 
+    public static final RateLimitPolicy PRE_RESERVE_ADMISSION = new RateLimitPolicy(
+            "reservation.admission.performance_time",
+            "POST /api/reservation/pre-reserve",
+            "performance_time",
+            16,
+            Duration.ofSeconds(10)
+    );
+
     private RateLimitPolicies() {
     }
 }
