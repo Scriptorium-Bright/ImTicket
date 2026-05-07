@@ -1,6 +1,7 @@
 package org.example.ticket.util.ratelimit;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +10,7 @@ import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 
 @Component
+@Slf4j
 public class RedisFixedWindowRateLimiter {
 
     private final StringRedisTemplate redisTemplate;
@@ -52,6 +54,16 @@ public class RedisFixedWindowRateLimiter {
                     "keyType", policy.keyType(),
                     "reason", "limit_exceeded"
             ).increment();
+            log.warn(
+                    "Rate limit rejected. correlationId={}, policy={}, keyType={}, keyHash={}, remaining={}, retryAfter={}, reason={}",
+                    RateLimitLogSupport.correlationId(),
+                    policy.policyName(),
+                    policy.keyType(),
+                    RateLimitLogSupport.redactKey(normalizedKey),
+                    remaining,
+                    retryAfterSeconds,
+                    "limit_exceeded"
+            );
             return RateLimitDecision.rejected(policy, remaining, retryAfterSeconds, resetEpochSeconds,
                     "limit_exceeded");
         }

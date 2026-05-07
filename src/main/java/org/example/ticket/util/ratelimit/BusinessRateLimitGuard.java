@@ -1,6 +1,7 @@
 package org.example.ticket.util.ratelimit;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -8,6 +9,7 @@ import java.time.Duration;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class BusinessRateLimitGuard {
 
     private static final String SMS_VERIFY_FAILURE_PREFIX = "rl:sms:verify:failure:";
@@ -80,6 +82,16 @@ public class BusinessRateLimitGuard {
     private void ensureSmsVerifyNotBlocked(String normalizedKey) {
         String blockKey = SMS_VERIFY_BLOCK_PREFIX + normalizedKey;
         if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(blockKey))) {
+            log.warn(
+                    "Rate limit blocked. correlationId={}, policy={}, keyType={}, keyHash={}, remaining={}, retryAfter={}, reason={}",
+                    RateLimitLogSupport.correlationId(),
+                    RateLimitPolicies.SMS_VERIFY_PHONE_IP.policyName(),
+                    RateLimitPolicies.SMS_VERIFY_PHONE_IP.keyType(),
+                    RateLimitLogSupport.redactKey(normalizedKey),
+                    0,
+                    SMS_VERIFY_BLOCK_WINDOW.toSeconds(),
+                    "temporarily_blocked"
+            );
             RateLimitDecision decision = RateLimitDecision.rejected(
                     RateLimitPolicies.SMS_VERIFY_PHONE_IP,
                     0,

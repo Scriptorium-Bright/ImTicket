@@ -1,6 +1,7 @@
 package org.example.ticket.util.ratelimit;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -12,6 +13,7 @@ import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class PreReserveGuard {
 
     private static final String DEDUPE_PREFIX = "dedupe:pre-reserve:";
@@ -36,6 +38,16 @@ public class PreReserveGuard {
         String dedupeKey = buildDedupeKey(normalizedWallet, performanceTimeId, request.getSeatIds());
         Boolean dedupeAcquired = stringRedisTemplate.opsForValue().setIfAbsent(dedupeKey, "IN_PROGRESS", DEDUPE_TTL);
         if (!Boolean.TRUE.equals(dedupeAcquired)) {
+            log.warn(
+                    "Pre-reserve duplicate rejected. correlationId={}, policy={}, keyType={}, keyHash={}, remaining={}, retryAfter={}, reason={}",
+                    RateLimitLogSupport.correlationId(),
+                    RateLimitPolicies.PRE_RESERVE_DUPLICATE.policyName(),
+                    RateLimitPolicies.PRE_RESERVE_DUPLICATE.keyType(),
+                    RateLimitLogSupport.redactKey(dedupeKey),
+                    0,
+                    DEDUPE_TTL.toSeconds(),
+                    "duplicate_in_progress"
+            );
             RateLimitDecision decision = RateLimitDecision.rejected(
                     RateLimitPolicies.PRE_RESERVE_DUPLICATE,
                     0,

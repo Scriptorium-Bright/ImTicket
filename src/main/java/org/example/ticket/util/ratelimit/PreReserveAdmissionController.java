@@ -1,6 +1,7 @@
 package org.example.ticket.util.ratelimit;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +10,7 @@ import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class PreReserveAdmissionController {
 
     private static final int MAX_SLOTS = 16;
@@ -28,6 +30,16 @@ public class PreReserveAdmissionController {
             }
         }
 
+        log.warn(
+                "Admission rejected. correlationId={}, policy={}, keyType={}, keyHash={}, remaining={}, retryAfter={}, reason={}",
+                RateLimitLogSupport.correlationId(),
+                RateLimitPolicies.PRE_RESERVE_ADMISSION.policyName(),
+                RateLimitPolicies.PRE_RESERVE_ADMISSION.keyType(),
+                RateLimitLogSupport.redactKey(String.valueOf(performanceTimeId)),
+                0,
+                LEASE_TTL.toSeconds(),
+                "admission_full"
+        );
         RateLimitDecision decision = RateLimitDecision.rejected(
                 RateLimitPolicies.PRE_RESERVE_ADMISSION,
                 0,
