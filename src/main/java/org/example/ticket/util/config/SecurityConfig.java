@@ -9,6 +9,7 @@ import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.jwt.JwtUtil;
 import org.example.ticket.member.service.MemberService;
+import org.example.ticket.util.ratelimit.BusinessRateLimitGuard;
 import org.example.ticket.util.ratelimit.IngressRateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,6 +40,7 @@ public class SecurityConfig {
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
     private final MemberService memberService;
+    private final BusinessRateLimitGuard businessRateLimitGuard;
 
     @Bean
     public AuthenticationManager authManager() throws Exception {
@@ -105,7 +107,7 @@ public class SecurityConfig {
     public MetamaskAuthenticationFilter metamaskAuthenticationFilter(AuthenticationManager authenticationManager,
             ObjectMapper objectMapper) {
         MetamaskAuthenticationFilter filter = new MetamaskAuthenticationFilter(authenticationManager, objectMapper,
-                loginSuccessHandler(), loginFailureHandler());
+                loginSuccessHandler(), loginFailureHandler(), businessRateLimitGuard);
         return filter;
     }
 

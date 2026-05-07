@@ -1,8 +1,10 @@
 package org.example.ticket.entry.controller;
 
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.example.ticket.entry.service.TicketEntryService;
 import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.util.ratelimit.BusinessRateLimitGuard;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +17,7 @@ import java.util.Map;
 public class TicketEntryController {
 
     private final TicketEntryService ticketEntryService;
+    private final BusinessRateLimitGuard businessRateLimitGuard;
 
     @GetMapping("/token/{reservationId}")
     public ResponseEntity<?> getEntryToken(
@@ -29,10 +32,14 @@ public class TicketEntryController {
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<?> verifyEntry(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> verifyEntry(HttpServletRequest httpServletRequest, @RequestBody Map<String, String> request) {
         try {
             String token = request.get("token");
             String gateName = request.getOrDefault("gateName", "Default Gate");
+            businessRateLimitGuard.checkEntryVerify(
+                    request.get("gateName"),
+                    businessRateLimitGuard.resolveClientIp(httpServletRequest)
+            );
             ticketEntryService.verifyEntry(token, gateName);
             return ResponseEntity.ok(Map.of("message", "Entry Confirmed", "valid", true));
         } catch (Exception e) {

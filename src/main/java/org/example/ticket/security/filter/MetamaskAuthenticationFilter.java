@@ -9,23 +9,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.security.LoginRequestDto;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
-
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.util.ratelimit.BusinessRateLimitGuard;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
 
 @Slf4j
 public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessingFilter {
@@ -34,16 +28,24 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
     private static final String HTTP_METHOD_TYPE = "POST";
 
     private final ObjectMapper objectMapper; // JSON 응답 작성을 위해 주입
-    // 생성자에서 의존성 주입
+    private final BusinessRateLimitGuard businessRateLimitGuard;
     // 생성자에서 의존성 주입
 
     public MetamaskAuthenticationFilter(AuthenticationManager authenticationManager,
             ObjectMapper objectMapper, LoginSuccessHandler loginSuccessHandler,
             LoginFailureHandler loginFailureHandler) {
+        this(authenticationManager, objectMapper, loginSuccessHandler, loginFailureHandler, null);
+    }
+
+    public MetamaskAuthenticationFilter(AuthenticationManager authenticationManager,
+            ObjectMapper objectMapper, LoginSuccessHandler loginSuccessHandler,
+            LoginFailureHandler loginFailureHandler,
+            BusinessRateLimitGuard businessRateLimitGuard) {
         super(new AntPathRequestMatcher(SPRING_WEB_LOGIN_URI, HTTP_METHOD_TYPE), authenticationManager);
         setAuthenticationSuccessHandler(loginSuccessHandler);
         setAuthenticationFailureHandler(loginFailureHandler);
         this.objectMapper = objectMapper;
+        this.businessRateLimitGuard = businessRateLimitGuard;
     }
 
     @Override
@@ -56,6 +58,13 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
         } catch (IOException e) {
             log.error("Failed to parse authentication request body", e);
             throw new BadCredentialsException("Invalid request body format");
+        }
+
+        if (businessRateLimitGuard != null) {
+            businessRateLimitGuard.checkSignatureVerify(
+                    loginRequestDto.getWalletAddress(),
+                    businessRateLimitGuard.resolveClientIp(request)
+            );
         }
 
         MetamaskAuthenticationToken authRequest = getMetamaskAuthenticationToken(loginRequestDto);
