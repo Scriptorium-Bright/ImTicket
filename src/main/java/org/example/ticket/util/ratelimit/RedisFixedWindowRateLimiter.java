@@ -2,6 +2,7 @@ package org.example.ticket.util.ratelimit;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,7 @@ public class RedisFixedWindowRateLimiter {
     private final MeterRegistry meterRegistry;
     private final Clock clock;
 
+    @Autowired
     public RedisFixedWindowRateLimiter(StringRedisTemplate redisTemplate, MeterRegistry meterRegistry) {
         this(redisTemplate, meterRegistry, Clock.systemUTC());
     }

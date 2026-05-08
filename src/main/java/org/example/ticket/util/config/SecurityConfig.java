@@ -70,7 +70,7 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http
-                .addFilterBefore(ingressRateLimitFilter, JwtFilter.class)
+                .addFilterBefore(ingressRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAt(metamaskAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtFilter(jwtUtil), MetamaskAuthenticationFilter.class);
 
