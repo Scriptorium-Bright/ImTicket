@@ -58,7 +58,11 @@ public class IngressRateLimitFilter extends OncePerRequestFilter {
     }
 
     private RateLimitPolicy resolvePolicy(HttpServletRequest request) {
-        RouteKey routeKey = new RouteKey(request.getMethod(), request.getServletPath());
+        String path = request.getServletPath();
+        if (path == null || path.isBlank()) {
+            path = request.getRequestURI();
+        }
+        RouteKey routeKey = new RouteKey(request.getMethod(), path);
         return policies.get(routeKey);
     }
 

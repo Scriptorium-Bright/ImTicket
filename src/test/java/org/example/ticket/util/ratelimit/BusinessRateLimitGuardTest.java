@@ -34,7 +34,6 @@ class BusinessRateLimitGuardTest {
     void setUp() {
         ClientIpResolver clientIpResolver = new ClientIpResolver();
         businessRateLimitGuard = new BusinessRateLimitGuard(rateLimiter, clientIpResolver, stringRedisTemplate);
-        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
     }
 
     @Test
@@ -60,6 +59,7 @@ class BusinessRateLimitGuardTest {
 
     @Test
     void recordSmsVerifyFailureBlocksPhoneIpAfterThreshold() {
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
         when(valueOperations.increment("rl:sms:verify:failure:01012345678:203.0.113.10")).thenReturn(5L);
 
         businessRateLimitGuard.recordSmsVerifyResult("01012345678", "203.0.113.10", false);
