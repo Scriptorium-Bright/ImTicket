@@ -90,7 +90,78 @@ request	status	time_total	response_file
 
 ## 1.3 관측 절차
 
-작성 예정.
+### 스크립트
+
+- `scripts/troubleshooting/observe_mysql_lock_wait.sh`
+
+### 실행 명령
+
+```bash
+MYSQL_HOST=127.0.0.1 \
+MYSQL_PORT=10047 \
+MYSQL_USER=capstone \
+MYSQL_PASSWORD='<password>' \
+MYSQL_DATABASE=capstone \
+scripts/troubleshooting/observe_mysql_lock_wait.sh
+```
+
+### MySQL 관측 포인트
+
+`SHOW FULL PROCESSLIST`는 lock wait 중인 session, query, time 값을 빠르게 확인하는 용도입니다.
+
+```sql
+SHOW FULL PROCESSLIST;
+```
+
+`SHOW ENGINE INNODB STATUS`는 latest detected deadlock, transaction wait, locked row 정보를 확인하는 용도입니다.
+
+```sql
+SHOW ENGINE INNODB STATUS\G
+```
+
+`performance_schema.data_locks`는 현재 lock을 잡고 있거나 기다리는 transaction의 lock mode와 대상 object를 확인하는 용도입니다.
+
+```sql
+SELECT
+  ENGINE_TRANSACTION_ID,
+  OBJECT_SCHEMA,
+  OBJECT_NAME,
+  INDEX_NAME,
+  LOCK_TYPE,
+  LOCK_MODE,
+  LOCK_STATUS,
+  LOCK_DATA
+FROM performance_schema.data_locks
+WHERE OBJECT_SCHEMA = DATABASE()
+ORDER BY ENGINE_TRANSACTION_ID, OBJECT_NAME, INDEX_NAME;
+```
+
+`performance_schema.data_lock_waits`는 어떤 transaction이 어떤 transaction을 기다리는지 확인하는 용도입니다.
+
+```sql
+SELECT
+  REQUESTING_ENGINE_TRANSACTION_ID,
+  BLOCKING_ENGINE_TRANSACTION_ID,
+  REQUESTING_THREAD_ID,
+  BLOCKING_THREAD_ID
+FROM performance_schema.data_lock_waits;
+```
+
+### 애플리케이션 관측 포인트
+
+Actuator / Prometheus가 켜져 있으면 아래 지표를 함께 봅니다.
+
+```bash
+curl -s http://127.0.0.1:10080/actuator/prometheus | grep 'hikaricp_connections_active'
+curl -s http://127.0.0.1:10080/actuator/prometheus | grep 'hikaricp_connections_pending'
+curl -s http://127.0.0.1:10080/actuator/prometheus | grep 'http_server_requests'
+```
+
+### 판단 기준
+
+- `data_lock_waits`에 row가 생기면 lock wait 관계가 관측된 것입니다.
+- `SHOW ENGINE INNODB STATUS`의 transaction 섹션에서 waiting lock과 blocking transaction을 확인합니다.
+- Hikari active connection이 증가하고 pending thread가 생기면 lock wait가 애플리케이션 자원 점유로 번지는 신호입니다.
 
 ## 1.4 재현 결과
 
