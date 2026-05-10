@@ -165,7 +165,42 @@ curl -s http://127.0.0.1:10080/actuator/prometheus | grep 'http_server_requests'
 
 ## 1.4 재현 결과
 
-작성 예정.
+### 수행한 검증
+
+- `bash -n scripts/troubleshooting/reproduce_lock_wait.sh`
+- `bash -n scripts/troubleshooting/observe_mysql_lock_wait.sh`
+
+결과:
+
+- 두 스크립트 모두 shell syntax 검증을 통과했습니다.
+
+### 미수행 항목
+
+- 실제 `POST /api/reservation/pre-reserve` 병렬 호출
+- MySQL `SHOW PROCESSLIST` / `SHOW ENGINE INNODB STATUS` 실시간 관측
+- `performance_schema.data_locks`, `performance_schema.data_lock_waits` 결과 수집
+- Hikari active / pending connection 지표 수집
+
+### 미수행 사유
+
+- 현재 로컬 `http://127.0.0.1:10080/actuator/health`에 연결할 수 없어 애플리케이션이 실행 중이 아닌 상태로 판단했습니다.
+- 인증된 JWT와 예약 가능한 테스트 좌석 ID가 필요하므로 실제 lock wait 재현은 실행 환경 준비 후 수행해야 합니다.
+
+### 실행 환경 준비 후 재현 순서
+
+1. 애플리케이션과 MySQL을 실행합니다.
+2. 예약 가능한 `Seat` ID를 하나 선택합니다.
+3. 인증된 JWT를 준비합니다.
+4. 터미널 A에서 lock wait 재현 스크립트를 실행합니다.
+5. 터미널 B에서 MySQL 관측 스크립트를 반복 실행합니다.
+6. HTTP status, latency, MySQL lock wait, Hikari 지표를 함께 기록합니다.
+
+### 대응 방향
+
+- DB row lock은 최종 정합성 방어선으로 유지합니다.
+- hot seat 요청이 DB lock wait로 직접 몰리지 않도록 pre-reserve admission control과 duplicate suppression을 먼저 통과시킵니다.
+- lock wait timeout을 명시적으로 관리하고, 실패 시 사용자에게 빠르게 재시도 가능한 응답을 주는 방향을 검토합니다.
+- 트랜잭션 안에서는 좌석 상태 확인과 변경만 수행하고 외부 호출은 넣지 않습니다.
 
 ## 포트폴리오 문장 초안
 
