@@ -140,7 +140,112 @@ redis-cli XACK seat-creation-stream seat-creation-group <message-id>
 
 ## 2.4 ACK 장애 시나리오 검증
 
-작성 예정.
+### 수행한 검증
+
+- `command -v redis-cli`
+- `scripts/troubleshooting/reproduce_stream_pending.sh`
+- `scripts/troubleshooting/observe_stream_pending.sh`
+- `redis-cli XACK seat-creation-stream:troubleshooting seat-creation-troubleshooting-group 1778399325599-0`
+- `redis-cli XPENDING seat-creation-stream:troubleshooting seat-creation-troubleshooting-group`
+
+### 실행 결과
+
+Redis CLI는 로컬에 설치되어 있었습니다.
+
+```text
+/opt/homebrew/bin/redis-cli
+```
+
+Troubleshooting 전용 stream에 메시지를 발행했습니다.
+
+```text
+Published message: 1778399325599-0
+```
+
+`XREADGROUP`으로 메시지를 읽고 의도적으로 `XACK`를 보내지 않았습니다.
+
+```text
+seat-creation-stream:troubleshooting
+1778399325599-0
+payload
+{"type":"troubleshooting","scenario":"ack-before-crash","source":"reproduce_stream_pending.sh"}
+```
+
+`XPENDING` summary에서 pending message 1건을 확인했습니다.
+
+```text
+1
+1778399325599-0
+1778399325599-0
+pending-debugger
+1
+```
+
+`XPENDING` detail에서 message id, consumer, idle time, delivery count를 확인했습니다.
+
+```text
+1778399325599-0
+pending-debugger
+13
+1
+```
+
+`XINFO GROUPS`에서도 consumer group pending count가 1로 확인됐습니다.
+
+```text
+name
+seat-creation-troubleshooting-group
+consumers
+1
+pending
+1
+last-delivered-id
+1778399325599-0
+entries-read
+1
+lag
+0
+```
+
+마지막으로 `XACK`를 보내 pending list에서 제거되는지 확인했습니다.
+
+```text
+redis-cli -h 127.0.0.1 -p 6379 XACK seat-creation-stream:troubleshooting seat-creation-troubleshooting-group 1778399325599-0
+1
+
+redis-cli -h 127.0.0.1 -p 6379 XPENDING seat-creation-stream:troubleshooting seat-creation-troubleshooting-group
+0
+```
+
+### 원인 분석
+
+Redis Stream consumer group은 메시지를 읽은 것과 처리가 끝난 것을 별개로 봅니다.
+`XREADGROUP`으로 메시지를 읽으면 해당 메시지는 consumer의 pending entries list에 들어갑니다.
+처리 성공 후 `XACK`를 보내야 Redis가 이 메시지를 성공 처리된 것으로 판단합니다.
+
+따라서 consumer가 DB 작업을 끝낸 뒤 `XACK` 전에 죽으면, 메시지는 처리됐을 수 있지만 Redis 입장에서는 pending 상태로 남습니다.
+이 메시지를 recovery consumer가 다시 처리하면 같은 작업이 중복 수행될 수 있습니다.
+
+### ImTicket에 대한 의미
+
+현재 `SeatCreationConsumer#onMessage`는 `venueHallService.allocateSeatsInternal(...)`을 호출하지만 명시적인 ACK, pending recovery, DLQ 처리가 없습니다.
+이 구조에서는 좌석 생성 작업이 중복 실행될 가능성을 전제로 분석해야 합니다.
+
+운영 보강 방향은 아래와 같습니다.
+
+1. 메시지에 `jobId` 또는 요청 business key를 포함합니다.
+2. 좌석 생성 job 상태를 DB에 저장합니다.
+3. 이미 완료된 job이면 재처리 시 skip 후 ACK합니다.
+4. 성공 후에만 `XACK`를 보냅니다.
+5. 오래 pending 된 메시지는 `XAUTOCLAIM`으로 회수합니다.
+6. 재시도 횟수 초과 메시지는 DLQ stream으로 이동합니다.
+
+### 대응 방향
+
+- Redis Stream은 at-least-once 전달로 보고 consumer를 멱등하게 설계합니다.
+- 좌석 생성에는 `hallId + floor + section + row + seatNumber` 같은 business key unique constraint를 검토합니다.
+- pending count, idle time, delivery count를 운영 지표 또는 주기 로그로 남깁니다.
+- 실패 메시지는 바로 삭제하지 않고 pending 유지, retry, DLQ 순서로 처리합니다.
 
 ## 포트폴리오 문장 초안
 
