@@ -79,7 +79,64 @@ scripts/troubleshooting/reproduce_stream_pending.sh
 
 ## 2.3 Pending 관측 절차
 
-작성 예정.
+### 스크립트
+
+- `scripts/troubleshooting/observe_stream_pending.sh`
+
+### 실행 명령
+
+```bash
+REDIS_HOST=127.0.0.1 \
+REDIS_PORT=6379 \
+STREAM_KEY=seat-creation-stream:troubleshooting \
+CONSUMER_GROUP=seat-creation-troubleshooting-group \
+scripts/troubleshooting/observe_stream_pending.sh
+```
+
+### Redis 관측 명령
+
+Stream 자체의 길이, first/last entry, group 수를 확인합니다.
+
+```bash
+redis-cli XINFO STREAM seat-creation-stream
+```
+
+Consumer group의 pending count, last-delivered-id, lag를 확인합니다.
+
+```bash
+redis-cli XINFO GROUPS seat-creation-stream
+```
+
+Pending summary를 확인합니다.
+
+```bash
+redis-cli XPENDING seat-creation-stream seat-creation-group
+```
+
+Pending detail을 확인합니다.
+
+```bash
+redis-cli XPENDING seat-creation-stream seat-creation-group - + 10
+```
+
+오래 pending 상태인 메시지를 다른 consumer가 회수할 때는 `XAUTOCLAIM`을 사용합니다.
+
+```bash
+redis-cli XAUTOCLAIM seat-creation-stream seat-creation-group recovery-consumer 60000 0-0 COUNT 10
+```
+
+처리 성공 후에는 `XACK`를 보냅니다.
+
+```bash
+redis-cli XACK seat-creation-stream seat-creation-group <message-id>
+```
+
+### 판단 기준
+
+- `XPENDING` count가 증가하면 ACK되지 않은 메시지가 있는 상태입니다.
+- pending detail의 delivery count가 증가하면 같은 메시지가 재전달된 이력이 있는 상태입니다.
+- idle time이 길어지는 메시지는 recovery 대상입니다.
+- recovery consumer가 메시지를 처리했다면 성공 후 `XACK`를 보내 pending list에서 제거해야 합니다.
 
 ## 2.4 ACK 장애 시나리오 검증
 
