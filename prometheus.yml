@@ -5,4 +5,4 @@ scrape_configs:
   - job_name: 'imticket-app'
     metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['imticket-app:10080'] # Use container name and internal port
+      - targets: ['host.docker.internal:10080'] # Use container name and internal port

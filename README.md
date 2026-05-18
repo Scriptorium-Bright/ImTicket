@@ -33,3 +33,11 @@
 
 <img width="1042" height="844" alt="image" src="https://github.com/user-attachments/assets/d1762fe6-626f-4aea-ad4e-9fb8ad67cdba" />
 
+## 코드 정리 문서
+
+- [docs/README.md](docs/README.md): 현재 코드 기준 구현 항목 요약
+- [docs/02-cache-and-redis.md](docs/02-cache-and-redis.md): 캐시, Redis, Stream 정리
+- [docs/03-auth-and-security.md](docs/03-auth-and-security.md): MetaMask 인증, JWT, 보안 흐름 정리
+- [docs/04-reservation-and-entry.md](docs/04-reservation-and-entry.md): 예매, 동시성, 입장 처리 정리
+- [docs/10-redis-stream-hardening-plan.md](docs/10-redis-stream-hardening-plan.md): Redis Stream 운영 보강 방향 정리
+- [docs/11-operational-hardening-roadmap.md](docs/11-operational-hardening-roadmap.md): 운영형 백엔드 포트폴리오 보강 로드맵
