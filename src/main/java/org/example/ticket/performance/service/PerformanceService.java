@@ -1,5 +1,7 @@
 package org.example.ticket.performance.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,10 +24,15 @@ import java.util.Optional;
 @RequiredArgsConstructor
 @Slf4j
 public class PerformanceService {
+    private static final String DETAILS_REQUESTS_METRIC = "imticket.performance.details.requests";
+    private static final String DETAILS_DURATION_METRIC = "imticket.performance.details.duration";
+    private static final String CACHE_WRITE_METRIC = "imticket.performance.details.cache.writes";
+    private static final String DETAILS_CACHE_NAME = "performanceDetails";
 
     private final PerformanceRepository performanceRepository;
     private final FileService fileService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final MeterRegistry meterRegistry;
     public final static int CACHE_TIMEOUT = 10;
     public final static TimeUnit MINUTES = TimeUnit.MINUTES;
 
@@ -47,10 +54,18 @@ public class PerformanceService {
         return performanceRepository.save(performance).getId();
     }
 
+    @Transactional(readOnly = true)
     public PerformanceDetailsResponse viewPerformanceDetails(Long pathId) {
-        Performance performanceDetails = performanceRepository.findById(pathId)
-                .orElseThrow(() -> new EntityNotFoundException("해당 공연을 찾을 수 없습니다."));
-        return PerformanceDetailsResponse.from(performanceDetails);
+        Timer.Sample sample = Timer.start(meterRegistry);
+
+        try {
+            PerformanceDetailsResponse response = loadPerformanceDetailsFromDb(pathId);
+            recordDetailsRequest("direct", "bypass", sample);
+            return response;
+        } catch (RuntimeException e) {
+            recordDetailsRequest("direct", "error", sample);
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -59,18 +74,48 @@ public class PerformanceService {
     }
 
     public PerformanceDetailsResponse viewPerformanceDetailsCached(Long pathId) {
+        Timer.Sample sample = Timer.start(meterRegistry);
         String key = "performance:details:" + pathId;
-        PerformanceDetailsResponse cached = (PerformanceDetailsResponse) redisTemplate.opsForValue().get(key);
+        try {
+            PerformanceDetailsResponse cached = (PerformanceDetailsResponse) redisTemplate.opsForValue().get(key);
 
-        if (cached != null) {
-            log.info("Cache Hit for performance id: {}", pathId);
-            return cached;
+            if (cached != null) {
+                log.info("Cache Hit for performance id: {}", pathId);
+                recordDetailsRequest("cache", "hit", sample);
+                return cached;
+            }
+
+            log.info("Cache Miss for performance id: {}", pathId);
+            PerformanceDetailsResponse response = loadPerformanceDetailsFromDb(pathId);
+            redisTemplate.opsForValue().set(key, response, CACHE_TIMEOUT, MINUTES);
+            meterRegistry.counter(CACHE_WRITE_METRIC, "cache", DETAILS_CACHE_NAME).increment();
+            recordDetailsRequest("cache", "miss", sample);
+            return response;
+        } catch (RuntimeException e) {
+            recordDetailsRequest("cache", "error", sample);
+            throw e;
         }
-
-        log.info("Cache Miss for performance id: {}", pathId);
-        PerformanceDetailsResponse response = viewPerformanceDetails(pathId);
-        redisTemplate.opsForValue().set(key, response, CACHE_TIMEOUT, MINUTES);
-        return response;
     }
 
+    private PerformanceDetailsResponse loadPerformanceDetailsFromDb(Long pathId) {
+        Performance performanceDetails = performanceRepository.findById(pathId)
+                .orElseThrow(() -> new EntityNotFoundException("해당 공연을 찾을 수 없습니다."));
+        return PerformanceDetailsResponse.from(performanceDetails);
+    }
+
+    private void recordDetailsRequest(String access, String result, Timer.Sample sample) {
+        meterRegistry.counter(
+                DETAILS_REQUESTS_METRIC,
+                "cache", DETAILS_CACHE_NAME,
+                "access", access,
+                "result", result
+        ).increment();
+
+        sample.stop(meterRegistry.timer(
+                DETAILS_DURATION_METRIC,
+                "cache", DETAILS_CACHE_NAME,
+                "access", access,
+                "result", result
+        ));
+    }
 }
