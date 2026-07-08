@@ -3,9 +3,6 @@ package org.example.ticket.venue.model;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @Entity
 @Getter
 @Setter
@@ -27,8 +24,4 @@ public class VenueHall {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "venue_id")
     private Venue venue;
-
-    @Builder.Default
-    @OneToMany(mappedBy = "venueHall", cascade = CascadeType.ALL)
-    private List<VenueHallFloor> floorList = new ArrayList<>();
 }
