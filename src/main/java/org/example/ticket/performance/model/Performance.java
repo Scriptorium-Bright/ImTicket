@@ -36,6 +36,7 @@ public class Performance {
     @Column(name = "performance_title", nullable = false)
     private String title;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "venue_type")
     private VenueType venueType;
 
@@ -47,7 +48,7 @@ public class Performance {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organizer_id")
-    public Organizer organizer;
+    private Organizer organizer;
 
     @Builder.Default
     @OneToMany(mappedBy = "performance",  cascade = CascadeType.ALL, orphanRemoval = true)
@@ -60,6 +61,16 @@ public class Performance {
     public void addPrice(SeatPrice seatPrice) {
         this.seatPrices.add(seatPrice);
         seatPrice.setPerformance(this);
+    }
+
+    public void assignOrganizer(Organizer organizer) {
+        this.organizer = organizer;
+    }
+
+    public boolean isManagedBy(String walletAddress) {
+        return organizer != null
+                && organizer.getMember() != null
+                && organizer.getMember().getWalletAddress().equals(walletAddress);
     }
 
     public static Performance from(PerformanceDetailRequest request) {
@@ -75,4 +86,3 @@ public class Performance {
     }
 
 }
-

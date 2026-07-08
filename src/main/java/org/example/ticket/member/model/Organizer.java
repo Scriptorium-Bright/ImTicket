@@ -43,7 +43,13 @@ public class Organizer {
     @JoinColumn(name = "member_id")
     private Member member;
 
+    @Builder.Default
     @OneToMany(mappedBy = "organizer")
     private List<Performance> performances = new ArrayList<>();
+
+    public void addPerformance(Performance performance) {
+        this.performances.add(performance);
+        performance.assignOrganizer(this);
+    }
 
 }

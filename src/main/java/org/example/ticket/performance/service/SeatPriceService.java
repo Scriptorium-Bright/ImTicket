@@ -22,10 +22,14 @@ public class SeatPriceService {
 
     @Transactional
     public void setSeatPrice(List<SeatPriceRequest> seatPriceRequestList,
-                             Long performanceId) {
+                             Long performanceId,
+                             String walletAddress) {
 
         Performance performance = performanceRepository.findById(performanceId)
                 .orElseThrow(() -> new EntityNotFoundException("공연 정보를 찾을 수 없습니다."));
+        if (!performance.isManagedBy(walletAddress)) {
+            throw new EntityNotFoundException("본인 공연만 좌석 가격을 등록할 수 있습니다.");
+        }
 
         List<SeatPrice> seatPrices = seatPriceRequestList
                 .stream()

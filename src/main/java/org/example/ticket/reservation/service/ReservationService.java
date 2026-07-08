@@ -1,11 +1,11 @@
 package org.example.ticket.reservation.service;
 
 
-import com.siot.IamportRestClient.exception.IamportResponseException;
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
@@ -18,21 +18,15 @@ import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.repository.ReservationRepository;
 import org.example.ticket.reservation.response.ReservationSuccessResponse;
 import org.example.ticket.util.tracing.TracingConstants;
-import org.example.ticket.util.constant.ReservationStatus;
-import org.example.ticket.util.constant.SeatStatus;
-//import org.redisson.api.RLock;
-//import org.redisson.api.RedissonClient;
 import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.PageRequest;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import static org.example.ticket.util.constant.ReservationStatus.PENDING_PAYMENT;
 import static org.example.ticket.util.constant.ReservationStatus.SUCCESS;
@@ -46,7 +40,7 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final MemberRepository memberRepository;
     private final SeatService seatService;
-    private final static long EXPIRED_SCHEDULING_TIME = 420000;
+    private final static long EXPIRED_SCHEDULING_TIME = 30000;
     private static final int EXPIRED_CLEANUP_BATCH_SIZE = 5000;
 
 
@@ -56,7 +50,11 @@ public class ReservationService {
         Reservation reservation = reservationRepository.findByIdWithDetails(request.getReservationId())
                 .orElseThrow(() -> new EntityNotFoundException("해당 예약을 찾을 수 없습니다."));
 
-        List<Seat> seats = reservation.getReservedSeats().stream().map(ReservedSeat::getSeat).toList();
+        List<Seat> seats = reservation
+                .getReservedSeats()
+                .stream()
+                .map(ReservedSeat::getSeat)
+                .toList();
 
         if (!reservation.getMember().getWalletAddress().equals(walletAddress)) {
             throw new EntityNotFoundException("본인 예약만 확정할 수 있습니다.");
@@ -70,16 +68,21 @@ public class ReservationService {
             throw new RuntimeException("이미 만료된 좌석입니다. 처음부터 다시 진행해야합니다."); // custom Exception
         }
 
-        reservation.setReservationStatus(SUCCESS);
-        reservation.setExpiredTime(null);
+        reservation.manageReservationStatus(SUCCESS, null);
 
-        Performance performance = reservation.getReservedSeats().getFirst().getSeat().getPerformanceTime().getPerformance();
+        Performance performance = reservation
+                .getReservedSeats()
+                .getFirst()
+                .getSeat()
+                .getPerformanceTime()
+                .getPerformance();
         seatService.changeSeatsState(seats, RESERVED);
 
         return ReservationSuccessResponse.from(reservation, performance, walletAddress);
     }
 
-    @Scheduled(fixedRate = EXPIRED_SCHEDULING_TIME)
+    @Scheduled(fixedDelay = EXPIRED_SCHEDULING_TIME)
+    @SchedulerLock(name = "cleanupExpiredReservation", lockAtMostFor = "PT6M")
     @Transactional
     public void cleanupExpiredReservation() {
         String runId = UUID.randomUUID().toString();
@@ -134,6 +137,7 @@ public class ReservationService {
 
     @Transactional
     public ReservationCreateResponse createReservation(String walletAddress, ReservationRequest request) {
+
         if (request.getPerformanceTimeId() == null) {
             throw new IllegalArgumentException("공연 회차 식별자는 필수입니다.");
         }
@@ -159,9 +163,11 @@ public class ReservationService {
 
         seatService.changeSeatsState(seats, LOCKED);
 
-        int totalPrice = seats.stream().mapToInt(Seat::getPrice).sum();
+        int totalPrice = seats.stream()
+                .mapToInt(Seat::getPrice)
+                .sum();
 
-        String reservationCode = member.makeReservationCode();
+        String reservationCode = makeReservationCode();
 
         Reservation reservation = Reservation.builder()
                 .totalPrice(totalPrice)
@@ -171,18 +177,22 @@ public class ReservationService {
                 .reservationStatus(PENDING_PAYMENT)
                 .build();
 
-        // ----
-
         List<ReservedSeat> reservedSeats = seats.stream()
-                .map(seat -> ReservedSeat.builder().reservation(reservation).seat(seat).build())
+                .map(seat -> ReservedSeat.builder()
+                        .reservation(reservation)
+                        .seat(seat)
+                        .build())
                 .toList();
 
         reservation.setReservedSeats(reservedSeats);
-
         reservationRepository.save(reservation);
 
         return ReservationCreateResponse.from(reservation);
 
+    }
+
+    private String makeReservationCode() {
+        return UUID.randomUUID().toString();
     }
 
     public void checkSeatsAvailability(List<Seat> seats) {
@@ -192,8 +202,9 @@ public class ReservationService {
                         seat.getSeatStatus().equals(UNAVAILABLE) ||
                         seat.getSeatStatus().equals(LOCKED));
 
-
-        if (isReserved) throw new EntityExistsException("이미 예약 완료된 좌석입니다."); // customException
+        if (isReserved) {
+            throw new EntityExistsException("이미 예약 완료된 좌석입니다.");
+        }
 
     }
 

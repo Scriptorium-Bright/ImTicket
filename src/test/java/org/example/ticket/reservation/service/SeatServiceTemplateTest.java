@@ -82,7 +82,7 @@ class SeatServiceTemplateTest {
         when(performanceTimeRepository.findById(10L)).thenReturn(Optional.of(performanceTime));
         when(seatTemplateRepository.findActiveTemplatesByHallId(1L)).thenReturn(templates);
 
-        seatService.preprocessSeatData(10L).join();
+        seatService.preprocessSeatData(10L, null).join();
 
         verify(seatRepository).saveAll(captor.capture());
 

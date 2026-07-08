@@ -8,7 +8,6 @@ import org.example.ticket.venue.model.VenueHall;
 import org.example.ticket.venue.model.VenueHallSeatTemplate;
 import org.example.ticket.venue.repository.VenueHallRepository;
 import org.example.ticket.venue.repository.VenueHallSeatTemplateRepository;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +26,6 @@ public class VenueHallService {
         return venueHallRepository.findAllAsVenueHallResponse();
     }
 
-    @Async("seatCreationTaskExecutor")
     @Transactional
     public void allocateEmptySeatTemplate(Long hallId, List<VenueHallFloorRequest> floorRequestList) {
         VenueHall hall = venueHallRepository.findById(hallId)

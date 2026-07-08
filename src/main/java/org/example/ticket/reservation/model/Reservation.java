@@ -17,7 +17,6 @@ import java.util.List;
 })
 @Builder
 @Getter
-@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 public class Reservation {
@@ -54,6 +53,16 @@ public class Reservation {
     public void changeReservationStatus(ReservationStatus reservationStatus) {
         this.reservationStatus = reservationStatus;
     }
+
+    public void setReservedSeats(List<ReservedSeat> reservedSeats) {
+        this.reservedSeats = reservedSeats;
+    }
+
+    public void manageReservationStatus(ReservationStatus reservationStatus, LocalDateTime expiredTime) {
+        this.reservationStatus = reservationStatus;
+        this.expiredTime = expiredTime;
+    }
+
 /*
 
     @OneToOne

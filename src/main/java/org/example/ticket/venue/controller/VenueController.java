@@ -10,9 +10,11 @@ import org.example.ticket.venue.service.VenueHallService;
 import org.example.ticket.venue.service.VenueService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.example.ticket.common.response.ApiResponse;
 
 @RestController
 @RequiredArgsConstructor
@@ -24,30 +26,23 @@ public class VenueController {
     private final VenueHallService venueHallService;
 
     @PostMapping("/enter")
-    public ResponseEntity<Void> registerVenue(@RequestBody ShowPlace showPlace) {
-
+    @PreAuthorize("hasAuthority('ROLE_ORGANIZER')")
+    public ResponseEntity<ApiResponse<Void>> registerVenue(@RequestBody ShowPlace showPlace) {
         venueService.insertVenue(showPlace.getRequest(), showPlace.getVenueHallRequest());
-
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(ApiResponse.success());
     }
 
     @PostMapping("/enter/{hallId}/seats")
-    public ResponseEntity<Void> registerEmptySeats(@PathVariable Long hallId,
-            @RequestBody List<VenueHallFloorRequest> requestList,
-            @RequestParam(defaultValue = "async") String type) {
-
-        if ("stream".equalsIgnoreCase(type)) {
-            venueHallService.allocateEmptySeatTemplateSync(hallId, requestList);
-        } else {
-            venueHallService.allocateEmptySeatTemplate(hallId, requestList);
-        }
-
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+    @PreAuthorize("hasAuthority('ROLE_ORGANIZER')")
+    public ResponseEntity<ApiResponse<Void>> registerEmptySeats(@PathVariable Long hallId,
+            @RequestBody List<VenueHallFloorRequest> requestList) {
+        venueHallService.allocateEmptySeatTemplate(hallId, requestList);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success());
     }
 
     @GetMapping("/halls")
-    public List<VenueHallResponse> viewVenueHallList() {
-        return venueHallService.viewVenueHallList();
+    public ResponseEntity<ApiResponse<List<VenueHallResponse>>> viewVenueHallList() {
+        return ResponseEntity.ok(ApiResponse.success(venueHallService.viewVenueHallList()));
     }
 
 }

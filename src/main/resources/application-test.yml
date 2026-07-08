@@ -1,27 +1,21 @@
 spring:
-  # MySQL 데이터베이스 설정
+  # H2 데이터베이스 설정 (테스트용 인메모리)
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    # URL의 데이터베이스 이름을 방금 생성한 'capstone_test'로 변경
-    url: jdbc:mysql://127.0.0.1:10046/capstone?useSSL=false&useUnicode=true&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
-    username: capstone
-    password: cider123
-    # 테스트 환경에서는 커넥션 풀을 너무 크게 잡을 필요가 없습니다.
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    username: sa
+    password:
     hikari:
-      maximum-pool-size: 3500
+      maximum-pool-size: 10
 
   jpa:
-    # 'create-drop'은 'capstone_test' DB에 대해서만 적용되므로 안전합니다.
     hibernate:
       ddl-auto: create-drop
       naming:
         physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
     properties:
       hibernate:
-        jdbc:
-          batch_size: 30
-        # MySQL용 Dialect를 명시적으로 지정해주는 것이 좋습니다.
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: org.hibernate.dialect.H2Dialect
         show_sql: true
         format_sql: true
         use_sql_comments: true
@@ -65,3 +59,8 @@ ticket:
     secret: test-entry-secret
   sms:
     allow-test-code: true
+
+management:
+  health:
+    redis:
+      enabled: false

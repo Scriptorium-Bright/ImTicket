@@ -3,16 +3,15 @@ package org.example.ticket.performance.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.performance.request.PerformanceDetailRequest;
-import org.example.ticket.performance.request.PerformanceTimeRequest;
-import org.example.ticket.performance.request.SeatPriceRequest;
 import org.example.ticket.performance.response.PerformanceDetailsResponse;
 import org.example.ticket.performance.response.PerformanceOverviewResponse;
-import org.example.ticket.performance.response.PerformanceTimeResponse;
 import org.example.ticket.performance.service.PerformanceService;
-import org.example.ticket.performance.service.PerformanceTimeService;
-import org.example.ticket.performance.service.SeatPriceService;
+import org.example.ticket.security.util.MetamaskUserDetails;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.example.ticket.common.response.ApiResponse;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,23 +30,26 @@ public class PerformanceController {
     private final PerformanceService performanceService;
 
     @PostMapping("/enter")
-    public ResponseEntity<Void> registerPerformance(
+    @PreAuthorize("hasAuthority('ROLE_ORGANIZER')")
+    public ResponseEntity<ApiResponse<Void>> registerPerformance(
+            @AuthenticationPrincipal MetamaskUserDetails userDetails,
             @Validated @RequestPart("details") PerformanceDetailRequest detailsRequest,
             @Validated @RequestPart("image") MultipartFile file) throws IOException {
 
-        Long performanceId = performanceService.registerPerformance(detailsRequest, file);
+        Long performanceId = performanceService.registerPerformance(userDetails.getAddress(), detailsRequest, file);
 
         if (performanceId != null) {
             URI location = ServletUriComponentsBuilder
                     .fromCurrentContextPath().path("/api/performance/intro/{performanceId}")
                     .buildAndExpand(performanceId).toUri();
-            return ResponseEntity.created(location).build();
+            return ResponseEntity.created(location).body(ApiResponse.success());
         }
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.fail(org.example.ticket.common.response.ErrorResponse.of("INTERNAL_SERVER_ERROR", "공연 등록에 실패했습니다.")));
     }
 
     @GetMapping("/intro/{performanceId}")
-    public ResponseEntity<PerformanceDetailsResponse> retrieveEventDetails(@PathVariable Long performanceId,
+    public ResponseEntity<ApiResponse<PerformanceDetailsResponse>> retrieveEventDetails(@PathVariable Long performanceId,
             @RequestParam(defaultValue = "false") boolean cache) {
         PerformanceDetailsResponse response;
         if (cache) {
@@ -55,13 +57,13 @@ public class PerformanceController {
         } else {
             response = performanceService.viewPerformanceDetails(performanceId);
         }
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/intro")
-    public ResponseEntity<List<PerformanceOverviewResponse>> retrieveEventOverview() {
+    public ResponseEntity<ApiResponse<List<PerformanceOverviewResponse>>> retrieveEventOverview() {
         List<PerformanceOverviewResponse> overviewList = performanceService.viewPerformanceIntro();
-        return ResponseEntity.ok(overviewList);
+        return ResponseEntity.ok(ApiResponse.success(overviewList));
     }
 
 }

@@ -5,6 +5,8 @@ import io.micrometer.core.instrument.Timer;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.ticket.member.model.Organizer;
+import org.example.ticket.member.repository.OrganizerRepository;
 import org.example.ticket.performance.response.PerformanceDetailsResponse;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.request.PerformanceDetailRequest;
@@ -18,7 +20,6 @@ import java.util.concurrent.TimeUnit;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +31,7 @@ public class PerformanceService {
     private static final String DETAILS_CACHE_NAME = "performanceDetails";
 
     private final PerformanceRepository performanceRepository;
+    private final OrganizerRepository organizerRepository;
     private final FileService fileService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final MeterRegistry meterRegistry;
@@ -37,9 +39,11 @@ public class PerformanceService {
     public final static TimeUnit MINUTES = TimeUnit.MINUTES;
 
     @Transactional
-    public Long registerPerformance(PerformanceDetailRequest detailsRequest, MultipartFile file) throws IOException {
+    public Long registerPerformance(String walletAddress, PerformanceDetailRequest detailsRequest, MultipartFile file) throws IOException {
 
-         String dbFilePath = fileService.saveImages(file);
+        Organizer organizer = organizerRepository.findByMemberWalletAddress(walletAddress)
+                .orElseThrow(() -> new EntityNotFoundException("공연 등록 권한이 없습니다."));
+        String dbFilePath = fileService.saveImages(file);
 
         Performance performance = Performance.builder()
                 .ageLimit(detailsRequest.getAge())
@@ -50,6 +54,7 @@ public class PerformanceService {
                 .endDate(detailsRequest.getEndDate())
                 .venueType(detailsRequest.getVenueType())
                 .build();
+        organizer.addPerformance(performance);
 
         return performanceRepository.save(performance).getId();
     }

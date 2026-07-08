@@ -4,10 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.performance.request.SeatPriceRequest;
 import org.example.ticket.performance.service.SeatPriceService;
+import org.example.ticket.security.util.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.example.ticket.common.response.ApiResponse;
 
 @RestController
 @RequestMapping("/api/price")
@@ -18,10 +22,13 @@ public class SeatPriceController {
     private final SeatPriceService seatPriceService;
 
     @PostMapping("/enter/{performanceId}/prices")
-    public ResponseEntity<?> registerSeatPrice(@PathVariable Long performanceId, @RequestBody List<SeatPriceRequest> seatPriceRequestList) {
-        log.info("저장 완료");
-        seatPriceService.setSeatPrice(seatPriceRequestList, performanceId);
+    @PreAuthorize("hasAuthority('ROLE_ORGANIZER')")
+    public ResponseEntity<ApiResponse<Void>> registerSeatPrice(
+            @AuthenticationPrincipal MetamaskUserDetails userDetails,
+            @PathVariable Long performanceId,
+            @RequestBody List<SeatPriceRequest> seatPriceRequestList) {
+        seatPriceService.setSeatPrice(seatPriceRequestList, performanceId, userDetails.getAddress());
 
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(ApiResponse.success());
     }
 }

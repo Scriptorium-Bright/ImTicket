@@ -34,11 +34,6 @@ public class SeatService {
     private final PerformanceTimeRepository performanceTimeRepository;
     private final VenueHallSeatTemplateRepository seatTemplateRepository;
 
-
-    public List<Seat> findAndLockSeatsByIds(List<Long> seatId) {
-        return repository.findByIdsForUpdate(seatId);
-    }
-
     public List<Seat> findAndLockSeatsByPerformanceTime(Long performanceTimeId, List<Long> seatIds) {
         List<Seat> seats = repository.findByPerformanceTimeIdAndIdsForUpdate(performanceTimeId, seatIds);
         if (seats.size() != seatIds.size()) {
@@ -63,7 +58,7 @@ public class SeatService {
 
     @Async("seatCreationTaskExecutor")
     @Transactional
-    public CompletableFuture<Void> preprocessSeatData(Long performanceTimeId) {
+    public CompletableFuture<Void> preprocessSeatData(Long performanceTimeId, String walletAddress) {
 
 
         try {
@@ -72,6 +67,9 @@ public class SeatService {
 
             VenueHall venueHall = performanceTime.getVenueHall();
             Performance performance = performanceTime.getPerformance();
+            if (walletAddress != null && !performance.isManagedBy(walletAddress)) {
+                throw new EntityNotFoundException("본인 공연만 좌석을 생성할 수 있습니다.");
+            }
 
             Map<SeatInfo, Integer> priceMap = getPriceInfo(performance);
 

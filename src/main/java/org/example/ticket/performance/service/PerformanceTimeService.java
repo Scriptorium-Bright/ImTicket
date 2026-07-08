@@ -28,11 +28,15 @@ public class PerformanceTimeService {
 
     @Transactional
     public List<PerformanceTimeResponse> allocatePerformanceTime(List<PerformanceTimeRequest> performanceTimeRequests,
-                                                                 Long performanceId) {
+                                                                 Long performanceId,
+                                                                 String walletAddress) {
 
 
         Performance performance = performanceRepository.findById(performanceId)
                 .orElseThrow(() -> new EntityNotFoundException("공연 정보를 찾을 수 없습니다."));
+        if (!performance.isManagedBy(walletAddress)) {
+            throw new EntityNotFoundException("본인 공연만 회차를 등록할 수 있습니다.");
+        }
 
         List<Long> venueHallIds = performanceTimeRequests.stream()
                 .map(PerformanceTimeRequest::getVenueHallId)
