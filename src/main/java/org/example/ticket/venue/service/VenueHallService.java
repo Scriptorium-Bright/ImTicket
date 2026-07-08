@@ -2,17 +2,17 @@ package org.example.ticket.venue.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.example.ticket.util.tracing.TracingConstants;
-import org.slf4j.MDC;
-import org.example.ticket.venue.dto.event.SeatCreationEvent;
 import org.example.ticket.venue.dto.request.*;
 import org.example.ticket.venue.dto.response.VenueHallResponse;
-import org.example.ticket.venue.model.*;
-import org.example.ticket.venue.repository.*;
+import org.example.ticket.venue.model.VenueHall;
+import org.example.ticket.venue.model.VenueHallSeatTemplate;
+import org.example.ticket.venue.repository.VenueHallRepository;
+import org.example.ticket.venue.repository.VenueHallSeatTemplateRepository;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -21,8 +21,7 @@ import java.util.stream.IntStream;
 public class VenueHallService {
 
     private final VenueHallRepository venueHallRepository;
-    private final VenueHallMapper venueHallMapper;
-    private final org.example.ticket.venue.stream.SeatCreationProducer seatCreationProducer;
+    private final VenueHallSeatTemplateRepository seatTemplateRepository;
 
     public List<VenueHallResponse> viewVenueHallList() {
         return venueHallRepository.findAllAsVenueHallResponse();
@@ -31,61 +30,51 @@ public class VenueHallService {
     @Async("seatCreationTaskExecutor")
     @Transactional
     public void allocateEmptySeatTemplate(Long hallId, List<VenueHallFloorRequest> floorRequestList) {
-        allocateSeatsInternal(hallId, floorRequestList);
-    }
-
-    public void allocateEmptySeatTemplateSync(Long hallId, List<VenueHallFloorRequest> floorRequestList) {
-        seatCreationProducer
-                .publishEvent(SeatCreationEvent.builder()
-                        .hallId(hallId)
-                        .floorRequestList(floorRequestList)
-                        .correlationId(MDC.get(TracingConstants.CORRELATION_ID_MDC_KEY))
-                        .build());
-    }
-
-    @Transactional
-    public void allocateSeatsInternal(Long hallId, List<VenueHallFloorRequest> floorRequestList) {
         VenueHall hall = venueHallRepository.findById(hallId)
                 .orElseThrow(() -> new EntityNotFoundException("공연장을 찾을 수 없습니다."));
 
-        processFloor(floorRequestList, hall);
+        List<VenueHallSeatTemplate> templates = buildSeatTemplates(hall, floorRequestList);
+        if (templates.isEmpty()) {
+            throw new IllegalArgumentException("저장할 좌석 템플릿이 없습니다.");
+        }
+
+        seatTemplateRepository.deleteByVenueHallId(hallId);
+        seatTemplateRepository.saveAll(templates);
     }
 
-    private void processFloor(List<VenueHallFloorRequest> floorRequestList, VenueHall hall) {
+    private List<VenueHallSeatTemplate> buildSeatTemplates(VenueHall hall, List<VenueHallFloorRequest> floorRequestList) {
+        List<VenueHallSeatTemplate> templates = new ArrayList<>();
 
-        floorRequestList.forEach(floorDTO -> {
-            VenueHallFloor floors = venueHallMapper.toFloors(floorDTO, hall);
-            hall.getFloorList().add(floors);
-            processSection(floors, floorDTO.getSection());
-        });
+        floorRequestList.forEach(floorDTO ->
+                floorDTO.getSection().forEach(sectionDTO ->
+                        sectionDTO.getRows().forEach(rowDTO ->
+                                rowDTO.getSeats().forEach(seatDTO ->
+                                        templates.addAll(buildSeatTemplates(hall, floorDTO, sectionDTO, rowDTO, seatDTO))
+                                )
+                        )
+                )
+        );
 
+        return templates;
     }
 
-    private void processSection(VenueHallFloor floors, List<VenueHallSectionRequest> sectionList) {
-        sectionList.forEach(sectionDTO -> {
-            VenueHallSection sections = venueHallMapper.toSections(floors, sectionDTO);
-            floors.getSections().add(sections);
-            processRow(sections, sectionDTO.getRows());
-        });
-    }
-
-    private void processRow(VenueHallSection sections, List<VenueHallRowRequest> rowList) {
-        rowList.forEach(rowDTO -> {
-            VenueHallRow rows = venueHallMapper.toRows(sections, rowDTO);
-            sections.getRows().add(rows);
-            processSeats(rows, rowDTO.getSeats());
-        });
-    }
-
-    private void processSeats(VenueHallRow rows, List<VenueHallSeatRequest> seatList) {
-        seatList.forEach(seatDTO -> {
-            Integer startNum = seatDTO.getStartSeatNumber();
-            Integer endNum = seatDTO.getEndSeatNumber();
-
-            IntStream.rangeClosed(startNum, endNum)
-                    .mapToObj(seatNumber -> venueHallMapper.toSeats(rows, seatDTO, seatNumber, startNum, endNum))
-                    .forEach(seat -> rows.getSeats().add(seat));
-        });
+    private List<VenueHallSeatTemplate> buildSeatTemplates(
+            VenueHall hall,
+            VenueHallFloorRequest floorDTO,
+            VenueHallSectionRequest sectionDTO,
+            VenueHallRowRequest rowDTO,
+            VenueHallSeatRequest seatDTO
+    ) {
+        return IntStream.rangeClosed(seatDTO.getStartSeatNumber(), seatDTO.getEndSeatNumber())
+                .mapToObj(seatNumber -> VenueHallSeatTemplate.builder()
+                        .venueHall(hall)
+                        .floor(floorDTO.getFloor())
+                        .section(sectionDTO.getSection())
+                        .row(rowDTO.getRow())
+                        .seatNumber(seatNumber)
+                        .seatInfo(seatDTO.getSeatInfo())
+                        .build())
+                .toList();
     }
 
 }

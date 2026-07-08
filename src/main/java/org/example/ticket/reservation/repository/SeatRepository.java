@@ -50,10 +50,14 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
     List<Seat> findBySeats(@Param("seatIds") List<Long> seatIds);
 
     @Query("SELECT new org.example.ticket.reservation.response.SeatResponse(" +
-            "s.id, s.seatFloor, s.seatSection, s.seatRow, s.seatNumber, s.seatType, s.price, s.isReservation) " +
+            "s.id, s.seatFloor, s.seatSection, s.seatRow, s.seatNumber, s.seatType, s.price, s.isReservation, s.seatStatus) " +
             "FROM Seat s " +
             "WHERE s.performanceTime.id = :performanceTimeId")
-    List<SeatResponse> findByEmptySeat(@Param("performanceTimeId") Long performanceTimeId);
+    List<SeatResponse> findSeatMapByPerformanceTimeId(@Param("performanceTimeId") Long performanceTimeId);
+
+    default List<SeatResponse> findByEmptySeat(Long performanceTimeId) {
+        return findSeatMapByPerformanceTimeId(performanceTimeId);
+    }
 
     List<Seat> findAllByPerformanceTimeId(Long performanceTimeId);
 

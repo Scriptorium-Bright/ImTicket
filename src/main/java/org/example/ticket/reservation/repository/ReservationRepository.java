@@ -2,6 +2,7 @@ package org.example.ticket.reservation.repository;
 
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.reservation.model.Reservation;
+import org.example.ticket.util.constant.ReservationStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -48,8 +49,13 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     List<Reservation> findByIdInWithSeats(@Param("reservationIds") List<Long> reservationIds);
 
     @Query("SELECT r.id FROM Reservation r " +
-            "WHERE r.expiredTime < :now " +
+            "WHERE r.reservationStatus = :status " +
+            "AND r.expiredTime < :now " +
             "ORDER BY r.expiredTime ASC")
-    List<Long> findExpiredReservationIdsBefore(@Param("now") LocalDateTime expiredTimeBefore, Pageable pageable);
+    List<Long> findExpiredReservationIdsBefore(
+            @Param("status") ReservationStatus status,
+            @Param("now") LocalDateTime expiredTimeBefore,
+            Pageable pageable
+    );
 
 }

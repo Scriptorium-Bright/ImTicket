@@ -13,7 +13,7 @@ import java.util.List;
 
 @Entity
 @Table(indexes = {
-        @Index(name = "idx_reservation_expired_time", columnList = "reservation_expired_time")
+        @Index(name = "idx_reservation_status_expired_time", columnList = "reservation_status, reservation_expired_time")
 })
 @Builder
 @Getter

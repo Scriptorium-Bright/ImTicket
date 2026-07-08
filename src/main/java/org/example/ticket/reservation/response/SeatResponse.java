@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.util.constant.SeatInfo;
+import org.example.ticket.util.constant.SeatStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +29,7 @@ public class SeatResponse {
     private SeatInfo seatType;
     private Integer price;
     private Boolean isReservation;
+    private SeatStatus seatStatus;
 
     public SeatResponse(Seat seat) {
         this.seatFloor = seat.getSeatFloor();
@@ -35,6 +37,7 @@ public class SeatResponse {
         this.seatRow = seat.getSeatRow();
         this.seatSection = seat.getSeatSection();
         this.seatType = seat.getSeatType();
+        this.seatStatus = seat.getSeatStatus();
     }
 
 

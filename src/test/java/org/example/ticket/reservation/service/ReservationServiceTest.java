@@ -131,7 +131,7 @@ class ReservationServiceTest {
         AtomicReference<String> runId = new AtomicReference<>();
         AtomicReference<String> correlationId = new AtomicReference<>();
 
-        when(reservationRepository.findExpiredReservationIdsBefore(any(LocalDateTime.class), any(PageRequest.class)))
+        when(reservationRepository.findExpiredReservationIdsBefore(eq(PENDING_PAYMENT), any(LocalDateTime.class), any(PageRequest.class)))
                 .thenAnswer(invocation -> {
                     runId.set(MDC.get(TracingConstants.RUN_ID_MDC_KEY));
                     correlationId.set(MDC.get(TracingConstants.CORRELATION_ID_MDC_KEY));
@@ -154,7 +154,7 @@ class ReservationServiceTest {
         AtomicReference<String> runId = new AtomicReference<>();
         AtomicReference<String> correlationId = new AtomicReference<>();
 
-        when(reservationRepository.findExpiredReservationIdsBefore(any(LocalDateTime.class), any(PageRequest.class)))
+        when(reservationRepository.findExpiredReservationIdsBefore(eq(PENDING_PAYMENT), any(LocalDateTime.class), any(PageRequest.class)))
                 .thenReturn(List.of(1L));
         when(reservationRepository.findByIdInWithSeats(List.of(1L))).thenReturn(List.of(reservation));
         when(reservation.getReservedSeats()).thenReturn(List.of(reservedSeat));

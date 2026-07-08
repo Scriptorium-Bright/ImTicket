@@ -96,6 +96,7 @@ public class ReservationService {
             LocalDateTime now = LocalDateTime.now();
 
             List<Long> expiredReservationIds = reservationRepository.findExpiredReservationIdsBefore(
+                    PENDING_PAYMENT,
                     now,
                     PageRequest.of(0, EXPIRED_CLEANUP_BATCH_SIZE)
             );
