@@ -1,6 +1,7 @@
 package org.example.ticket.reservation.service;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.EntityExistsException;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.reservation.model.Reservation;
@@ -8,6 +9,9 @@ import org.example.ticket.reservation.model.ReservedSeat;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.repository.ReservationRepository;
 import org.example.ticket.reservation.request.ReservationCheckRequest;
+import org.example.ticket.reservation.request.ReservationRequest;
+import org.example.ticket.reservation.response.ReservationCreateResponse;
+import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.tracing.TracingConstants;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.example.ticket.util.constant.ReservationStatus.PENDING_PAYMENT;
 import static org.example.ticket.util.constant.SeatStatus.AVAILABLE;
+import static org.example.ticket.util.constant.SeatStatus.LOCKED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +52,58 @@ class ReservationServiceTest {
 
     @InjectMocks
     private ReservationService reservationService;
+
+    @Test
+    void createReservationLocksSeatsWithinRequestedPerformanceTime() {
+        Member member = Member.builder()
+                .walletAddress("0xowner")
+                .phoneNumber("01012345678")
+                .nickname("owner")
+                .smsVerified(true)
+                .walletVerified(true)
+                .role("ROLE_USER")
+                .build();
+        Seat seat1 = Seat.builder()
+                .id(1L)
+                .seatFloor(1)
+                .seatSection("A")
+                .seatRow(1)
+                .seatNumber(1)
+                .seatType(SeatInfo.VIP)
+                .price(10000)
+                .seatStatus(AVAILABLE)
+                .build();
+        Seat seat2 = Seat.builder()
+                .id(3L)
+                .seatFloor(1)
+                .seatSection("A")
+                .seatRow(1)
+                .seatNumber(3)
+                .seatType(SeatInfo.VIP)
+                .price(20000)
+                .seatStatus(AVAILABLE)
+                .build();
+
+        when(memberRepository.findByWalletAddress("0xowner")).thenReturn(Optional.of(member));
+        when(seatService.findAndLockSeatsByPerformanceTime(10L, List.of(1L, 3L)))
+                .thenReturn(List.of(seat1, seat2));
+
+        ReservationCreateResponse response = reservationService.createReservation(
+                "0xowner",
+                new ReservationRequest(10L, List.of(3L, 1L))
+        );
+
+        assertThat(response.getTotalPrice()).isEqualTo(30000);
+        verify(seatService).findAndLockSeatsByPerformanceTime(10L, List.of(1L, 3L));
+        verify(seatService).changeSeatsState(List.of(seat1, seat2), LOCKED);
+        verify(reservationRepository).save(any(Reservation.class));
+    }
+
+    @Test
+    void createReservationRejectsDuplicateSeatIds() {
+        assertThrows(EntityExistsException.class,
+                () -> reservationService.createReservation("0xowner", new ReservationRequest(10L, List.of(1L, 1L))));
+    }
 
     @Test
     void confirmReservationRejectsDifferentOwner() {

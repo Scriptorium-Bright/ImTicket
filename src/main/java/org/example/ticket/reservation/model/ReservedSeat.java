@@ -5,6 +5,12 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
+@Table(uniqueConstraints = {
+        @UniqueConstraint(
+                name = "uk_reserved_seat_reservation_seat",
+                columnNames = {"reservation_id", "seat_id"}
+        )
+})
 @Builder
 @Getter
 @Setter
@@ -17,11 +23,11 @@ public class ReservedSeat {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "seat_id")
+    @JoinColumn(name = "seat_id", nullable = false)
     private Seat seat;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reservation_id")
+    @JoinColumn(name = "reservation_id", nullable = false)
     private Reservation reservation;
 
 }

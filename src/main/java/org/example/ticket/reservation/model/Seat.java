@@ -12,6 +12,11 @@ import static org.example.ticket.util.constant.SeatStatus.LOCKED;
 @Entity
 @Table(indexes = {
         @Index(name = "idx_seat_perf_status", columnList = "performance_time_id, seat_status")
+}, uniqueConstraints = {
+        @UniqueConstraint(
+                name = "uk_seat_performance_position",
+                columnNames = {"performance_time_id", "seat_floor", "seat_section", "seat_row", "seat_number"}
+        )
 })
 @Builder
 @Getter
@@ -56,7 +61,7 @@ public class Seat {
      */
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "performance_time_id")
+    @JoinColumn(name = "performance_time_id", nullable = false)
     private PerformanceTime performanceTime; // 이 좌석이 속한 특정 공연 회차
 
     public static Seat from(SeatRequest seat, Boolean isReservation) {

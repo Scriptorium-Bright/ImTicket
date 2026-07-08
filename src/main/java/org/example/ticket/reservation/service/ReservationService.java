@@ -133,10 +133,27 @@ public class ReservationService {
 
     @Transactional
     public ReservationCreateResponse createReservation(String walletAddress, ReservationRequest request) {
+        if (request.getPerformanceTimeId() == null) {
+            throw new IllegalArgumentException("공연 회차 식별자는 필수입니다.");
+        }
+        if (request.getSeatIds() == null || request.getSeatIds().isEmpty()) {
+            throw new IllegalArgumentException("예약할 좌석은 최소 1개 이상이어야 합니다.");
+        }
+
+        List<Long> seatIds = request.getSeatIds()
+                .stream()
+                .distinct()
+                .sorted()
+                .toList();
+
+        if (seatIds.size() != request.getSeatIds().size()) {
+            throw new EntityExistsException("중복된 좌석이 포함되어 있습니다.");
+        }
+
         Member member = memberRepository.findByWalletAddress(walletAddress)
                 .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
 
-        List<Seat> seats = seatService.findAndLockSeatsByIds(request.getSeatIds());
+        List<Seat> seats = seatService.findAndLockSeatsByPerformanceTime(request.getPerformanceTimeId(), seatIds);
         checkSeatsAvailability(seats);
 
         seatService.changeSeatsState(seats, LOCKED);

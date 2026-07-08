@@ -37,6 +37,14 @@ public class SeatService {
         return repository.findByIdsForUpdate(seatId);
     }
 
+    public List<Seat> findAndLockSeatsByPerformanceTime(Long performanceTimeId, List<Long> seatIds) {
+        List<Seat> seats = repository.findByPerformanceTimeIdAndIdsForUpdate(performanceTimeId, seatIds);
+        if (seats.size() != seatIds.size()) {
+            throw new EntityNotFoundException("요청한 공연 회차에 속하지 않는 좌석이 포함되어 있습니다.");
+        }
+        return seats;
+    }
+
     @Transactional
     public void changeSeatsState(List<Seat> seats, SeatStatus seatStatus) {
         seats.forEach(seat -> seat.markAsReserved(seatStatus));
