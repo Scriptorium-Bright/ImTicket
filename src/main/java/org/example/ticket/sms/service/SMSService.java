@@ -2,6 +2,8 @@ package org.example.ticket.sms.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.nurigo.sdk.message.model.Message;
+import net.nurigo.sdk.message.request.SingleMessageSendingRequest;
 import net.nurigo.sdk.message.service.DefaultMessageService;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.sms.request.SmsRequest;
@@ -10,8 +12,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.naming.AuthenticationException;
+import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.Random;
 
 @Service
 @Slf4j
@@ -21,6 +23,7 @@ public class SMSService {
     private final MemberRepository memberRepository;
 
     private static final String SMS_KEY ="sms:";
+    private static final int CERTIFICATION_CODE_BOUND = 1_000_000;
 
     @Value("${coolsms.api.from}")
     private String from;
@@ -31,7 +34,7 @@ public class SMSService {
     private final DefaultMessageService messageService;
     private final RedisTemplate<String, String> redisTemplate;
 
-    private final Random random = new Random();
+    private final SecureRandom secureRandom = new SecureRandom();
 
     public boolean sendMessage(SmsRequest request) throws AuthenticationException {
 
@@ -40,19 +43,16 @@ public class SMSService {
         }
 
         String code = generateRandomCertificationCode(request);
-        log.info(code);
-        /*
-
 
         Message message = new Message();
         message.setFrom(from);
         message.setTo(request.getTo());
         message.setText("[I'm 표] 인증번호는 [" + code + "] 입니다.");
 
-        log.info("send success");
-        messageService.sendOne(new SingleMessageSendingRequest(message));*/
+        messageService.sendOne(new SingleMessageSendingRequest(message));
+        log.info("SMS verification code sent. to={}", maskPhoneNumber(request.getTo()));
 
-        return code != null;
+        return true;
     }
 
     public boolean verifiedCode(String phoneNumber, String code) {
@@ -62,8 +62,6 @@ public class SMSService {
 
         String usersKey = SMS_KEY + phoneNumber;
         String storedCode = redisTemplate.opsForValue().get(usersKey);
-        log.info(storedCode);
-        log.info(usersKey);
         if (code != null && code.equals(storedCode)) {
             redisTemplate.delete(usersKey);
             return true;
@@ -74,9 +72,15 @@ public class SMSService {
     }
 
     public String generateRandomCertificationCode(SmsRequest request) {
-        // 무작위 6자리 코드 생성
-        String randomNumber = String.valueOf(random.nextInt(900000) + 100000);
+        String randomNumber = String.format("%06d", secureRandom.nextInt(CERTIFICATION_CODE_BOUND));
         redisTemplate.opsForValue().set(SMS_KEY + request.getTo(), randomNumber, Duration.ofMinutes(1));
         return randomNumber;
+    }
+
+    private String maskPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null || phoneNumber.length() < 4) {
+            return "****";
+        }
+        return "****" + phoneNumber.substring(phoneNumber.length() - 4);
     }
 }
