@@ -1,7 +1,6 @@
 package org.example.ticket.reservation.service;
 
 
-import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +16,7 @@ import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.repository.ReservationRepository;
 import org.example.ticket.reservation.response.ReservationSuccessResponse;
+import org.example.ticket.reservation.validation.ReservationValidator;
 import org.example.ticket.util.tracing.TracingConstants;
 import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -56,17 +56,7 @@ public class ReservationService {
                 .map(ReservedSeat::getSeat)
                 .toList();
 
-        if (!reservation.getMember().getWalletAddress().equals(walletAddress)) {
-            throw new EntityNotFoundException("본인 예약만 확정할 수 있습니다.");
-        }
-
-        if(reservation.getReservationStatus() != PENDING_PAYMENT) {
-            throw new RuntimeException("예약 대기 상태가 아닙니다."); // custom Exception
-        }
-
-        if(reservation.getExpiredTime().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("이미 만료된 좌석입니다. 처음부터 다시 진행해야합니다."); // custom Exception
-        }
+        ReservationValidator.validateConfirmable(reservation, walletAddress);
 
         reservation.manageReservationStatus(SUCCESS, null);
 
@@ -138,12 +128,7 @@ public class ReservationService {
     @Transactional
     public ReservationCreateResponse createReservation(String walletAddress, ReservationRequest request) {
 
-        if (request.getPerformanceTimeId() == null) {
-            throw new IllegalArgumentException("공연 회차 식별자는 필수입니다.");
-        }
-        if (request.getSeatIds() == null || request.getSeatIds().isEmpty()) {
-            throw new IllegalArgumentException("예약할 좌석은 최소 1개 이상이어야 합니다.");
-        }
+        ReservationValidator.validateCreateRequest(request);
 
         List<Long> seatIds = request.getSeatIds()
                 .stream()
@@ -151,11 +136,9 @@ public class ReservationService {
                 .sorted()
                 .toList();
 
-        if (seatIds.size() != request.getSeatIds().size()) {
-            throw new EntityExistsException("중복된 좌석이 포함되어 있습니다.");
-        }
+        ReservationValidator.validateNoDuplicateSeatIds(request.getSeatIds(), seatIds);
 
-        Member member = memberRepository.findByWalletAddress(walletAddress)
+        Member member = memberRepository.findByWalletAddressIgnoreCase(walletAddress)
                 .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
 
         List<Seat> seats = seatService.findAndLockSeatsByPerformanceTime(request.getPerformanceTimeId(), seatIds);
@@ -197,14 +180,7 @@ public class ReservationService {
 
     public void checkSeatsAvailability(List<Seat> seats) {
 
-        boolean isReserved = seats.stream()
-                .anyMatch(seat -> seat.getSeatStatus().equals(RESERVED) ||
-                        seat.getSeatStatus().equals(UNAVAILABLE) ||
-                        seat.getSeatStatus().equals(LOCKED));
-
-        if (isReserved) {
-            throw new EntityExistsException("이미 예약 완료된 좌석입니다.");
-        }
+        ReservationValidator.validateSeatsAvailable(seats);
 
     }
 
