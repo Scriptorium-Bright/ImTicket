@@ -31,10 +31,6 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
             "WHERE s.performanceTime.id = :performanceTimeId")
     List<SeatResponse> findSeatMapByPerformanceTimeId(@Param("performanceTimeId") Long performanceTimeId);
 
-    default List<SeatResponse> findByEmptySeat(Long performanceTimeId) {
-        return findSeatMapByPerformanceTimeId(performanceTimeId);
-    }
-
     List<Seat> findAllByPerformanceTimeId(Long performanceTimeId);
 
 }

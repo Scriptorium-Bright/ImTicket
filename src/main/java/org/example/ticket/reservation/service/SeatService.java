@@ -47,11 +47,6 @@ public class SeatService {
     }
 
     @Transactional(readOnly = true)
-    public List<SeatResponse> viewEmptySeatList(Long performanceTimeId) {
-        return viewSeatMap(performanceTimeId);
-    }
-
-    @Transactional(readOnly = true)
     public List<SeatResponse> viewSeatMap(Long performanceTimeId) {
         return repository.findSeatMapByPerformanceTimeId(performanceTimeId);
     }
