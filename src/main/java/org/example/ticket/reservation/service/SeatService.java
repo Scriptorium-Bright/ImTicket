@@ -62,7 +62,7 @@ public class SeatService {
 
             VenueHall venueHall = performanceTime.getVenueHall();
             Performance performance = performanceTime.getPerformance();
-            if (walletAddress != null && !performance.isManagedBy(walletAddress)) {
+            if (walletAddress != null && performance.isManagedBy(walletAddress)) {
                 throw new EntityNotFoundException("본인 공연만 좌석을 생성할 수 있습니다.");
             }
 

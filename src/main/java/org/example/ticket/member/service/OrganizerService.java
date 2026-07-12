@@ -24,7 +24,7 @@ public class OrganizerService {
 
     @Transactional
     public void registerOrganizer(String walletAddress, OrganizerRequest request) {
-        Member member = memberRepository.findByWalletAddress(walletAddress)
+        Member member = memberRepository.findByWalletAddressIgnoreCase(walletAddress)
                 .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
 
         Organizer organizer = initializeOrganizer(member, request);

@@ -4,12 +4,12 @@ import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletRequest;
 import org.example.ticket.entry.service.TicketEntryService;
 import org.example.ticket.security.util.MetamaskUserDetails;
-import org.example.ticket.util.ratelimit.BusinessRateLimitGuard;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import org.example.ticket.common.response.ApiResponse;
 
 @RestController
 @RequestMapping("/api/entry")
@@ -17,33 +17,20 @@ import java.util.Map;
 public class TicketEntryController {
 
     private final TicketEntryService ticketEntryService;
-    private final BusinessRateLimitGuard businessRateLimitGuard;
 
     @GetMapping("/token/{reservationId}")
-    public ResponseEntity<?> getEntryToken(
+    public ResponseEntity<ApiResponse<Map<String, String>>> getEntryToken(
             @AuthenticationPrincipal MetamaskUserDetails userDetails,
             @PathVariable Long reservationId) {
-        try {
-            String token = ticketEntryService.generateEntryToken(userDetails.getAddress(), reservationId);
-            return ResponseEntity.ok(Map.of("token", token));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
+        String token = ticketEntryService.generateEntryToken(userDetails.getAddress(), reservationId);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("token", token)));
     }
 
     @PostMapping("/verify")
-    public ResponseEntity<?> verifyEntry(HttpServletRequest httpServletRequest, @RequestBody Map<String, String> request) {
-        try {
-            String token = request.get("token");
-            String gateName = request.getOrDefault("gateName", "Default Gate");
-            businessRateLimitGuard.checkEntryVerify(
-                    request.get("gateName"),
-                    businessRateLimitGuard.resolveClientIp(httpServletRequest)
-            );
-            ticketEntryService.verifyEntry(token, gateName);
-            return ResponseEntity.ok(Map.of("message", "Entry Confirmed", "valid", true));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "valid", false));
-        }
+    public ResponseEntity<ApiResponse<Map<String, Object>>> verifyEntry(HttpServletRequest httpServletRequest, @RequestBody Map<String, String> request) {
+        String token = request.get("token");
+        String gateName = request.getOrDefault("gateName", "Default Gate");
+        ticketEntryService.verifyEntry(token, gateName);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("message", "Entry Confirmed", "valid", true)));
     }
 }

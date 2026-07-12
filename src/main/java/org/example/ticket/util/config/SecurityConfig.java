@@ -9,8 +9,6 @@ import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.jwt.JwtUtil;
 import org.example.ticket.member.service.MemberService;
-import org.example.ticket.util.ratelimit.BusinessRateLimitGuard;
-import org.example.ticket.util.ratelimit.IngressRateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -40,7 +38,7 @@ public class SecurityConfig {
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
     private final MemberService memberService;
-    private final BusinessRateLimitGuard businessRateLimitGuard;
+//    private final BusinessRateLimitGuard businessRateLimitGuard;
 
     @Bean
     public AuthenticationManager authManager() throws Exception {
@@ -49,7 +47,7 @@ public class SecurityConfig {
 
     @Bean
     public LoginSuccessHandler loginSuccessHandler() {
-        return new LoginSuccessHandler(jwtUtil, objectMapper, memberService);
+        return new LoginSuccessHandler(jwtUtil, objectMapper);
     }
 
     @Bean
@@ -59,8 +57,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http,
-            MetamaskAuthenticationFilter metamaskAuthenticationFilter,
-            IngressRateLimitFilter ingressRateLimitFilter)
+            MetamaskAuthenticationFilter metamaskAuthenticationFilter
+            )
             throws Exception {
         http
                 .cors(Customizer.withDefaults())
@@ -70,7 +68,6 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http
-                .addFilterBefore(ingressRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAt(metamaskAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new JwtFilter(jwtUtil), MetamaskAuthenticationFilter.class);
 
@@ -107,7 +104,7 @@ public class SecurityConfig {
     public MetamaskAuthenticationFilter metamaskAuthenticationFilter(AuthenticationManager authenticationManager,
             ObjectMapper objectMapper) {
         MetamaskAuthenticationFilter filter = new MetamaskAuthenticationFilter(authenticationManager, objectMapper,
-                loginSuccessHandler(), loginFailureHandler(), businessRateLimitGuard);
+                loginSuccessHandler(), loginFailureHandler());
         return filter;
     }
 

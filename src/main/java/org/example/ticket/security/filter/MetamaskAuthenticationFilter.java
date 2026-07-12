@@ -6,11 +6,10 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.security.LoginRequestDto;
+import org.example.ticket.security.dto.LoginRequest;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
-import org.example.ticket.util.ratelimit.BusinessRateLimitGuard;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -28,55 +27,38 @@ public class MetamaskAuthenticationFilter extends AbstractAuthenticationProcessi
     private static final String HTTP_METHOD_TYPE = "POST";
 
     private final ObjectMapper objectMapper; // JSON 응답 작성을 위해 주입
-    private final BusinessRateLimitGuard businessRateLimitGuard;
-    // 생성자에서 의존성 주입
 
     public MetamaskAuthenticationFilter(AuthenticationManager authenticationManager,
             ObjectMapper objectMapper, LoginSuccessHandler loginSuccessHandler,
             LoginFailureHandler loginFailureHandler) {
-        this(authenticationManager, objectMapper, loginSuccessHandler, loginFailureHandler, null);
-    }
-
-    public MetamaskAuthenticationFilter(AuthenticationManager authenticationManager,
-            ObjectMapper objectMapper, LoginSuccessHandler loginSuccessHandler,
-            LoginFailureHandler loginFailureHandler,
-            BusinessRateLimitGuard businessRateLimitGuard) {
         super(new AntPathRequestMatcher(SPRING_WEB_LOGIN_URI, HTTP_METHOD_TYPE), authenticationManager);
         setAuthenticationSuccessHandler(loginSuccessHandler);
         setAuthenticationFailureHandler(loginFailureHandler);
         this.objectMapper = objectMapper;
-        this.businessRateLimitGuard = businessRateLimitGuard;
     }
 
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
             throws AuthenticationException, IOException { // IOException 추가
 
-        LoginRequestDto loginRequestDto;
+        LoginRequest loginRequest;
         try {
-            loginRequestDto = objectMapper.readValue(request.getInputStream(), LoginRequestDto.class);
+            loginRequest = objectMapper.readValue(request.getInputStream(), LoginRequest.class);
         } catch (IOException e) {
             log.error("Failed to parse authentication request body", e);
             throw new BadCredentialsException("Invalid request body format");
         }
 
-        if (businessRateLimitGuard != null) {
-            businessRateLimitGuard.checkSignatureVerify(
-                    loginRequestDto.getWalletAddress(),
-                    businessRateLimitGuard.resolveClientIp(request)
-            );
-        }
-
-        MetamaskAuthenticationToken authRequest = getMetamaskAuthenticationToken(loginRequestDto);
+        MetamaskAuthenticationToken authRequest = getMetamaskAuthenticationToken(loginRequest);
         authRequest.setDetails(this.authenticationDetailsSource.buildDetails(request));
 
         return this.getAuthenticationManager().authenticate(authRequest);
     }
 
     @NotNull
-    private static MetamaskAuthenticationToken getMetamaskAuthenticationToken(LoginRequestDto loginRequestDto) {
-        String walletAddress = loginRequestDto.getWalletAddress();
-        String signature = loginRequestDto.getSignature();
+    private static MetamaskAuthenticationToken getMetamaskAuthenticationToken(LoginRequest loginRequest) {
+        String walletAddress = loginRequest.walletAddress();
+        String signature = loginRequest.signature();
 
         if (walletAddress == null || walletAddress.isEmpty()) {
             throw new BadCredentialsException("Wallet address is NULL or empty");

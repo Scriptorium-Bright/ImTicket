@@ -30,7 +30,12 @@ application.yml
 out/
 !**/src/main/**/out/
 !**/src/test/**/out/
-docs/
+docs/*
+!docs/33-admission-control-removal-and-reintroduction.md
+!docs/34-why-mysql.md
+:bootRun
+*.log
+seed_output.txt
 
 ### NetBeans ###
 /nbproject/private/

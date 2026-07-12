@@ -5,7 +5,6 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.member.service.MemberService;
 import org.example.ticket.security.dto.TokenResponse;
 import org.example.ticket.security.jwt.JwtUtil;
 import org.example.ticket.security.util.MetamaskUserDetails;
@@ -15,20 +14,16 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.Iterator;
 
 @Slf4j
 public class LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
-    private final MemberService memberService;
 
-    public LoginSuccessHandler(JwtUtil jwtUtil, ObjectMapper objectMapper, MemberService memberService) {
+    public LoginSuccessHandler(JwtUtil jwtUtil, ObjectMapper objectMapper) {
         this.jwtUtil = jwtUtil;
         this.objectMapper = objectMapper;
-        this.memberService = memberService;
     }
 
     @Override
@@ -41,9 +36,6 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
         String role = authentication.getAuthorities().stream().findFirst().map(GrantedAuthority::getAuthority)
                 .orElse("");
 
-        log.info("MetamaskAuthenticationFilter: Authentication successful for {}. Issuing JWT.", walletAddress);
-        memberService.rotateNonce(walletAddress);
-
         String token = jwtUtil.createJwt(walletAddress, role);
 
         TokenResponse tokenResponse = TokenResponse.builder()
@@ -52,8 +44,7 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
                 .role(role)
                 .build();
 
-        log.info("wallet address = {}", walletAddress);
-        log.info("role = {}", role);
+        log.info("Metamask authentication succeeded. role={}", role);
 
         setResponseStatus(response, tokenResponse);
     }

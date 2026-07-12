@@ -33,7 +33,7 @@ public class TicketEntryService {
         Reservation reservation = reservationRepository.findById(reservationId)
                 .orElseThrow(() -> new IllegalArgumentException("Reservation not found"));
 
-        if (!reservation.getMember().getWalletAddress().equals(walletAddress)) {
+        if (!reservation.getMember().getWalletAddress().equalsIgnoreCase(walletAddress)) {
             throw new IllegalArgumentException("본인 티켓만 입장 토큰을 발급할 수 있습니다.");
         }
 

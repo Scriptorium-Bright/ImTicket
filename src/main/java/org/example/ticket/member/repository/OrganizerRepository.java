@@ -8,5 +8,5 @@ import java.util.Optional;
 
 public interface OrganizerRepository extends JpaRepository<Organizer, Long> {
 
-    Optional<Organizer> findByMemberWalletAddress(String walletAddress);
+    Optional<Organizer> findByMemberWalletAddressIgnoreCase(String walletAddress);
 }

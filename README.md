@@ -1,43 +1,189 @@
-# 2025학년도 소프트웨어공학캡스톤프로젝트
+# ImTicket 🎟️
 
-## 블록체인 기반 SBT 티켓 플랫폼
-      
-|    **앱 명칭**     |                      I'm 표                      |
-|:----------------:|:------------------------------------------------:|
-|    **개발 기간**   |  2025.04.09 ~ present  |
-|    **담당 역할**   |  Spring boot Server 구축  |
-|    **담당 기능**   |  전반적인 서버 구축(메타마스크를 이용한 인증 (로그인/회원가입) , 티켓팅 시스템, 공연장 관리 등)  |
-|    **핵심 기능**   |  ***Multi-Signature Wallet**과 **Soul Bound Token**을 이용한 **그룹 기반 데이터 공유 시스템***  |
+> **동시접속 트래픽 처리에 집중한 티켓팅 플랫폼 백엔드**
+> Spring Boot 3.4 · Java 21 · MySQL · Redis · Metamask Auth
 
-<img width="685" alt="architecture" src="https://github.com/user-attachments/assets/bc14a096-95a6-45e2-b52b-4b5bee9102fb" />
+---
 
-## 2025 한국정보기술학회 대학생논문경진대회 금상
-<img width="650" alt="금상" src="https://github.com/user-attachments/assets/686ed4fd-b16f-4069-aaea-b94a4ec3fc80" />
+## 이 프로젝트가 해결하는 문제
 
+| 문제 상황 | 적용 기술 |
+|---|---|
+| 수천 명이 동시에 같은 좌석을 예매하면? | MySQL Row-level Lock (`SELECT FOR UPDATE`) |
+| 여러 서버 인스턴스가 동시에 만료 예약을 정리하면? | ShedLock (DB 기반 분산 락) |
+| 공연 상세 조회가 오픈 순간 폭발하면? | Redis Look-aside 캐시 (TTL 10분) |
+| 티켓 QR이 복사/캡처되어 재사용되면? | HMAC-SHA256 동적 QR (60초 유효) |
+| ID/PW 없이 Web3 지갑으로 로그인하고 싶으면? | Metamask ECDSA 서명 검증 (Web3j) |
 
-## Back-end (Spring Boot & Solidity)
+---
 
-### Use case
-1. 회원가입: 고객
-2. 로그인: 고객 & 이벤트 주최자
-3. 티켓 구매: 고객
-4. 티켓 사용: 고객
-5. 이벤트 등록: 이벤트 주최자
-6. 티켓 구매자 조회: 이벤트 주최자
+## 기술 스택
 
-### Entity Relationship
+```
+Backend   : Spring Boot 3.4.4, Java 21
+Database  : MySQL 8.0 (JPA/Hibernate)
+Cache     : Redis (Lettuce)
+Auth      : Spring Security + JWT + Web3j
+Async     : @Async + ThreadPoolTaskExecutor
+Lock      : ShedLock 5.13 (분산 스케줄러 락)
+SMS       : CoolSMS (NuriGo SDK)
+Payment   : Iamport (미완성)
+Monitoring: Micrometer + Prometheus + Grafana
+API Docs  : springdoc-openapi (Swagger UI)
+Container : Docker + docker-compose
+Load Test : k6
+```
 
-<img width="1189" height="733" alt="스크린샷 2026-01-20 오전 9 57 39" src="https://github.com/user-attachments/assets/be49d619-b1f9-4844-ac92-db6e24f89700" />
+---
 
-### Backend System Architecture
+## 아키텍처 요약
 
-<img width="1042" height="844" alt="image" src="https://github.com/user-attachments/assets/d1762fe6-626f-4aea-ad4e-9fb8ad67cdba" />
+```
+Frontend (React)
+       │
+       ▼
+Spring Boot (port: 10080)
+  ├── Security Filter (JWT + Metamask)
+  ├── CorrelationId Filter (MDC 추적)
+  ├── Controllers → Services → Repositories
+  ├── Redis (캐시 + SMS 인증코드)
+  └── MySQL (메인 DB)
 
-## 코드 정리 문서
+Monitoring
+  Actuator → Prometheus → Grafana
+```
 
-- [docs/README.md](docs/README.md): 현재 코드 기준 구현 항목 요약
-- [docs/02-cache-and-redis.md](docs/02-cache-and-redis.md): 캐시, Redis, Stream 정리
-- [docs/03-auth-and-security.md](docs/03-auth-and-security.md): MetaMask 인증, JWT, 보안 흐름 정리
-- [docs/04-reservation-and-entry.md](docs/04-reservation-and-entry.md): 예매, 동시성, 입장 처리 정리
-- [docs/10-redis-stream-hardening-plan.md](docs/10-redis-stream-hardening-plan.md): Redis Stream 운영 보강 방향 정리
-- [docs/11-operational-hardening-roadmap.md](docs/11-operational-hardening-roadmap.md): 운영형 백엔드 포트폴리오 보강 로드맵
+---
+
+## 빠른 시작
+
+```bash
+# 1. MySQL + Redis 실행
+docker-compose up mysql redis -d
+
+# 2. 서버 실행
+./gradlew bootRun
+
+# 3. API 문서 확인
+open http://localhost:10080/swagger-ui/index.html
+```
+
+### 환경변수 (`.env`)
+
+```env
+SPRING_DATASOURCE_URL=jdbc:mysql://127.0.0.1:10046/capstone?useSSL=false&useUnicode=true&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
+SPRING_DATASOURCE_USERNAME=capstone
+SPRING_DATASOURCE_PASSWORD=cider123
+SPRING_JWT_SECRET=your-jwt-secret
+TICKET_ENTRY_SECRET=your-entry-secret
+COOLSMS_API_KEY=your-coolsms-key
+COOLSMS_API_SECRET=your-coolsms-secret
+COOLSMS_API_FROM=01000000000
+TICKET_SMS_ALLOW_TEST_CODE=true   # 테스트 시 인증코드 123456 고정
+```
+
+---
+
+## 주요 API
+
+| 용도 | 메서드 | 경로 |
+|---|---|---|
+| Nonce 발급 | GET | `/api/user/nonce?walletAddress=` |
+| 지갑 로그인 | POST | `/api/user/login` |
+| 회원 등록 | POST | `/api/user/register` |
+| SMS 발송 | POST | `/api/sms/certificate` |
+| 공연 목록 | GET | `/api/performance` |
+| 빈 좌석 조회 | GET | `/api/seats/{performanceTimeId}` |
+| 예약 생성 | POST | `/api/reservation/pre-reserve` |
+| 예약 확정 | POST | `/api/reservation/{id}/confirm` |
+| QR 토큰 발급 | GET | `/api/entry/token/{reservationId}` |
+| QR 토큰 검증 | POST | `/api/entry/verify` |
+
+---
+
+## 예약 플로우
+
+```
+좌석 생성 (비동기)
+POST /api/seats/{performanceTimeId}
+        │
+        ▼
+빈 좌석 조회
+GET /api/seats/{performanceTimeId}
+        │
+        ▼
+예약 생성 (SELECT FOR UPDATE → LOCKED 상태, 7분 유효)
+POST /api/reservation/pre-reserve
+        │
+        ▼
+예약 확정 (SUCCESS 상태)
+POST /api/reservation/{id}/confirm
+        │
+        ▼
+QR 토큰 발급 (HMAC-SHA256, 60초 유효)
+GET /api/entry/token/{reservationId}
+        │
+        ▼
+입장 검증
+POST /api/entry/verify
+```
+
+---
+
+## 테스트
+
+```bash
+# 전체 테스트
+./gradlew test
+
+# 동시성 테스트 (100명 동시 예매)
+./gradlew test --tests "*ReservationConcurrencyTest*"
+
+# 분산 환경 시뮬레이션 (ShedLock 검증)
+./run-cluster.sh
+```
+
+### 테스트 분류
+
+| 유형 | 설명 |
+|---|---|
+| **동시성 테스트** | 100명 동시 좌석 예매 → 1명만 성공 검증 |
+| **배드스멜 테스트** | 실제 버그/성능 문제 재현 (의도적 실패) |
+| **분산 환경 테스트** | ShedLock 없이 다중 스케줄러 중복 실행 증명 |
+| **단위 테스트** | 서비스/필터 단위 검증 |
+
+---
+
+## 모니터링
+
+```bash
+# 전체 스택 실행
+docker-compose up --build
+
+# 접속
+Grafana   : http://localhost:3000
+Prometheus: http://localhost:9090
+Swagger   : http://localhost:10080/swagger-ui/index.html
+```
+
+---
+
+## 상세 문서
+
+| 문서 | 내용 |
+|---|---|
+| [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) | **전체 문서** (도메인, API, 테스트, 설정 모두 포함) |
+| [DB_SCHEMA.md](./DB_SCHEMA.md) | DB 스키마 |
+| [docs/03-auth-and-security.md](./03-auth-and-security.md) | 인증 상세 |
+| [docs/04-reservation-and-entry.md](./04-reservation-and-entry.md) | 예약/입장 상세 |
+
+---
+
+## Known Issues
+
+| 우선순위 | 문제 |
+|---|---|
+| 🔴 HIGH | `@SchedulerLock` 비활성화 → 다중 인스턴스에서 중복 스케줄링 |
+| 🔴 HIGH | 클린업 시 SUCCESS 예약도 삭제될 수 있는 로직 오류 |
+| 🟡 MID | Cache Stampede 방어 미적용 (`@Cacheable(sync=true)` 필요) |
+| 🟡 MID | 결제(Iamport) 미구현 |

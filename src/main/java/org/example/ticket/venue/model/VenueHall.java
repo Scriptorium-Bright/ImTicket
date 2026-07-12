@@ -5,7 +5,6 @@ import lombok.*;
 
 @Entity
 @Getter
-@Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -24,4 +23,8 @@ public class VenueHall {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "venue_id")
     private Venue venue;
+
+    public void assignVenue(Venue venue) {
+        this.venue = venue;
+    }
 }

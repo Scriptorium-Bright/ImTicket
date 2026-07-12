@@ -12,7 +12,6 @@ import org.example.ticket.util.constant.SeatInfo;
         )
 })
 @Builder
-@Setter
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -32,5 +31,9 @@ public class SeatPrice {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "performance_id", nullable = false)
     private Performance performance;
+
+    public void assignPerformance(Performance performance) {
+        this.performance = performance;
+    }
 
 }

@@ -92,7 +92,8 @@ export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignU
             // For now, let's assume the parent handles the actual signing or we import web3Service here.
             // Let's import web3Service dynamically or use a prop if possible, but importing is easier.
             const { web3Service } = await import("@/services/web3")
-            const message = `Registering for ImTicket with address: ${walletAddress}`
+            const nonceRes = await authApi.getNonce(walletAddress, 'REGISTER')
+            const message = nonceRes.data.message
             const signature = await web3Service.signMessage(message)
 
             await memberApi.register({

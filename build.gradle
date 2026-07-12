@@ -73,8 +73,24 @@ dependencies {
 
     implementation 'net.javacrumbs.shedlock:shedlock-spring:5.13.0'
     implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:5.13.0'
+
+    // Swagger (OpenAPI)
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+
+    // .env 파일의 환경변수를 테스트 실행 시 주입
+    def envFile = file('.env')
+    if (envFile.exists()) {
+        envFile.readLines().each { line ->
+            if (line.trim() != "" && !line.startsWith("#")) {
+                def parts = line.split('=', 2)
+                if (parts.length == 2) {
+                    environment parts[0].trim(), parts[1].trim()
+                }
+            }
+        }
+    }
 }

@@ -39,8 +39,8 @@ public class Organizer {
     private String businessNumber;
 
 
-    @OneToOne(fetch = FetchType.LAZY, orphanRemoval = true, cascade = CascadeType.ALL)
-    @JoinColumn(name = "member_id")
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "member_id", nullable = false, unique = true)
     private Member member;
 
     @Builder.Default

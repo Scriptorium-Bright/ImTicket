@@ -21,8 +21,31 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
+// Add a response interceptor to unwrap the common ApiResponse format
+api.interceptors.response.use(
+    (response) => {
+        // 백엔드에서 내려주는 공통 응답 포맷 (ApiResponse: { success, data, error })
+        // 만약 응답이 이런 구조를 띠고 있고 success가 true라면 data.data를 바로 반환한다.
+        if (response.data && typeof response.data === 'object' && 'success' in response.data) {
+            if (response.data.success) {
+                return { ...response, data: response.data.data };
+            } else {
+                return Promise.reject(response.data.error || new Error('Unknown API error'));
+            }
+        }
+        return response;
+    },
+    (error) => {
+        if (error.response && error.response.data && error.response.data.error) {
+            return Promise.reject(error.response.data.error);
+        }
+        return Promise.reject(error);
+    }
+);
+
 export const authApi = {
-    getNonce: (walletAddress: string) => api.get(`/api/user/nonce?walletAddress=${walletAddress}`),
+    getNonce: (walletAddress: string, purpose: 'LOGIN' | 'REGISTER' = 'LOGIN') =>
+        api.get('/api/user/nonce', { params: { walletAddress, purpose } }),
     verifySignature: (walletAddress: string, signature: string) =>
         api.post('/api/user/signature/verify', { walletAddress, signature }),
     sendSms: (to: string) => api.post('/api/sms/certificate', { to }),

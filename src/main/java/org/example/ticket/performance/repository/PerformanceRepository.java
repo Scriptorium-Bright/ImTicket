@@ -1,6 +1,5 @@
 package org.example.ticket.performance.repository;
 
-import io.lettuce.core.dynamic.annotation.Param;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.response.PerformanceOverviewResponse;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,9 +16,6 @@ public interface PerformanceRepository extends JpaRepository<Performance, Long> 
                     " FROM Performance p "
     )
     List<PerformanceOverviewResponse> findByIntro();
-
-
-    Optional<Performance> findById(@Param("id") Long id);
 
     @Query("select distinct p from Performance p " +
             "left join fetch p.seatPrices " +

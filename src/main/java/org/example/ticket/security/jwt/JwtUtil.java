@@ -23,7 +23,6 @@ public class JwtUtil {
     private final Long expiredMs;
 
     public JwtUtil(@Value("${spring.jwt.secret}") String secret, @Value("${spring.jwt.expired.time}") Long expiredMs) {
-        log.info("jwt Util process");
         if (secret == null) {
             throw new IllegalArgumentException("JWT secret key is null");
         }

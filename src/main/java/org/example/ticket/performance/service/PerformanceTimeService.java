@@ -31,10 +31,10 @@ public class PerformanceTimeService {
                                                                  Long performanceId,
                                                                  String walletAddress) {
 
-
         Performance performance = performanceRepository.findById(performanceId)
                 .orElseThrow(() -> new EntityNotFoundException("공연 정보를 찾을 수 없습니다."));
-        if (!performance.isManagedBy(walletAddress)) {
+
+        if (performance.isManagedBy(walletAddress)) {
             throw new EntityNotFoundException("본인 공연만 회차를 등록할 수 있습니다.");
         }
 

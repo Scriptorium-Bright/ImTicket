@@ -23,18 +23,20 @@ export const useUserStore = create<UserState>((set, get) => ({
         try {
             const address = await web3Service.connectWallet()
 
-            // Check if user exists
             try {
                 await memberApi.validate(address)
-                // User exists, proceed to login (In real app, sign nonce here)
-                // For now, we assume validate success means we can log them in
-                const nicknameRes = await memberApi.getNickname(address)
-                set({ walletAddress: address, isLoggedIn: true, nickname: nicknameRes.data })
             } catch (error) {
-                // User does not exist, trigger sign up
                 console.log("User not found, triggering sign up")
                 set({ walletAddress: address, isSignUpModalOpen: true })
+                return
             }
+
+            const nonceRes = await authApi.getNonce(address, 'LOGIN')
+            const signature = await web3Service.signMessage(nonceRes.data.message)
+            const tokenRes = await authApi.verifySignature(address, signature)
+            localStorage.setItem('accessToken', tokenRes.data.token)
+            const nicknameRes = await memberApi.getNickname(address)
+            set({ walletAddress: address, isLoggedIn: true, nickname: nicknameRes.data })
         } catch (error) {
             console.error("Wallet connection failed:", error)
             alert("지갑 연결에 실패했습니다.")

@@ -35,7 +35,7 @@ public class Venue {
 
     public void addHall(VenueHall hall) {
         this.venueHalls.add(hall);
-        hall.setVenue(this); // 자식에게도 부모(나 자신)를 설정하여 양쪽 관계를 모두 설정
+        hall.assignVenue(this);
     }
 
 }

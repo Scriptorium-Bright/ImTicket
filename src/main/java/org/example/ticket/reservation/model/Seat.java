@@ -7,8 +7,6 @@ import org.example.ticket.reservation.request.SeatRequest;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
 
-import static org.example.ticket.util.constant.SeatStatus.LOCKED;
-
 @Entity
 @Table(indexes = {
         @Index(name = "idx_seat_perf_status", columnList = "performance_time_id, seat_status")
@@ -20,7 +18,6 @@ import static org.example.ticket.util.constant.SeatStatus.LOCKED;
 })
 @Builder
 @Getter
-@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class Seat {
@@ -78,10 +75,6 @@ public class Seat {
 
     public void markAsReserved(SeatStatus seatStatus) {
         this.seatStatus = seatStatus;
-    }
-
-    public void forIncreaseSeatNumber(Integer seatNumber) {
-        this.seatNumber = seatNumber;
     }
 
 }

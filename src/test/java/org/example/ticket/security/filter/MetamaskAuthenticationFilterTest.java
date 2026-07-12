@@ -1,11 +1,10 @@
 package org.example.ticket.security.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.example.ticket.security.LoginRequestDto;
+import org.example.ticket.security.dto.LoginRequest;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
-import org.example.ticket.util.ratelimit.BusinessRateLimitGuard;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -37,37 +36,29 @@ class MetamaskAuthenticationFilterTest {
     private LoginFailureHandler loginFailureHandler;
 
     @Mock
-    private BusinessRateLimitGuard businessRateLimitGuard;
-
-    @Mock
     private Authentication authentication;
 
     @Test
-    void attemptAuthenticationChecksWalletIpRateLimitBeforeAuthenticationManager() throws Exception {
+    void attemptAuthenticationSucceeds() throws Exception {
         MetamaskAuthenticationFilter filter = new MetamaskAuthenticationFilter(
                 authenticationManager,
                 objectMapper,
                 loginSuccessHandler,
-                loginFailureHandler,
-                businessRateLimitGuard
+                loginFailureHandler
         );
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/user/signature/verify");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        LoginRequestDto loginRequestDto = new LoginRequestDto();
-        loginRequestDto.setWalletAddress("0xABCD");
-        loginRequestDto.setSignature("signature");
+        LoginRequest loginRequest = new LoginRequest("0xABCD", "signature");
 
         request.setRemoteAddr("198.51.100.11");
         request.setContentType("application/json");
         request.setContent("{\"walletAddress\":\"0xABCD\",\"signature\":\"signature\"}".getBytes());
 
-        when(objectMapper.readValue(any(java.io.InputStream.class), eq(LoginRequestDto.class))).thenReturn(loginRequestDto);
-        when(businessRateLimitGuard.resolveClientIp(request)).thenReturn("198.51.100.11");
+        when(objectMapper.readValue(any(java.io.InputStream.class), eq(LoginRequest.class))).thenReturn(loginRequest);
         when(authenticationManager.authenticate(any(MetamaskAuthenticationToken.class))).thenReturn(authentication);
 
         Authentication result = filter.attemptAuthentication(request, response);
 
-        verify(businessRateLimitGuard).checkSignatureVerify("0xABCD", "198.51.100.11");
         verify(authenticationManager).authenticate(any(MetamaskAuthenticationToken.class));
         assertThat(result).isSameAs(authentication);
     }

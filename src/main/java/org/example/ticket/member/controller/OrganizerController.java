@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.example.ticket.common.response.ApiResponse;
 
 @RestController
 @Slf4j
@@ -21,11 +22,11 @@ public class OrganizerController {
     private final OrganizerService organizerService;
 
     @PostMapping("/register")
-    public ResponseEntity<?> registerOrganizerInformation(
+    public ResponseEntity<ApiResponse<Void>> registerOrganizerInformation(
             @AuthenticationPrincipal MetamaskUserDetails userDetails,
             @RequestBody OrganizerRequest request) {
         organizerService.registerOrganizer(userDetails.getAddress(), request);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok(ApiResponse.success());
     }
 
 

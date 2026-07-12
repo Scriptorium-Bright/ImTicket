@@ -1,7 +1,9 @@
 package org.example.ticket.member.service;
 
 import org.example.ticket.member.model.Member;
+import org.example.ticket.member.model.NoncePurpose;
 import org.example.ticket.member.repository.MemberRepository;
+import org.example.ticket.member.response.NonceResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -12,15 +14,17 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MemberServiceTest {
+
+    private static final String WALLET_ADDRESS = "0x0000000000000000000000000000000000000abc";
 
     @Mock
     private MemberRepository memberRepository;
@@ -29,47 +33,50 @@ class MemberServiceTest {
     private MemberService memberService;
 
     @Test
-    void nonceRequestDoesNotPersistUnregisteredWallet() {
-        when(memberRepository.findByWalletAddress("0xnew")).thenReturn(Optional.empty());
+    void nonceRequestPersistsPendingChallengeForUnregisteredWallet() {
+        when(memberRepository.findByWalletAddressIgnoreCase(WALLET_ADDRESS)).thenReturn(Optional.empty());
+        when(memberRepository.save(any(Member.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Integer nonce = memberService.getOrCreateNonce("0xnew");
+        NonceResponse response = memberService.getOrCreateNonce(WALLET_ADDRESS, NoncePurpose.REGISTER);
 
-        assertNotEquals(null, nonce);
-        verify(memberRepository, never()).save(any());
+        assertNotNull(response.nonce());
+        assertTrue(response.message().contains("Purpose: Register for ImTicket"));
+        assertTrue(response.message().contains("Nonce: " + response.nonce()));
+        verify(memberRepository).save(any(Member.class));
     }
 
     @Test
     void registerCompletesExistingPendingMember() {
         Member pendingMember = Member.builder()
-                .walletAddress("0xabc")
+                .walletAddress(WALLET_ADDRESS)
                 .role("ROLE_USER")
                 .build();
-        when(memberRepository.findByWalletAddress("0xabc")).thenReturn(Optional.of(pendingMember));
+        when(memberRepository.findByWalletAddressIgnoreCase(WALLET_ADDRESS)).thenReturn(Optional.of(pendingMember));
 
-        memberService.register("0xabc", "01012345678", "tester");
+        memberService.register(WALLET_ADDRESS, "01012345678", "tester");
 
         assertTrue(pendingMember.isRegistered());
         assertEquals("01012345678", pendingMember.getPhoneNumber());
         assertEquals("tester", pendingMember.getNickname());
-        verify(memberRepository, never()).save(any());
     }
 
     @Test
     void rotateNonceUpdatesRegisteredMemberNonce() {
         Member registeredMember = Member.builder()
-                .walletAddress("0xabc")
+                .walletAddress(WALLET_ADDRESS)
                 .phoneNumber("01012345678")
                 .nickname("tester")
                 .smsVerified(true)
                 .walletVerified(true)
                 .role("ROLE_USER")
-                .nonce(1)
+                .nonce("old-nonce")
                 .build();
-        when(memberRepository.findByWalletAddress("0xabc")).thenReturn(Optional.of(registeredMember));
+        when(memberRepository.findByWalletAddressIgnoreCase(WALLET_ADDRESS)).thenReturn(Optional.of(registeredMember));
 
-        memberService.rotateNonce("0xabc");
+        memberService.rotateNonce(WALLET_ADDRESS);
 
         assertTrue(registeredMember.isRegistered());
-        assertFalse(registeredMember.getNonce().equals(1));
+        assertFalse(registeredMember.getNonce().equals("old-nonce"));
+        assertEquals(NoncePurpose.LOGIN, registeredMember.getNoncePurpose());
     }
 }

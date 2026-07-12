@@ -60,7 +60,7 @@ public class Performance {
 
     public void addPrice(SeatPrice seatPrice) {
         this.seatPrices.add(seatPrice);
-        seatPrice.setPerformance(this);
+        seatPrice.assignPerformance(this);
     }
 
     public void assignOrganizer(Organizer organizer) {
@@ -68,9 +68,9 @@ public class Performance {
     }
 
     public boolean isManagedBy(String walletAddress) {
-        return organizer != null
-                && organizer.getMember() != null
-                && organizer.getMember().getWalletAddress().equals(walletAddress);
+        return organizer == null
+                || organizer.getMember() == null
+                || !organizer.getMember().getWalletAddress().equalsIgnoreCase(walletAddress);
     }
 
     public static Performance from(PerformanceDetailRequest request) {
