@@ -1,189 +1,84 @@
-# ImTicket 🎟️
+# ImTicket
 
-> **동시접속 트래픽 처리에 집중한 티켓팅 플랫폼 백엔드**
-> Spring Boot 3.4 · Java 21 · MySQL · Redis · Metamask Auth
+> 동시 예약 상황의 데이터 정합성과 반복 조회 성능을 고려한 티켓 예매 플랫폼
 
----
+## 프로젝트 소개
 
-## 이 프로젝트가 해결하는 문제
+ImTicket은 공연 등록부터 회차별 좌석 생성, 좌석 선점, 예약 확정, 만료 좌석 회수, 입장 검증까지 티켓의 전체 흐름을 관리하는 서비스입니다.
 
-| 문제 상황 | 적용 기술 |
-|---|---|
-| 수천 명이 동시에 같은 좌석을 예매하면? | MySQL Row-level Lock (`SELECT FOR UPDATE`) |
-| 여러 서버 인스턴스가 동시에 만료 예약을 정리하면? | ShedLock (DB 기반 분산 락) |
-| 공연 상세 조회가 오픈 순간 폭발하면? | Redis Look-aside 캐시 (TTL 10분) |
-| 티켓 QR이 복사/캡처되어 재사용되면? | HMAC-SHA256 동적 QR (60초 유효) |
-| ID/PW 없이 Web3 지갑으로 로그인하고 싶으면? | Metamask ECDSA 서명 검증 (Web3j) |
+운영자는 공연장과 좌석 템플릿을 등록하고 공연 일정과 좌석 가격을 설정할 수 있습니다. 사용자는 MetaMask 지갑 서명으로 인증한 뒤 공연과 좌석을 조회하고, 원하는 좌석을 선점해 예약을 확정할 수 있습니다. 예약이 확정되지 않으면 만료 처리 과정에서 좌석이 다시 판매 가능한 상태로 복구됩니다.
 
----
+백엔드는 Java 21과 Spring Boot로 구현했으며, MySQL 트랜잭션과 비관적 Lock으로 동일 좌석의 중복 예약을 방지했습니다. 공연 상세처럼 반복 조회되는 데이터에는 Redis Cache를 적용하고, Micrometer와 Prometheus, k6를 이용해 동시 요청과 조회 성능을 측정했습니다.
+
+## 핵심 흐름
+
+```text
+공연장과 좌석 템플릿 등록
+    → 공연과 회차 등록
+    → 회차별 판매 좌석 생성
+    → 좌석 조회
+    → 좌석 임시 선점
+    → 예약 확정 또는 만료 좌석 회수
+    → 입장 토큰 발급과 검증
+```
+
+## 주요 구현
+
+### 좌석 예약 정합성
+
+- 공연 회차와 좌석 ID를 함께 검증한 뒤 MySQL `PESSIMISTIC_WRITE` Lock 획득
+- 다중 좌석 요청의 ID를 오름차순으로 정렬해 잠금 순서 고정
+- `AVAILABLE`, `LOCKED`, `RESERVED` 상태를 기준으로 좌석 생명주기 관리
+- 같은 공연 회차의 좌석 위치가 중복되지 않도록 Database Unique Constraint 적용
+
+### 만료 예약 자동 정리
+
+- `PENDING_PAYMENT` 상태이면서 만료 시각이 지난 예약만 정리
+- 만료 예약 ID를 최대 5,000건 먼저 조회한 뒤 필요한 예약과 좌석 조회
+- 만료된 예약의 좌석을 `AVAILABLE` 상태로 복구
+- ShedLock을 적용해 다중 인스턴스의 정리 작업 중복 실행 방지
+- 실행별 `runId`와 `correlationId`를 기록해 작업 단위 추적
+
+### Redis 조회 Cache
+
+- 공연 상세 응답을 Redis Look-aside Cache로 저장
+- `performance:details:{id}` 형식의 Cache Key와 10분 TTL 적용
+- Cache Hit, Miss, Write와 응답시간을 Micrometer로 계측
+- k6와 Prometheus를 이용해 Database 직접 조회와 Redis 조회 성능 비교
+
+### 인증과 입장 검증
+
+- MetaMask ECDSA 서명 검증과 JWT 기반 API 인증
+- 일회성 Nonce와 만료 시각을 이용한 서명 재사용 방지
+- 로그인과 회원가입 목적에 따른 Nonce 분리
+- 예약 소유자와 예약 상태를 확인한 뒤 입장 토큰 발급 및 검증
+
+### 공연장 좌석 모델링
+
+- 공연장의 좌석 배치를 `VenueHallSeatTemplate`로 관리
+- 공연 회차마다 실제 판매 대상인 `Seat` 생성
+- 좌석 템플릿과 회차별 좌석 상태의 생명주기 분리
+- 좌석 등급별 가격을 회차별 판매 좌석에 반영
+
+## 성능 검증
+
+| 검증 항목 | 조건 | 결과 |
+| --- | --- | --- |
+| 동일 좌석 동시 예약 | 단일 서버, 동일 좌석, 50, 100, 200 VU | 각 구간에서 성공 1건, 나머지 409, 중복 예약과 5xx 0건 |
+| 공연 상세 Redis Cache | 20 VU, 15초 | 평균 응답시간 65.30ms에서 24.66ms, 처리량 74.47 req/s에서 86.26 req/s |
+| Cache Hit Ratio | Cache Warm-up 이후 | 99.92% |
 
 ## 기술 스택
 
-```
-Backend   : Spring Boot 3.4.4, Java 21
-Database  : MySQL 8.0 (JPA/Hibernate)
-Cache     : Redis (Lettuce)
-Auth      : Spring Security + JWT + Web3j
-Async     : @Async + ThreadPoolTaskExecutor
-Lock      : ShedLock 5.13 (분산 스케줄러 락)
-SMS       : CoolSMS (NuriGo SDK)
-Payment   : Iamport (미완성)
-Monitoring: Micrometer + Prometheus + Grafana
-API Docs  : springdoc-openapi (Swagger UI)
-Container : Docker + docker-compose
-Load Test : k6
-```
-
----
-
-## 아키텍처 요약
-
-```
-Frontend (React)
-       │
-       ▼
-Spring Boot (port: 10080)
-  ├── Security Filter (JWT + Metamask)
-  ├── CorrelationId Filter (MDC 추적)
-  ├── Controllers → Services → Repositories
-  ├── Redis (캐시 + SMS 인증코드)
-  └── MySQL (메인 DB)
-
-Monitoring
-  Actuator → Prometheus → Grafana
-```
-
----
-
-## 빠른 시작
-
-```bash
-# 1. MySQL + Redis 실행
-docker-compose up mysql redis -d
-
-# 2. 서버 실행
-./gradlew bootRun
-
-# 3. API 문서 확인
-open http://localhost:10080/swagger-ui/index.html
-```
-
-### 환경변수 (`.env`)
-
-```env
-SPRING_DATASOURCE_URL=jdbc:mysql://127.0.0.1:10046/capstone?useSSL=false&useUnicode=true&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
-SPRING_DATASOURCE_USERNAME=capstone
-SPRING_DATASOURCE_PASSWORD=cider123
-SPRING_JWT_SECRET=your-jwt-secret
-TICKET_ENTRY_SECRET=your-entry-secret
-COOLSMS_API_KEY=your-coolsms-key
-COOLSMS_API_SECRET=your-coolsms-secret
-COOLSMS_API_FROM=01000000000
-TICKET_SMS_ALLOW_TEST_CODE=true   # 테스트 시 인증코드 123456 고정
-```
-
----
-
-## 주요 API
-
-| 용도 | 메서드 | 경로 |
-|---|---|---|
-| Nonce 발급 | GET | `/api/user/nonce?walletAddress=` |
-| 지갑 로그인 | POST | `/api/user/login` |
-| 회원 등록 | POST | `/api/user/register` |
-| SMS 발송 | POST | `/api/sms/certificate` |
-| 공연 목록 | GET | `/api/performance` |
-| 빈 좌석 조회 | GET | `/api/seats/{performanceTimeId}` |
-| 예약 생성 | POST | `/api/reservation/pre-reserve` |
-| 예약 확정 | POST | `/api/reservation/{id}/confirm` |
-| QR 토큰 발급 | GET | `/api/entry/token/{reservationId}` |
-| QR 토큰 검증 | POST | `/api/entry/verify` |
-
----
-
-## 예약 플로우
-
-```
-좌석 생성 (비동기)
-POST /api/seats/{performanceTimeId}
-        │
-        ▼
-빈 좌석 조회
-GET /api/seats/{performanceTimeId}
-        │
-        ▼
-예약 생성 (SELECT FOR UPDATE → LOCKED 상태, 7분 유효)
-POST /api/reservation/pre-reserve
-        │
-        ▼
-예약 확정 (SUCCESS 상태)
-POST /api/reservation/{id}/confirm
-        │
-        ▼
-QR 토큰 발급 (HMAC-SHA256, 60초 유효)
-GET /api/entry/token/{reservationId}
-        │
-        ▼
-입장 검증
-POST /api/entry/verify
-```
-
----
-
-## 테스트
-
-```bash
-# 전체 테스트
-./gradlew test
-
-# 동시성 테스트 (100명 동시 예매)
-./gradlew test --tests "*ReservationConcurrencyTest*"
-
-# 분산 환경 시뮬레이션 (ShedLock 검증)
-./run-cluster.sh
-```
-
-### 테스트 분류
-
-| 유형 | 설명 |
-|---|---|
-| **동시성 테스트** | 100명 동시 좌석 예매 → 1명만 성공 검증 |
-| **배드스멜 테스트** | 실제 버그/성능 문제 재현 (의도적 실패) |
-| **분산 환경 테스트** | ShedLock 없이 다중 스케줄러 중복 실행 증명 |
-| **단위 테스트** | 서비스/필터 단위 검증 |
-
----
-
-## 모니터링
-
-```bash
-# 전체 스택 실행
-docker-compose up --build
-
-# 접속
-Grafana   : http://localhost:3000
-Prometheus: http://localhost:9090
-Swagger   : http://localhost:10080/swagger-ui/index.html
-```
-
----
-
-## 상세 문서
-
-| 문서 | 내용 |
-|---|---|
-| [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) | **전체 문서** (도메인, API, 테스트, 설정 모두 포함) |
-| [DB_SCHEMA.md](./DB_SCHEMA.md) | DB 스키마 |
-| [docs/03-auth-and-security.md](./03-auth-and-security.md) | 인증 상세 |
-| [docs/04-reservation-and-entry.md](./04-reservation-and-entry.md) | 예약/입장 상세 |
-
----
-
-## Known Issues
-
-| 우선순위 | 문제 |
-|---|---|
-| 🔴 HIGH | `@SchedulerLock` 비활성화 → 다중 인스턴스에서 중복 스케줄링 |
-| 🔴 HIGH | 클린업 시 SUCCESS 예약도 삭제될 수 있는 로직 오류 |
-| 🟡 MID | Cache Stampede 방어 미적용 (`@Cacheable(sync=true)` 필요) |
-| 🟡 MID | 결제(Iamport) 미구현 |
+| 구분 | 기술 |
+| --- | --- |
+| Backend | Java 21, Spring Boot 3.4.4, Spring Web MVC |
+| Data | Spring Data JPA, Hibernate, MySQL 8 |
+| Cache | Redis, Lettuce |
+| Security | Spring Security, JWT, Web3j |
+| Scheduling | Spring Scheduling, ShedLock |
+| Monitoring | Micrometer, Prometheus, Grafana |
+| Test | JUnit 5, Mockito, AssertJ, k6 |
+| Frontend | React, Next.js, TypeScript |
+| Infrastructure | Docker, Docker Compose |
+| Collaboration | Git, GitHub |
