@@ -52,10 +52,8 @@ public class Seat {
     @Column(name = "seat_status")
     private SeatStatus seatStatus;
 
-    /*
-     * @Version
-     * private Long version;
-     */
+    @Version
+    private Long version;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "performance_time_id", nullable = false)

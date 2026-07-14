@@ -17,6 +17,7 @@ import org.example.ticket.venue.model.VenueHallSeatTemplate;
 import org.example.ticket.venue.repository.VenueHallSeatTemplateRepository;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,12 +35,22 @@ public class SeatService {
     private final PerformanceTimeRepository performanceTimeRepository;
     private final VenueHallSeatTemplateRepository seatTemplateRepository;
 
+    @Value("${reservation.lock-strategy:pessimistic}")
+    private String reservationLockStrategy;
+
     public List<Seat> findAndLockSeatsByPerformanceTime(Long performanceTimeId, List<Long> seatIds) {
-        List<Seat> seats = repository.findByPerformanceTimeIdAndIdsForUpdate(performanceTimeId, seatIds);
+        List<Seat> seats = usesDatabasePessimisticLock()
+                ? repository.findByPerformanceTimeIdAndIdsForUpdate(performanceTimeId, seatIds)
+                : repository.findByPerformanceTimeIdAndIds(performanceTimeId, seatIds);
         if (seats.size() != seatIds.size()) {
             throw new EntityNotFoundException("요청한 공연 회차에 속하지 않는 좌석이 포함되어 있습니다.");
         }
         return seats;
+    }
+
+    private boolean usesDatabasePessimisticLock() {
+        return "pessimistic".equalsIgnoreCase(reservationLockStrategy)
+                || reservationLockStrategy == null;
     }
 
     public void changeSeatsState(List<Seat> seats, SeatStatus seatStatus) {

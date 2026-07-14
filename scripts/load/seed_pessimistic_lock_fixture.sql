@@ -42,7 +42,7 @@ INSERT INTO VenueHall (
 VALUES (
     @venue_id,
     'Lock Test Hall',
-    3
+    4
 );
 SET @venuehall_id = LAST_INSERT_ID();
 
@@ -79,6 +79,7 @@ SET @performance_time_id = LAST_INSERT_ID();
 SET @seat_id_1 = (SELECT COALESCE(MAX(id), 0) + 1 FROM Seat);
 SET @seat_id_2 = @seat_id_1 + 1;
 SET @seat_id_3 = @seat_id_1 + 2;
+SET @seat_id_4 = @seat_id_1 + 3;
 
 INSERT INTO Seat (
     id,
@@ -90,19 +91,22 @@ INSERT INTO Seat (
     seat_status,
     seat_type,
     is_reservation,
-    seat_price
+    seat_price,
+    version
 )
 VALUES
-    (@seat_id_1, @performance_time_id, 1, 'A', 1, 1, 'AVAILABLE', 'A', FALSE, 100000),
-    (@seat_id_2, @performance_time_id, 1, 'A', 1, 2, 'AVAILABLE', 'A', FALSE, 100000),
-    (@seat_id_3, @performance_time_id, 1, 'A', 1, 3, 'AVAILABLE', 'A', FALSE, 100000);
+    (@seat_id_1, @performance_time_id, 1, 'A', 1, 1, 'AVAILABLE', 'A', FALSE, 100000, 0),
+    (@seat_id_2, @performance_time_id, 1, 'A', 1, 2, 'AVAILABLE', 'A', FALSE, 100000, 0),
+    (@seat_id_3, @performance_time_id, 1, 'A', 1, 3, 'AVAILABLE', 'A', FALSE, 100000, 0),
+    (@seat_id_4, @performance_time_id, 1, 'A', 1, 4, 'AVAILABLE', 'A', FALSE, 100000, 0);
 
 UPDATE Seat_SEQ
-SET next_val = GREATEST(next_val, @seat_id_3 + 1);
+SET next_val = GREATEST(next_val, @seat_id_4 + 1);
 
 SELECT
     @wallet_address AS wallet_address,
     @performance_time_id AS performance_time_id,
     @seat_id_1 AS grade_1_seat_id,
     @seat_id_2 AS grade_2_seat_id,
-    @seat_id_3 AS grade_3_seat_id;
+    @seat_id_3 AS grade_3_seat_id,
+    @seat_id_4 AS grade_4_seat_id;

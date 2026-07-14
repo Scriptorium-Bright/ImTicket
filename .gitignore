@@ -33,6 +33,8 @@ out/
 docs/*
 !docs/33-admission-control-removal-and-reintroduction.md
 !docs/34-why-mysql.md
+!docs/72-single-server-grade-and-cache-load-tests.md
+!docs/blog-single-server-reservation-aop.md
 :bootRun
 *.log
 seed_output.txt
@@ -50,6 +52,8 @@ seed_output.txt
 ### k6 ###
 *.js
 *.html
+!k6-scripts/01-ticket-open-run.js
+!k6-scripts/06-performance-cache-load.js
 
 ### Environment Variables ###
 .env

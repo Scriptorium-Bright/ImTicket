@@ -1,6 +1,7 @@
 package org.example.ticket.util.config;
 
 import org.example.ticket.util.tracing.MdcTaskDecorator;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskDecorator;
@@ -25,6 +26,21 @@ public class AsyncConfig {
         executor.setMaxPoolSize(20);    // 동시에 처리할 수 있는 최대 스레드 수
         executor.setQueueCapacity(100); // 최대 스레드가 모두 바쁠 때, 대기열에 쌓아둘 작업 수
         executor.setThreadNamePrefix("SeatCreate-");
+        executor.setTaskDecorator(mdcTaskDecorator);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "reservationSingleThreadTaskExecutor")
+    public ThreadPoolTaskExecutor reservationSingleThreadTaskExecutor(
+            TaskDecorator mdcTaskDecorator,
+            @Value("${reservation.lock.single-thread.queue-capacity:1000}") int queueCapacity
+    ) {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(1);
+        executor.setQueueCapacity(queueCapacity);
+        executor.setThreadNamePrefix("ReservationSingle-");
         executor.setTaskDecorator(mdcTaskDecorator);
         executor.initialize();
         return executor;

@@ -28,6 +28,18 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
             @Param("seatIds") List<Long> seatIds
     );
 
+    @Query("""
+            select s
+            from Seat s
+            where s.performanceTime.id = :performanceTimeId
+              and s.id in :seatIds
+            order by s.id
+            """)
+    List<Seat> findByPerformanceTimeIdAndIds(
+            @Param("performanceTimeId") Long performanceTimeId,
+            @Param("seatIds") List<Long> seatIds
+    );
+
     @Query("SELECT new org.example.ticket.reservation.response.SeatResponse(" +
             "s.id, s.seatFloor, s.seatSection, s.seatRow, s.seatNumber, s.seatType, s.price, s.isReservation, s.seatStatus) " +
             "FROM Seat s " +

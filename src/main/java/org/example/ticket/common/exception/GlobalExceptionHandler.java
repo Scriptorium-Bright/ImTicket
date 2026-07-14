@@ -2,10 +2,13 @@ package org.example.ticket.common.exception;
 
 import jakarta.persistence.EntityExistsException;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.OptimisticLockException;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.common.response.ApiResponse;
 import org.example.ticket.common.response.ErrorResponse;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.example.ticket.reservation.exception.ReservationErrorCode;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -34,6 +37,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleEntityExistsException(EntityExistsException e) {
         log.warn("EntityExistsException: {}", e.getMessage());
         return toResponse(CommonErrorCode.CONFLICT, e.getMessage());
+    }
+
+    @ExceptionHandler({OptimisticLockException.class, ObjectOptimisticLockingFailureException.class})
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockException(RuntimeException e) {
+        log.warn("Optimistic lock conflict: {}", e.getMessage());
+        return toResponse(ReservationErrorCode.SEAT_ALREADY_RESERVED);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
