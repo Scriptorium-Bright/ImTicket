@@ -134,6 +134,16 @@ public class PerformanceService {
         }
 
         try {
+            // Redis miss를 본 뒤 스케줄링에서 밀린 요청은 기존 flight가 제거된 뒤
+            // 새 owner가 될 수 있다. DB에 다시 가기 전에 cache를 한 번 더 확인한다.
+            PerformanceDetailsResponse cachedAfterFlightAcquired =
+                    (PerformanceDetailsResponse) redisTemplate.opsForValue().get(key);
+            if (cachedAfterFlightAcquired != null) {
+                newFlight.complete(cachedAfterFlightAcquired);
+                recordDetailsRequest("cache", "hit", sample);
+                return cachedAfterFlightAcquired;
+            }
+
             PerformanceDetailsResponse response = loadPerformanceDetailsFromDb(pathId);
             redisTemplate.opsForValue().set(key, response, CACHE_TIMEOUT, MINUTES);
             meterRegistry.counter(CACHE_WRITE_METRIC, "cache", DETAILS_CACHE_NAME).increment();
