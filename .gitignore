@@ -57,3 +57,6 @@ seed_output.txt
 
 ### Environment Variables ###
 .env
+
+### Sensitive local credentials ###
+*.key

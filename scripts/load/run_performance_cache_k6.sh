@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ACTION="${ACTION:-comparison}"
-BASE_URL="${BASE_URL:-http://127.0.0.1:10080}"
+BASE_URL="${BASE_URL:-http://140.245.76.87:10080}"
 BASE_URL="${BASE_URL%/}"
 PERFORMANCE_IDS="${PERFORMANCE_IDS:-${PERFORMANCE_ID:-}}"
 USERS="${USERS:-5000}"
@@ -14,7 +14,7 @@ MAX_DURATION="${MAX_DURATION:-10m}"
 K6_BIN="${K6_BIN:-k6}"
 CURL_BIN="${CURL_BIN:-curl}"
 REDIS_CLI="${REDIS_CLI:-redis-cli}"
-REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
+REDIS_HOST="${REDIS_HOST:-140.245.76.87}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 REDIS_PASSWORD="${REDIS_PASSWORD:-}"
 RESULT_DIR="${RESULT_DIR:-${ROOT_DIR}/build/k6-results/performance-cache}"
@@ -30,7 +30,7 @@ case "${ACTION}" in
 esac
 
 case "${BASE_URL}" in
-  http://127.0.0.1:*|http://localhost:*|https://127.0.0.1:*|https://localhost:*) ;;
+  http://140.245.76.87:*|http://localhost:*|https://140.245.76.87:*|https://localhost:*) ;;
   *)
     if [[ "${ALLOW_REMOTE_LOAD}" != "true" ]]; then
       echo "원격 대상 부하는 ALLOW_REMOTE_LOAD=true를 명시해야 합니다: ${BASE_URL}" >&2
@@ -92,9 +92,9 @@ mkdir -p "${run_dir}"
 redis_cmd() {
   if [[ -n "${REDIS_PASSWORD}" ]]; then
     REDISCLI_AUTH="${REDIS_PASSWORD}" "${REDIS_CLI}" \
-      --host "${REDIS_HOST}" --port "${REDIS_PORT}" "$@"
+      -h "${REDIS_HOST}" -p "${REDIS_PORT}" "$@"
   else
-    "${REDIS_CLI}" --host "${REDIS_HOST}" --port "${REDIS_PORT}" "$@"
+    "${REDIS_CLI}" -h "${REDIS_HOST}" -p "${REDIS_PORT}" "$@"
   fi
 }
 

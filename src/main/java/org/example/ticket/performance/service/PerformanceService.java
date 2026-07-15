@@ -16,10 +16,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.redis.core.RedisTemplate;
-import java.util.concurrent.TimeUnit;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +39,8 @@ public class PerformanceService {
     private final FileService fileService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final MeterRegistry meterRegistry;
+    private final ConcurrentMap<String, CompletableFuture<PerformanceDetailsResponse>> inFlightDetailLoads
+            = new ConcurrentHashMap<>();
     public final static int CACHE_TIMEOUT = 10;
     public final static TimeUnit MINUTES = TimeUnit.MINUTES;
 
@@ -106,14 +112,59 @@ public class PerformanceService {
             }
 
             log.info("Cache Miss for performance id: {}", pathId);
-            PerformanceDetailsResponse response = loadPerformanceDetailsFromDb(pathId);
-            redisTemplate.opsForValue().set(key, response, CACHE_TIMEOUT, MINUTES);
-            meterRegistry.counter(CACHE_WRITE_METRIC, "cache", DETAILS_CACHE_NAME).increment();
-            recordDetailsRequest("cache", "miss", sample);
-            return response;
+            return loadAndCacheSingleFlight(pathId, key, sample);
         } catch (RuntimeException e) {
             recordDetailsRequest("cache", "error", sample);
             throw e;
+        }
+    }
+
+    private PerformanceDetailsResponse loadAndCacheSingleFlight(
+            Long pathId,
+            String key,
+            Timer.Sample sample
+    ) {
+        CompletableFuture<PerformanceDetailsResponse> newFlight = new CompletableFuture<>();
+        CompletableFuture<PerformanceDetailsResponse> currentFlight = inFlightDetailLoads.putIfAbsent(key, newFlight);
+
+        if (currentFlight != null) {
+            PerformanceDetailsResponse response = awaitSingleFlight(currentFlight);
+            recordDetailsRequest("cache", "coalesced", sample);
+            return response;
+        }
+
+        try {
+            PerformanceDetailsResponse response = loadPerformanceDetailsFromDb(pathId);
+            redisTemplate.opsForValue().set(key, response, CACHE_TIMEOUT, MINUTES);
+            meterRegistry.counter(CACHE_WRITE_METRIC, "cache", DETAILS_CACHE_NAME).increment();
+            newFlight.complete(response);
+            recordDetailsRequest("cache", "miss", sample);
+            return response;
+        } catch (RuntimeException e) {
+            newFlight.completeExceptionally(e);
+            throw e;
+        } finally {
+            inFlightDetailLoads.remove(key, newFlight);
+        }
+    }
+
+    private PerformanceDetailsResponse awaitSingleFlight(
+            CompletableFuture<PerformanceDetailsResponse> currentFlight
+    ) {
+        try {
+            return currentFlight.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("공연 상세 cache single-flight 대기 중 인터럽트되었습니다.", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException("공연 상세 cache single-flight 조회에 실패했습니다.", cause);
         }
     }
 
