@@ -2,10 +2,8 @@ package org.example.ticket.reservation.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.reservation.request.ReservationCheckRequest;
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.response.ReservationCreateResponse;
-import org.example.ticket.reservation.response.ReservationSuccessResponse;
 import org.example.ticket.reservation.service.ReservationService;
 import org.example.ticket.security.util.MetamaskUserDetails;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,16 +29,4 @@ public class ReservationController {
         );
         return ResponseEntity.ok(ApiResponse.success(response));
     }
-    @PostMapping("/{reservationId}/confirm")
-    public ResponseEntity<ApiResponse<ReservationSuccessResponse>> completeReservation(
-            @AuthenticationPrincipal MetamaskUserDetails userDetails,
-            @PathVariable Long reservationId) {
-        ReservationSuccessResponse response = reservationService.confirmReservation(
-                userDetails.getAddress(),
-                new ReservationCheckRequest(reservationId)
-        );
-        return ResponseEntity.ok(ApiResponse.success(response));
-    }
-
-
 }

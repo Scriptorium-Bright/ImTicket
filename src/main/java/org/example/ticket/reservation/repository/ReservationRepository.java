@@ -1,10 +1,12 @@
 package org.example.ticket.reservation.repository;
 
+import jakarta.persistence.LockModeType;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.reservation.model.Reservation;
 import org.example.ticket.util.constant.ReservationStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,6 +26,17 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             "JOIN FETCH pt.performance p " +
             "WHERE r.id = :reservationId  ")
     Optional<Reservation> findByIdWithDetails(Long reservationId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT DISTINCT r " +
+            "FROM Reservation r " +
+            "JOIN FETCH r.member m " +
+            "JOIN FETCH r.reservedSeats rs " +
+            "JOIN FETCH rs.seat s " +
+            "JOIN FETCH s.performanceTime pt " +
+            "JOIN FETCH pt.performance p " +
+            "WHERE r.id = :reservationId")
+    Optional<Reservation> findByIdWithDetailsForUpdate(@Param("reservationId") Long reservationId);
 
     @Query(
             "SELECT p " +

@@ -3,14 +3,11 @@ package org.example.ticket.reservation.service;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
-import org.example.ticket.performance.model.Performance;
-import org.example.ticket.performance.model.PerformanceTime;
 import org.example.ticket.reservation.exception.ReservationErrorCode;
 import org.example.ticket.reservation.model.Reservation;
 import org.example.ticket.reservation.model.ReservedSeat;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.repository.ReservationRepository;
-import org.example.ticket.reservation.request.ReservationCheckRequest;
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.response.ReservationCreateResponse;
 import org.example.ticket.util.constant.SeatInfo;
@@ -31,7 +28,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.example.ticket.util.constant.ReservationStatus.PENDING_PAYMENT;
 import static org.example.ticket.util.constant.SeatStatus.AVAILABLE;
 import static org.example.ticket.util.constant.SeatStatus.LOCKED;
-import static org.example.ticket.util.constant.SeatStatus.RESERVED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
@@ -137,68 +133,6 @@ class ReservationServiceTest {
                 () -> reservationService.createReservation("0xowner", new ReservationRequest(10L, List.of(1L, 1L))));
 
         assertThat(exception.getErrorCode()).isEqualTo(ReservationErrorCode.DUPLICATE_SEAT_INCLUDED);
-    }
-
-    @Test
-    void confirmReservationRejectsDifferentOwner() {
-        Member owner = Member.builder()
-                .walletAddress("0xowner")
-                .phoneNumber("01012345678")
-                .nickname("owner")
-                .smsVerified(true)
-                .walletVerified(true)
-                .role("ROLE_USER")
-                .build();
-        Reservation reservation = Reservation.builder()
-                .id(1L)
-                .member(owner)
-                .reservationStatus(PENDING_PAYMENT)
-                .build();
-        when(reservationRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(reservation));
-
-        BusinessException exception = assertThrows(BusinessException.class,
-                () -> reservationService.confirmReservation("0xother", new ReservationCheckRequest(1L)));
-
-        assertThat(exception.getErrorCode()).isEqualTo(ReservationErrorCode.RESERVATION_NOT_OWNER);
-    }
-
-    @Test
-    void confirmReservationAcceptsSameWalletAddressWithDifferentCase() {
-        Member owner = Member.builder()
-                .walletAddress("0xowner")
-                .phoneNumber("01012345678")
-                .nickname("owner")
-                .smsVerified(true)
-                .walletVerified(true)
-                .role("ROLE_USER")
-                .build();
-        PerformanceTime performanceTime = PerformanceTime.builder()
-                .performance(Performance.builder().build())
-                .build();
-        Seat seat = Seat.builder()
-                .id(1L)
-                .seatFloor(1)
-                .seatSection("A")
-                .seatRow(1)
-                .seatNumber(1)
-                .seatType(SeatInfo.VIP)
-                .price(10000)
-                .seatStatus(LOCKED)
-                .performanceTime(performanceTime)
-                .build();
-        Reservation reservation = Reservation.builder()
-                .id(1L)
-                .member(owner)
-                .reservationStatus(PENDING_PAYMENT)
-                .expiredTime(LocalDateTime.now().plusMinutes(1))
-                .reservedSeats(List.of(ReservedSeat.builder().seat(seat).build()))
-                .build();
-
-        when(reservationRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(reservation));
-
-        reservationService.confirmReservation("0xOWNER", new ReservationCheckRequest(1L));
-
-        verify(seatService).changeSeatsState(List.of(seat), RESERVED);
     }
 
     @Test

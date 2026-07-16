@@ -5,17 +5,14 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
-import org.example.ticket.performance.model.Performance;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
-import org.example.ticket.reservation.request.ReservationCheckRequest;
 import org.example.ticket.reservation.response.ReservationCreateResponse;
 import org.example.ticket.reservation.model.Reservation;
 import org.example.ticket.reservation.model.ReservedSeat;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.repository.ReservationRepository;
-import org.example.ticket.reservation.response.ReservationSuccessResponse;
 import org.example.ticket.reservation.validation.ReservationValidator;
 import org.example.ticket.util.tracing.TracingConstants;
 import org.slf4j.MDC;
@@ -29,7 +26,6 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.example.ticket.util.constant.ReservationStatus.PENDING_PAYMENT;
-import static org.example.ticket.util.constant.ReservationStatus.SUCCESS;
 import static org.example.ticket.util.constant.SeatStatus.*;
 
 @Service
@@ -43,33 +39,6 @@ public class ReservationService {
     private final static long EXPIRED_SCHEDULING_TIME = 30000;
     private static final int EXPIRED_CLEANUP_BATCH_SIZE = 5000;
 
-
-    @Transactional
-    public ReservationSuccessResponse confirmReservation(String walletAddress, ReservationCheckRequest request) {
-
-        Reservation reservation = reservationRepository.findByIdWithDetails(request.getReservationId())
-                .orElseThrow(() -> new EntityNotFoundException("해당 예약을 찾을 수 없습니다."));
-
-        List<Seat> seats = reservation
-                .getReservedSeats()
-                .stream()
-                .map(ReservedSeat::getSeat)
-                .toList();
-
-        ReservationValidator.validateConfirmable(reservation, walletAddress);
-
-        reservation.manageReservationStatus(SUCCESS, null);
-
-        Performance performance = reservation
-                .getReservedSeats()
-                .getFirst()
-                .getSeat()
-                .getPerformanceTime()
-                .getPerformance();
-        seatService.changeSeatsState(seats, RESERVED);
-
-        return ReservationSuccessResponse.from(reservation, performance, walletAddress);
-    }
 
     @Scheduled(fixedDelay = EXPIRED_SCHEDULING_TIME)
     @SchedulerLock(name = "cleanupExpiredReservation", lockAtMostFor = "PT6M")
