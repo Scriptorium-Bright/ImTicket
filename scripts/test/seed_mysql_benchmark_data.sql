@@ -1,7 +1,7 @@
 -- ImTicket DB operations portfolio benchmark data seed.
 --
 -- Intended usage:
---   scripts/troubleshooting/seed_mysql_benchmark_data.sh
+--   scripts/test/seed_mysql_benchmark_data.sh
 --
 -- This script inserts synthetic rows into the real domain tables used by the
 -- reservation flow, so EXPLAIN ANALYZE and lock-wait screenshots can be taken

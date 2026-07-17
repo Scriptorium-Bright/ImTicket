@@ -35,13 +35,16 @@ public class ReservationLockAspect {
 
     private final DataSource dataSource;
     private final AsyncTaskExecutor reservationSingleThreadExecutor;
+    private final ReservationLockStrategyContext strategyContext;
 
     public ReservationLockAspect(
             DataSource dataSource,
-            @Qualifier("reservationSingleThreadTaskExecutor") AsyncTaskExecutor reservationSingleThreadExecutor
+            @Qualifier("reservationSingleThreadTaskExecutor") AsyncTaskExecutor reservationSingleThreadExecutor,
+            ReservationLockStrategyContext strategyContext
     ) {
         this.dataSource = dataSource;
         this.reservationSingleThreadExecutor = reservationSingleThreadExecutor;
+        this.strategyContext = strategyContext;
     }
 
     @Value("${reservation.lock-strategy:pessimistic}")
@@ -53,20 +56,32 @@ public class ReservationLockAspect {
     private final ConcurrentMap<Long, Object> monitors = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, ReentrantLock> reentrantLocks = new ConcurrentHashMap<>();
 
-    @Around("execution(* org.example.ticket.reservation.service.ReservationService.createReservation(..))")
-    public Object lockReservationSeats(ProceedingJoinPoint joinPoint) throws Throwable {
+    @Around(value = "@annotation(reservationLock)", argNames = "joinPoint,reservationLock")
+    public Object lockReservationSeats(
+            ProceedingJoinPoint joinPoint,
+            ReservationLock reservationLock
+    ) throws Throwable {
         ReservationRequest request = findRequest(joinPoint.getArgs());
+        if (request == null) {
+            throw new IllegalArgumentException(
+                    "@ReservationLock 대상 메서드에는 ReservationRequest 인자가 필요합니다."
+            );
+        }
         List<Long> seatIds = normalizeSeatIds(request);
         if (seatIds.isEmpty()) {
             return joinPoint.proceed();
         }
 
-        return switch (strategy()) {
-            case SYNCHRONIZED -> withSynchronizedLocks(seatIds, joinPoint::proceed, 0);
-            case REENTRANT -> withReentrantLocks(seatIds, joinPoint::proceed, 0);
-            case MYSQL_NAMED -> withMysqlNamedLocks(seatIds, joinPoint::proceed);
-            case SINGLE_THREAD -> withSingleThread(joinPoint::proceed);
-            case PESSIMISTIC, OPTIMISTIC -> joinPoint.proceed();
+        ReservationLockStrategy strategy = resolveStrategy(reservationLock.strategy());
+        ThrowingOperation operation = () -> strategyContext.withStrategy(strategy, joinPoint::proceed);
+
+        return switch (strategy) {
+            case SYNCHRONIZED -> withSynchronizedLocks(seatIds, operation, 0);
+            case REENTRANT -> withReentrantLocks(seatIds, operation, 0);
+            case MYSQL_NAMED -> withMysqlNamedLocks(seatIds, operation);
+            case SINGLE_THREAD -> withSingleThread(operation);
+            case PESSIMISTIC, OPTIMISTIC -> operation.run();
+            case CONFIGURED -> throw new IllegalStateException("해석되지 않은 ReservationLock 전략입니다.");
         };
     }
 
@@ -169,8 +184,11 @@ public class ReservationLockAspect {
         }
     }
 
-    private ReservationLockStrategy strategy() {
-        return ReservationLockStrategy.from(configuredStrategy);
+    private ReservationLockStrategy resolveStrategy(ReservationLockStrategy annotationStrategy) {
+        if (annotationStrategy == ReservationLockStrategy.CONFIGURED) {
+            return ReservationLockStrategy.from(configuredStrategy);
+        }
+        return annotationStrategy;
     }
 
     private ReservationRequest findRequest(Object[] arguments) {

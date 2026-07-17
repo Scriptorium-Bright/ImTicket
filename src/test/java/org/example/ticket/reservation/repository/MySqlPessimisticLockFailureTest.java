@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-//@EnabledIfEnvironmentVariable(named = "MYSQL_LOCK_TEST_ENABLED", matches = "(?i)true")
+@EnabledIfEnvironmentVariable(named = "MYSQL_LOCK_TEST_ENABLED", matches = "(?i)true")
 class MySqlPessimisticLockFailureTest {
 
     private static final int MYSQL_LOCK_WAIT_TIMEOUT_ERROR = 1205;
@@ -94,6 +94,10 @@ class MySqlPessimisticLockFailureTest {
             waiter.rollback();
 
             assertThat(waited).isGreaterThanOrEqualTo(Duration.ofMillis(250));
+            System.out.printf(
+                    "[LOCK-EVIDENCE] scenario=row-lock-wait waited_ms=%d%n",
+                    waited.toMillis()
+            );
         } finally {
             executor.shutdownNow();
             assertThat(executor.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
@@ -115,6 +119,12 @@ class MySqlPessimisticLockFailureTest {
             assertThat(exception.getErrorCode()).isEqualTo(MYSQL_LOCK_WAIT_TIMEOUT_ERROR);
             assertThat(exception.getSQLState()).isEqualTo("40001"); // MySQL 8.0/9.x returns 40001 for Lock Wait Timeout
             assertThat(elapsed).isBetween(Duration.ofMillis(800), Duration.ofSeconds(4));
+            System.out.printf(
+                    "[LOCK-EVIDENCE] scenario=lock-wait-timeout error_code=%d sql_state=%s elapsed_ms=%d%n",
+                    exception.getErrorCode(),
+                    exception.getSQLState(),
+                    elapsed.toMillis()
+            );
 
             waiter.rollback();
             owner.rollback();
@@ -145,6 +155,10 @@ class MySqlPessimisticLockFailureTest {
                     .filteredOn(outcome -> outcome.errorCode() == MYSQL_DEADLOCK_ERROR)
                     .singleElement()
                     .satisfies(outcome -> assertThat(outcome.sqlState()).isEqualTo("40001"));
+            System.out.printf(
+                    "[LOCK-EVIDENCE] scenario=reverse-order-deadlock outcomes=%s%n",
+                    outcomes
+            );
         } finally {
             executor.shutdownNow();
             assertThat(executor.awaitTermination(3, TimeUnit.SECONDS)).isTrue();

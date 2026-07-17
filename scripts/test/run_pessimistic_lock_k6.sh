@@ -14,6 +14,7 @@ HOLD_SECONDS="${HOLD_SECONDS:-8}"
 BURST_DELAY_SECONDS="${BURST_DELAY_SECONDS:-5}"
 START_AT_EPOCH_MS="${START_AT_EPOCH_MS:-}"
 MAX_DURATION="${MAX_DURATION:-10m}"
+REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-15s}"
 DISTRIBUTED="${DISTRIBUTED:-false}"
 ALLOW_LARGE_LOAD="${ALLOW_LARGE_LOAD:-false}"
 K6_EXECUTION_SEGMENT="${K6_EXECUTION_SEGMENT:-}"
@@ -105,9 +106,10 @@ if [[ "${MODE}" == "forced-timeout" ]]; then
   MYSQL_PORT="${MYSQL_PORT}" \
   MYSQL_USER="${MYSQL_USER}" \
   MYSQL_DATABASE="${MYSQL_DATABASE}" \
+  PT_ID="${PT_ID}" \
   SEAT_ID="${SEAT_ID}" \
   HOLD_SECONDS="${HOLD_SECONDS}" \
-    "${ROOT_DIR}/scripts/load/hold_pessimistic_seat_lock.sh" \
+    "${ROOT_DIR}/scripts/test/hold_pessimistic_seat_lock.sh" \
     > "${RESULT_DIR}/lock-holder-${timestamp}.log" 2>&1 &
   holder_pid=$!
 
@@ -146,6 +148,7 @@ k6_args=(
   -e "JWT_SECRET=${JWT_SECRET}"
   -e "BURST_DELAY_SECONDS=${BURST_DELAY_SECONDS}"
   -e "MAX_DURATION=${MAX_DURATION}"
+  -e "REQUEST_TIMEOUT=${REQUEST_TIMEOUT}"
   -e "DISTRIBUTED=${DISTRIBUTED}"
   --summary-export "${summary_file}"
 )
@@ -165,7 +168,7 @@ if [[ -n "${CONCURRENCY}" ]]; then
 fi
 
 set +e
-"${K6_BIN}" "${k6_args[@]}" "${ROOT_DIR}/k6-scripts/01-ticket-open-run.js"
+"${K6_BIN}" "${k6_args[@]}" "${ROOT_DIR}/scripts/test/01-ticket-open-run.js"
 k6_status=$?
 set -e
 

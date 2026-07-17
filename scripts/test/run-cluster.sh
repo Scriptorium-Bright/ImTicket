@@ -1,5 +1,9 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}}"
+mkdir -p "${LOG_DIR}"
+
 # ==================================================================
 # 💡 ShedLock 분산 락 검증용 멀티 서버 시뮬레이션 스크립트 💡
 # ==================================================================
@@ -62,12 +66,12 @@ echo "🔥 두 대의 서버를 각각 다른 포트로 실행하여 분산 환�
 echo "=================================================================="
 
 # 서버 A 실행 (포트 10080)
-SERVER_PORT=10080 java -jar build/libs/ticket-0.0.1-SNAPSHOT.jar > server_a.log 2>&1 &
+SERVER_PORT=10080 java -jar build/libs/ticket-0.0.1-SNAPSHOT.jar > "${LOG_DIR}/server_a.log" 2>&1 &
 PID_A=$!
 echo "🟢 [Node A] 포트 10080 실행 중... (PID: $PID_A)"
 
 # 서버 B 실행 (포트 10081)
-SERVER_PORT=10081 java -jar build/libs/ticket-0.0.1-SNAPSHOT.jar > server_b.log 2>&1 &
+SERVER_PORT=10081 java -jar build/libs/ticket-0.0.1-SNAPSHOT.jar > "${LOG_DIR}/server_b.log" 2>&1 &
 PID_B=$!
 echo "🟢 [Node B] 포트 10081 실행 중... (PID: $PID_B)"
 
@@ -80,13 +84,13 @@ echo "🔎 스케줄러 로그 분석 결과:"
 echo "=================================================================="
 
 echo "📌 [Node A] 로그 중 'cleanup' 관련 항목:"
-grep -i -E "cleanup|shedlock" server_a.log | tail -n 5 || echo "(관련 로그 없음)"
+grep -i -E "cleanup|shedlock" "${LOG_DIR}/server_a.log" | tail -n 5 || echo "(관련 로그 없음)"
 
 echo ""
 echo "📌 [Node B] 로그 중 'cleanup' 관련 항목:"
-grep -i -E "cleanup|shedlock" server_b.log | tail -n 5 || echo "(관련 로그 없음)"
+grep -i -E "cleanup|shedlock" "${LOG_DIR}/server_b.log" | tail -n 5 || echo "(관련 로그 없음)"
 
 echo "=================================================================="
 echo "🛑 테스트 종료: 백그라운드 서버를 종료합니다."
 kill -9 $PID_A $PID_B
-echo "✅ 스크립트가 종료되었습니다. 전체 로그는 server_a.log 및 server_b.log 파일에서 확인 가능합니다."
+echo "✅ 스크립트가 종료되었습니다. 전체 로그는 ${LOG_DIR}/server_a.log 및 ${LOG_DIR}/server_b.log 파일에서 확인 가능합니다."

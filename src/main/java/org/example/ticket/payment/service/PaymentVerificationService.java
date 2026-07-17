@@ -7,6 +7,7 @@ import org.example.ticket.payment.exception.PaymentErrorCode;
 import org.example.ticket.payment.gateway.PaymentAuthorization;
 import org.example.ticket.payment.gateway.PaymentGatewayClient;
 import org.example.ticket.payment.gateway.VerifiedPaymentSnapshot;
+import org.example.ticket.payment.model.PaymentAttempt;
 import org.example.ticket.payment.model.PaymentOrder;
 import org.example.ticket.payment.repository.PaymentAttemptRepository;
 import org.example.ticket.payment.repository.PaymentOrderRepository;
@@ -34,7 +35,7 @@ public class PaymentVerificationService {
         if (order.getStatus() == PaymentOrderStatus.APPLIED) {
             String providerTransactionId = paymentAttemptRepository
                     .findTopByPaymentOrderIdOrderByCreatedAtDesc(paymentOrderId)
-                    .map(attempt -> attempt.getProviderTransactionId())
+                    .map(PaymentAttempt::getProviderTransactionId)
                     .orElse(null);
             return PaymentVerificationResponse.of(order, order.getReservation(), providerTransactionId);
         }
@@ -60,7 +61,7 @@ public class PaymentVerificationService {
         validateOwner(order, walletAddress);
         String providerTransactionId = paymentAttemptRepository
                 .findTopByPaymentOrderIdOrderByCreatedAtDesc(paymentOrderId)
-                .map(attempt -> attempt.getProviderTransactionId())
+                .map(PaymentAttempt::getProviderTransactionId)
                 .orElse(null);
         return PaymentStatusResponse.of(order, providerTransactionId);
     }
@@ -68,7 +69,6 @@ public class PaymentVerificationService {
     private void validateOwner(PaymentOrder order, String walletAddress) {
         if (order.getMember() == null
                 || order.getMember().getWalletAddress() == null
-                || walletAddress == null
                 || !order.getMember().getWalletAddress().equalsIgnoreCase(walletAddress)) {
             throw new BusinessException(PaymentErrorCode.PAYMENT_ORDER_NOT_OWNER);
         }

@@ -13,6 +13,8 @@ import org.example.ticket.reservation.model.ReservedSeat;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.repository.ReservationRepository;
+import org.example.ticket.reservation.lock.ReservationLock;
+import org.example.ticket.reservation.lock.ReservationLockStrategy;
 import org.example.ticket.reservation.validation.ReservationValidator;
 import org.example.ticket.util.tracing.TracingConstants;
 import org.slf4j.MDC;
@@ -94,6 +96,7 @@ public class ReservationService {
         }
     }
 
+    @ReservationLock(strategy = ReservationLockStrategy.CONFIGURED)
     @Transactional
     public ReservationCreateResponse createReservation(String walletAddress, ReservationRequest request) {
 

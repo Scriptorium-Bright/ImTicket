@@ -12,12 +12,16 @@ const concurrency = positiveInteger(
   'CONCURRENCY',
   testType === 'stampede' ? 500 : users,
 );
+const steadyRate = positiveInteger('STEADY_RATE', 100);
+const steadyPreAllocatedVus = positiveInteger('STEADY_PRE_ALLOCATED_VUS', 150);
+const steadyMaxVus = positiveInteger('STEADY_MAX_VUS', 200);
+const steadyDuration = __ENV.STEADY_DURATION || '60s';
 const burstDelaySeconds = positiveNumber('BURST_DELAY_SECONDS', 10);
 const maxDuration = __ENV.MAX_DURATION || '10m';
 const performanceIds = parsePerformanceIds();
 
-if (!['distribution', 'stampede'].includes(testType)) {
-  throw new Error(`TEST_TYPE은 distribution 또는 stampede여야 합니다. actual=${testType}`);
+if (!['distribution', 'stampede', 'steady'].includes(testType)) {
+  throw new Error(`TEST_TYPE은 distribution, stampede 또는 steady여야 합니다. actual=${testType}`);
 }
 if (!['true', 'false'].includes(cacheOption)) {
   throw new Error(`CACHE는 true 또는 false여야 합니다. actual=${__ENV.CACHE}`);
@@ -30,6 +34,11 @@ if (testType === 'distribution' && performanceIds.length !== 100) {
 if (testType === 'distribution' && concurrency > users) {
   throw new Error(`CONCURRENCY는 USERS보다 클 수 없습니다. concurrency=${concurrency}, users=${users}`);
 }
+if (testType === 'steady' && steadyMaxVus < steadyPreAllocatedVus) {
+  throw new Error(
+    `STEADY_MAX_VUS는 STEADY_PRE_ALLOCATED_VUS 이상이어야 합니다. max=${steadyMaxVus}, preAllocated=${steadyPreAllocatedVus}`,
+  );
+}
 if (testType === 'stampede' && !cacheEnabled) {
   throw new Error('stampede 테스트는 CACHE=true로 실행해야 합니다.');
 }
@@ -37,6 +46,9 @@ if (testType === 'stampede' && !cacheEnabled) {
 const expectedRequests = testType === 'stampede' ? concurrency : users;
 const oneRequestPerVu = testType === 'distribution' && concurrency === users;
 const synchronizedBurst = testType === 'stampede' || oneRequestPerVu;
+const requestCountThreshold = testType === 'steady'
+  ? 'count>0'
+  : `count==${expectedRequests}`;
 const performanceRequests = new Counter('performance_requests');
 const performanceSuccesses = new Counter('performance_successes');
 const unexpectedResponses = new Counter('unexpected_responses');
@@ -45,41 +57,14 @@ const requestStartLag = new Trend('request_start_lag', true);
 http.setResponseCallback(http.expectedStatuses(200));
 
 export const options = {
-  scenarios: testType === 'stampede'
-    ? {
-        cold_or_warm_key_burst: {
-          executor: 'per-vu-iterations',
-          vus: concurrency,
-          iterations: 1,
-          maxDuration,
-          gracefulStop: '0s',
-        },
-      }
-    : oneRequestPerVu
-      ? {
-          one_hundred_performances_burst: {
-            executor: 'per-vu-iterations',
-            vus: concurrency,
-            iterations: 1,
-            maxDuration,
-            gracefulStop: '0s',
-          },
-        }
-      : {
-          one_hundred_performances: {
-            executor: 'shared-iterations',
-            vus: concurrency,
-            iterations: users,
-            maxDuration,
-            gracefulStop: '0s',
-          },
-        },
+  scenarios: scenariosFor(testType),
   thresholds: {
     checks: ['rate==1'],
     http_req_failed: ['rate==0'],
-    performance_requests: [`count==${expectedRequests}`],
-    performance_successes: [`count==${expectedRequests}`],
+    performance_requests: [requestCountThreshold],
+    performance_successes: [requestCountThreshold],
     unexpected_responses: ['count==0'],
+    ...(testType === 'steady' ? { dropped_iterations: ['count==0'] } : {}),
   },
   summaryTrendStats: ['avg', 'min', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
   tags: {
@@ -87,6 +72,56 @@ export const options = {
     cache: String(cacheEnabled),
   },
 };
+
+function scenariosFor(type) {
+  if (type === 'stampede') {
+    return {
+      cold_or_warm_key_burst: {
+        executor: 'per-vu-iterations',
+        vus: concurrency,
+        iterations: 1,
+        maxDuration,
+        gracefulStop: '0s',
+      },
+    };
+  }
+
+  if (type === 'steady') {
+    return {
+      steady_performance_details: {
+        executor: 'constant-arrival-rate',
+        rate: steadyRate,
+        timeUnit: '1s',
+        duration: steadyDuration,
+        preAllocatedVUs: steadyPreAllocatedVus,
+        maxVUs: steadyMaxVus,
+        gracefulStop: '5s',
+      },
+    };
+  }
+
+  if (oneRequestPerVu) {
+    return {
+      one_hundred_performances_burst: {
+        executor: 'per-vu-iterations',
+        vus: concurrency,
+        iterations: 1,
+        maxDuration,
+        gracefulStop: '0s',
+      },
+    };
+  }
+
+  return {
+    one_hundred_performances: {
+      executor: 'shared-iterations',
+      vus: concurrency,
+      iterations: users,
+      maxDuration,
+      gracefulStop: '0s',
+    },
+  };
+}
 
 export function setup() {
   return {

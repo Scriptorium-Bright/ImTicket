@@ -1,0 +1,89 @@
+groups:
+  - name: imticket-availability
+    rules:
+      - alert: ImTicketApplicationDown
+        expr: up{job="imticket-app"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: ImTicket application target is down
+          description: Prometheus has failed to scrape {{ $labels.instance }} for more than 30 seconds.
+
+      - alert: ImTicketHighHttp5xxRatio
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="imticket-app",status=~"5..",uri!="/actuator/prometheus"}[2m]))
+          /
+          clamp_min(sum(rate(http_server_requests_seconds_count{job="imticket-app",uri!="/actuator/prometheus"}[2m])), 0.001)
+          > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: ImTicket HTTP 5xx ratio is above 5%
+          description: The rolling two-minute 5xx ratio is {{ $value | humanizePercentage }}.
+
+      - alert: ImTicketHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(http_server_requests_seconds_bucket{job="imticket-app",uri!="/actuator/prometheus"}[2m])
+            )
+          ) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: ImTicket HTTP p95 latency is above one second
+          description: The rolling two-minute p95 latency is {{ $value | humanizeDuration }}.
+
+  - name: imticket-saturation
+    rules:
+      - alert: ImTicketTomcatThreadSaturation
+        expr: |
+          max(tomcat_threads_busy_threads{job="imticket-app",name=~"http-nio-10080.*"})
+          /
+          clamp_min(max(tomcat_threads_config_max_threads{job="imticket-app",name=~"http-nio-10080.*"}), 1)
+          > 0.9
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: ImTicket Tomcat worker pool is above 90%
+          description: Tomcat worker utilization is {{ $value | humanizePercentage }}.
+
+      - alert: ImTicketHikariConnectionsPending
+        expr: max(hikaricp_connections_pending{job="imticket-app"}) > 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: Requests are waiting for a database connection
+          description: Hikari pending connections have remained above zero for 30 seconds.
+
+      - alert: ImTicketHikariPoolSaturation
+        expr: |
+          max(hikaricp_connections_active{job="imticket-app"})
+          /
+          clamp_min(max(hikaricp_connections_max{job="imticket-app"}), 1)
+          > 0.9
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: ImTicket Hikari pool is above 90%
+          description: Hikari connection utilization is {{ $value | humanizePercentage }}.
+
+      - alert: ImTicketJvmHeapPressure
+        expr: |
+          sum(jvm_memory_used_bytes{job="imticket-app",area="heap"})
+          /
+          clamp_min(sum(jvm_memory_max_bytes{job="imticket-app",area="heap"}), 1)
+          > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: ImTicket JVM heap usage is above 85%
+          description: JVM heap utilization is {{ $value | humanizePercentage }}.

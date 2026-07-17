@@ -4,7 +4,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.model.Organizer;
 import org.example.ticket.member.repository.OrganizerRepository;
 import org.example.ticket.performance.response.PerformanceDetailsResponse;
@@ -15,34 +14,22 @@ import org.example.ticket.performance.repository.PerformanceRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class PerformanceService {
     private static final String DETAILS_REQUESTS_METRIC = "imticket.performance.details.requests";
     private static final String DETAILS_DURATION_METRIC = "imticket.performance.details.duration";
-    private static final String CACHE_WRITE_METRIC = "imticket.performance.details.cache.writes";
+    // Keep the metric label for dashboard compatibility while the runtime path is direct DB access.
     private static final String DETAILS_CACHE_NAME = "performanceDetails";
 
     private final PerformanceRepository performanceRepository;
     private final OrganizerRepository organizerRepository;
     private final FileService fileService;
-    private final RedisTemplate<String, Object> redisTemplate;
     private final MeterRegistry meterRegistry;
-    private final ConcurrentMap<String, CompletableFuture<PerformanceDetailsResponse>> inFlightDetailLoads
-            = new ConcurrentHashMap<>();
-    public final static int CACHE_TIMEOUT = 10;
-    public final static TimeUnit MINUTES = TimeUnit.MINUTES;
 
     @Transactional
     public Long registerPerformance(String walletAddress, PerformanceDetailRequest detailsRequest, MultipartFile file) throws IOException {
@@ -97,85 +84,6 @@ public class PerformanceService {
     @Transactional(readOnly = true)
     public List<PerformanceOverviewResponse> viewPerformanceIntro() {
         return performanceRepository.findByIntro();
-    }
-
-    public PerformanceDetailsResponse viewPerformanceDetailsCached(Long pathId) {
-        Timer.Sample sample = Timer.start(meterRegistry);
-        String key = "performance:details:" + pathId;
-        try {
-            PerformanceDetailsResponse cached = (PerformanceDetailsResponse) redisTemplate.opsForValue().get(key);
-
-            if (cached != null) {
-                log.info("Cache Hit for performance id: {}", pathId);
-                recordDetailsRequest("cache", "hit", sample);
-                return cached;
-            }
-
-            log.info("Cache Miss for performance id: {}", pathId);
-            return loadAndCacheSingleFlight(pathId, key, sample);
-        } catch (RuntimeException e) {
-            recordDetailsRequest("cache", "error", sample);
-            throw e;
-        }
-    }
-
-    private PerformanceDetailsResponse loadAndCacheSingleFlight(
-            Long pathId,
-            String key,
-            Timer.Sample sample
-    ) {
-        CompletableFuture<PerformanceDetailsResponse> newFlight = new CompletableFuture<>();
-        CompletableFuture<PerformanceDetailsResponse> currentFlight = inFlightDetailLoads.putIfAbsent(key, newFlight);
-
-        if (currentFlight != null) {
-            PerformanceDetailsResponse response = awaitSingleFlight(currentFlight);
-            recordDetailsRequest("cache", "coalesced", sample);
-            return response;
-        }
-
-        try {
-            // Redis miss를 본 뒤 스케줄링에서 밀린 요청은 기존 flight가 제거된 뒤
-            // 새 owner가 될 수 있다. DB에 다시 가기 전에 cache를 한 번 더 확인한다.
-            PerformanceDetailsResponse cachedAfterFlightAcquired =
-                    (PerformanceDetailsResponse) redisTemplate.opsForValue().get(key);
-            if (cachedAfterFlightAcquired != null) {
-                newFlight.complete(cachedAfterFlightAcquired);
-                recordDetailsRequest("cache", "hit", sample);
-                return cachedAfterFlightAcquired;
-            }
-
-            PerformanceDetailsResponse response = loadPerformanceDetailsFromDb(pathId);
-            redisTemplate.opsForValue().set(key, response, CACHE_TIMEOUT, MINUTES);
-            meterRegistry.counter(CACHE_WRITE_METRIC, "cache", DETAILS_CACHE_NAME).increment();
-            newFlight.complete(response);
-            recordDetailsRequest("cache", "miss", sample);
-            return response;
-        } catch (RuntimeException e) {
-            newFlight.completeExceptionally(e);
-            throw e;
-        } finally {
-            inFlightDetailLoads.remove(key, newFlight);
-        }
-    }
-
-    private PerformanceDetailsResponse awaitSingleFlight(
-            CompletableFuture<PerformanceDetailsResponse> currentFlight
-    ) {
-        try {
-            return currentFlight.get();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("공연 상세 cache single-flight 대기 중 인터럽트되었습니다.", e);
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            }
-            if (cause instanceof Error error) {
-                throw error;
-            }
-            throw new IllegalStateException("공연 상세 cache single-flight 조회에 실패했습니다.", cause);
-        }
     }
 
     private PerformanceDetailsResponse loadPerformanceDetailsFromDb(Long pathId) {

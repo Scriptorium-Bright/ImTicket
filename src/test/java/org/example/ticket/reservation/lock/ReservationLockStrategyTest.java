@@ -3,6 +3,7 @@ package org.example.ticket.reservation.lock;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ReservationLockStrategyTest {
 
@@ -30,5 +31,12 @@ class ReservationLockStrategyTest {
                 .isEqualTo(ReservationLockStrategy.PESSIMISTIC);
         assertThat(ReservationLockStrategy.from(""))
                 .isEqualTo(ReservationLockStrategy.PESSIMISTIC);
+    }
+
+    @Test
+    void rejectsConfiguredMarkerAsExternalConfiguration() {
+        assertThatThrownBy(() -> ReservationLockStrategy.from("configured"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("실제 전략을 지정해야 합니다");
     }
 }

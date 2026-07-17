@@ -10,6 +10,8 @@ import org.example.ticket.performance.repository.PerformanceTimeRepository;
 import org.example.ticket.reservation.response.SeatResponse;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.repository.SeatRepository;
+import org.example.ticket.reservation.lock.ReservationLockStrategy;
+import org.example.ticket.reservation.lock.ReservationLockStrategyContext;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
 import org.example.ticket.venue.model.VenueHall;
@@ -34,6 +36,7 @@ public class SeatService {
     private final SeatRepository repository;
     private final PerformanceTimeRepository performanceTimeRepository;
     private final VenueHallSeatTemplateRepository seatTemplateRepository;
+    private final ReservationLockStrategyContext lockStrategyContext;
 
     @Value("${reservation.lock-strategy:pessimistic}")
     private String reservationLockStrategy;
@@ -49,8 +52,9 @@ public class SeatService {
     }
 
     private boolean usesDatabasePessimisticLock() {
-        return "pessimistic".equalsIgnoreCase(reservationLockStrategy)
-                || reservationLockStrategy == null;
+        ReservationLockStrategy strategy = lockStrategyContext.currentStrategy()
+                .orElseGet(() -> ReservationLockStrategy.from(reservationLockStrategy));
+        return strategy == ReservationLockStrategy.PESSIMISTIC;
     }
 
     public void changeSeatsState(List<Seat> seats, SeatStatus seatStatus) {

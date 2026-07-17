@@ -15,6 +15,7 @@ const trafficProfile = __ENV.TRAFFIC_PROFILE || 'minimum';
 const distributed = (__ENV.DISTRIBUTED || 'false').toLowerCase() === 'true';
 const scheduledStartAt = optionalEpoch('START_AT_EPOCH_MS');
 const maxDuration = __ENV.MAX_DURATION || '10m';
+const requestTimeout = __ENV.REQUEST_TIMEOUT || '15s';
 
 const gradeConcurrency = {
   1: { minimum: 500, maximum: 5000 },
@@ -147,7 +148,7 @@ export default function (data) {
       responseCallback: mode === 'forced-timeout'
         ? http.expectedStatuses(200, 201, 409, 500, 503)
         : http.expectedStatuses(200, 201, 409),
-      timeout: '15s',
+      timeout: requestTimeout,
     },
   );
 

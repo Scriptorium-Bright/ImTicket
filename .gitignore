@@ -52,8 +52,7 @@ seed_output.txt
 ### k6 ###
 *.js
 *.html
-!k6-scripts/01-ticket-open-run.js
-!k6-scripts/06-performance-cache-load.js
+!scripts/test/*.js
 
 ### Environment Variables ###
 .env

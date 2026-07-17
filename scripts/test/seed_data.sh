@@ -2,6 +2,7 @@
 
 # Base URL
 URL="http://localhost:10080/api"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "🌱 Seeding Data for Load Test..."
 
@@ -106,4 +107,4 @@ echo "[6/6] Generating Seat Instances (Async)..."
 curl -X POST "$URL/seats/1"
 
 echo -e "\n✅ Data Seeding Completed!"
-echo "Now you can run k6 tests: k6 run load-test-cache.js"
+echo "Now you can run k6 tests: k6 run \"${SCRIPT_DIR}/05-cache-stampede.js\""

@@ -49,14 +49,8 @@ public class PerformanceController {
     }
 
     @GetMapping("/intro/{performanceId}")
-    public ResponseEntity<ApiResponse<PerformanceDetailsResponse>> retrieveEventDetails(@PathVariable Long performanceId,
-            @RequestParam(defaultValue = "false") boolean cache) {
-        PerformanceDetailsResponse response;
-        if (cache) {
-            response = performanceService.viewPerformanceDetailsCached(performanceId);
-        } else {
-            response = performanceService.viewPerformanceDetails(performanceId);
-        }
+    public ResponseEntity<ApiResponse<PerformanceDetailsResponse>> retrieveEventDetails(@PathVariable Long performanceId) {
+        PerformanceDetailsResponse response = performanceService.viewPerformanceDetails(performanceId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

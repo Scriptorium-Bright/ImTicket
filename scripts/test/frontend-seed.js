@@ -9,7 +9,7 @@ const GATEWAY_URL = 'http://127.0.0.1:7001/api';
 
 // Use a dummy image from public folder
 // If it doesn't exist, Create a simple text file pretending to be an image or use an existing one
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const PUBLIC_DIR = path.join(__dirname, '..', '..', 'frontend', 'public');
 const IMAGE_PATH = path.join(PUBLIC_DIR, 'next.svg');
 
 // Ensure image exists
