@@ -59,3 +59,5 @@ seed_output.txt
 
 ### Sensitive local credentials ###
 *.key
+
+.env.example
