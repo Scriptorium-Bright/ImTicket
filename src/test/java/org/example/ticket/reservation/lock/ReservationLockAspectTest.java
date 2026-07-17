@@ -1,6 +1,8 @@
 package org.example.ticket.reservation.lock;
 
 import org.aspectj.lang.ProceedingJoinPoint;
+import org.example.ticket.common.exception.BusinessException;
+import org.example.ticket.reservation.exception.ReservationErrorCode;
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,10 +12,16 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import javax.sql.DataSource;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -87,9 +95,76 @@ class ReservationLockAspectTest {
         assertThat(strategyContext.currentStrategy()).isEmpty();
     }
 
+    @Test
+    void reentrantLockTimesOutInsteadOfWaitingForever() throws Throwable {
+        ReflectionTestUtils.setField(aspect, "reentrantLockWaitTimeoutMillis", 30L);
+        ProceedingJoinPoint holder = mock(ProceedingJoinPoint.class);
+        ProceedingJoinPoint contender = mock(ProceedingJoinPoint.class);
+        ReservationRequest request = new ReservationRequest(1L, List.of(1L));
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        when(holder.getArgs()).thenReturn(new Object[]{request});
+        when(contender.getArgs()).thenReturn(new Object[]{request});
+        when(holder.proceed()).thenAnswer(invocation -> {
+            entered.countDown();
+            assertThat(release.await(1, TimeUnit.SECONDS)).isTrue();
+            return "held";
+        });
+
+        ExecutorService holderExecutor = Executors.newSingleThreadExecutor();
+        Future<Object> holderResult = holderExecutor.submit(() -> {
+            try {
+                return aspect.lockReservationSeats(holder, reentrantAnnotation());
+            } catch (Throwable throwable) {
+                throw new AssertionError(throwable);
+            }
+        });
+
+        try {
+            assertThat(entered.await(1, TimeUnit.SECONDS)).isTrue();
+
+            Throwable thrown = catchThrowable(() ->
+                    aspect.lockReservationSeats(contender, reentrantAnnotation())
+            );
+
+            assertThat(thrown).isInstanceOf(BusinessException.class);
+            assertThat(((BusinessException) thrown).getErrorCode())
+                    .isEqualTo(ReservationErrorCode.SEAT_LOCK_TIMEOUT);
+        } finally {
+            release.countDown();
+            assertThat(holderResult.get(1, TimeUnit.SECONDS)).isEqualTo("held");
+            holderExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void releasesReentrantLockWhenReservationOperationFails() throws Throwable {
+        ReflectionTestUtils.setField(aspect, "reentrantLockWaitTimeoutMillis", 30L);
+        ProceedingJoinPoint failed = mock(ProceedingJoinPoint.class);
+        ProceedingJoinPoint next = mock(ProceedingJoinPoint.class);
+        ReservationRequest request = new ReservationRequest(1L, List.of(1L));
+
+        when(failed.getArgs()).thenReturn(new Object[]{request});
+        when(next.getArgs()).thenReturn(new Object[]{request});
+        when(failed.proceed()).thenThrow(new IllegalStateException("reservation failed"));
+        when(next.proceed()).thenReturn("next reservation");
+
+        assertThatThrownBy(() -> aspect.lockReservationSeats(failed, reentrantAnnotation()))
+                .isInstanceOf(IllegalStateException.class);
+        assertThat(aspect.lockReservationSeats(next, reentrantAnnotation()))
+                .isEqualTo("next reservation");
+    }
+
     private ReservationLock configuredAnnotation() {
         ReservationLock annotation = mock(ReservationLock.class);
         when(annotation.strategy()).thenReturn(ReservationLockStrategy.CONFIGURED);
+        return annotation;
+    }
+
+    private ReservationLock reentrantAnnotation() {
+        ReservationLock annotation = mock(ReservationLock.class);
+        when(annotation.strategy()).thenReturn(ReservationLockStrategy.REENTRANT);
         return annotation;
     }
 }

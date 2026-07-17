@@ -35,4 +35,15 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getError().getCode()).isEqualTo("INTERNAL_SERVER_ERROR");
         assertThat(response.getBody().getError().getMessage()).isEqualTo("서버 내부 오류가 발생했습니다.");
     }
+
+    @Test
+    void seatLockTimeoutUsesTooManyRequests() {
+        ResponseEntity<ApiResponse<Void>> response = handler.handleBusinessException(
+                new BusinessException(ReservationErrorCode.SEAT_LOCK_TIMEOUT)
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError().getCode()).isEqualTo("SEAT_LOCK_TIMEOUT");
+    }
 }

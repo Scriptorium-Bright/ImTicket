@@ -11,7 +11,9 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.stereotype.Component;
+import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.reservation.request.ReservationRequest;
+import org.example.ticket.reservation.exception.ReservationErrorCode;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -26,6 +28,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Aspect
@@ -52,6 +55,9 @@ public class ReservationLockAspect {
 
     @Value("${reservation.lock.named-timeout-seconds:5}")
     private int namedLockTimeoutSeconds;
+
+    @Value("${reservation.lock.reentrant.wait-timeout-millis:1000}")
+    private long reentrantLockWaitTimeoutMillis;
 
     private final ConcurrentMap<Long, Object> monitors = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, ReentrantLock> reentrantLocks = new ConcurrentHashMap<>();
@@ -137,7 +143,16 @@ public class ReservationLockAspect {
                 seatIds.get(index),
                 ignored -> new ReentrantLock(true)
         );
-        lock.lock();
+        boolean acquired;
+        try {
+            acquired = lock.tryLock(reentrantLockWaitTimeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ReservationErrorCode.SEAT_LOCK_TIMEOUT, e);
+        }
+        if (!acquired) {
+            throw new BusinessException(ReservationErrorCode.SEAT_LOCK_TIMEOUT);
+        }
         try {
             return withReentrantLocks(seatIds, operation, index + 1);
         } finally {
