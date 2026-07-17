@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  evaluation_interval: 5s
+  external_labels:
+    environment: local
+    service: imticket
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  # Management connector only: application traffic remains on port 10080.
+  - job_name: imticket-app
+    metrics_path: /actuator/prometheus
+    scrape_interval: 1s
+    scrape_timeout: 900ms
+    static_configs:
+      - targets:
+          - app:10081
+        labels:
+          component: backend

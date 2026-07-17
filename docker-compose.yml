@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "10080:10080"
+      - "${MANAGEMENT_BIND_ADDRESS:-127.0.0.1}:${MANAGEMENT_HOST_PORT:-10081}:10081"
     environment:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL_DOCKER}
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
@@ -14,6 +15,8 @@ services:
       LOCK_NAMED_TIMEOUT_SECONDS: ${LOCK_NAMED_TIMEOUT_SECONDS:-5}
       LOCK_REENTRANT_WAIT_TIMEOUT_MILLIS: ${LOCK_REENTRANT_WAIT_TIMEOUT_MILLIS:-1000}
       LOCK_SINGLE_THREAD_QUEUE_CAPACITY: ${LOCK_SINGLE_THREAD_QUEUE_CAPACITY:-1000}
+      RESERVATION_ADMISSION_PER_SEAT_PERMITS: ${RESERVATION_ADMISSION_PER_SEAT_PERMITS:-1}
+      MANAGEMENT_SERVER_PORT: ${MANAGEMENT_SERVER_PORT:-10080}
 
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
@@ -85,7 +88,7 @@ services:
     ports:
       - "${PROMETHEUS_BIND_ADDRESS:-127.0.0.1}:9090:9090"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${PROMETHEUS_CONFIG_FILE:-./prometheus.yml}:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     healthcheck:
