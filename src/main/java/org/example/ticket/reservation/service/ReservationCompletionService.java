@@ -1,4 +1,4 @@
-package org.example.ticket.payment.service;
+package org.example.ticket.reservation.service;
 
 import lombok.RequiredArgsConstructor;
 import org.example.ticket.common.exception.BusinessException;
@@ -14,17 +14,23 @@ import org.example.ticket.reservation.model.Reservation;
 import org.example.ticket.reservation.model.ReservedSeat;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.repository.ReservationRepository;
-import org.example.ticket.reservation.service.SeatService;
 import org.example.ticket.reservation.validation.ReservationValidator;
+import org.example.ticket.util.constant.ReservationStatus;
 import org.example.ticket.util.constant.SeatStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * 결제 승인 결과를 예약 완료로 반영하는 애플리케이션 오케스트레이터다.
+ *
+ * 결제 도메인은 PG 승인 검증과 결제 상태를 책임지고, 이 서비스는 승인된
+ * 결과를 예약·좌석·결제 주문의 최종 상태로 함께 반영한다.
+ */
 @Service
 @RequiredArgsConstructor
-public class PaymentFinalizationService {
+public class ReservationCompletionService {
 
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
@@ -32,8 +38,8 @@ public class PaymentFinalizationService {
     private final SeatService seatService;
 
     @Transactional
-    public PaymentVerificationResponse finalizePayment(Long paymentOrderId, String walletAddress,
-                                                        VerifiedPaymentSnapshot snapshot) {
+    public PaymentVerificationResponse complete(Long paymentOrderId, String walletAddress,
+                                                 VerifiedPaymentSnapshot snapshot) {
         PaymentOrder orderReference = paymentOrderRepository.findById(paymentOrderId)
                 .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_ORDER_NOT_FOUND));
         Long reservationId = orderReference.getReservation().getId();
@@ -75,7 +81,7 @@ public class PaymentFinalizationService {
         );
 
         order.markPaidUnapplied();
-        reservation.manageReservationStatus(org.example.ticket.util.constant.ReservationStatus.SUCCESS, null);
+        reservation.manageReservationStatus(ReservationStatus.SUCCESS, null);
 
         List<Seat> seats = reservation.getReservedSeats().stream()
                 .map(ReservedSeat::getSeat)
@@ -97,7 +103,6 @@ public class PaymentFinalizationService {
     private boolean isOwner(PaymentOrder order, String walletAddress) {
         return order.getMember() != null
                 && order.getMember().getWalletAddress() != null
-                && walletAddress != null
                 && order.getMember().getWalletAddress().equalsIgnoreCase(walletAddress);
     }
 }

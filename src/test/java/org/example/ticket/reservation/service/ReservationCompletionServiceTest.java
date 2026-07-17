@@ -1,4 +1,4 @@
-package org.example.ticket.payment.service;
+package org.example.ticket.reservation.service;
 
 import org.example.ticket.member.model.Member;
 import org.example.ticket.payment.constant.PaymentAttemptStatus;
@@ -14,7 +14,6 @@ import org.example.ticket.reservation.model.Reservation;
 import org.example.ticket.reservation.model.ReservedSeat;
 import org.example.ticket.reservation.model.Seat;
 import org.example.ticket.reservation.repository.ReservationRepository;
-import org.example.ticket.reservation.service.SeatService;
 import org.example.ticket.util.constant.ReservationStatus;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
@@ -33,7 +32,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class PaymentFinalizationServiceTest {
+class ReservationCompletionServiceTest {
 
     @Mock
     private PaymentOrderRepository paymentOrderRepository;
@@ -48,10 +47,10 @@ class PaymentFinalizationServiceTest {
     private SeatService seatService;
 
     @InjectMocks
-    private PaymentFinalizationService paymentFinalizationService;
+    private ReservationCompletionService reservationCompletionService;
 
     @Test
-    void appliesVerifiedPaymentAndReservesSeatsInOneFinalizationPath() {
+    void appliesVerifiedPaymentAndCompletesReservationInOneApplicationPath() {
         Member owner = Member.builder()
                 .id(7L)
                 .walletAddress("0xowner")
@@ -105,7 +104,7 @@ class PaymentFinalizationServiceTest {
         when(paymentAttemptRepository.findTopByPaymentOrderIdOrderByCreatedAtDesc(1L))
                 .thenReturn(Optional.of(attempt));
 
-        var response = paymentFinalizationService.finalizePayment(
+        var response = reservationCompletionService.complete(
                 1L,
                 "0xOWNER",
                 new VerifiedPaymentSnapshot(

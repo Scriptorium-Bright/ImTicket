@@ -13,6 +13,7 @@ import org.example.ticket.payment.repository.PaymentOrderRepository;
 import org.example.ticket.payment.request.PaymentVerifyRequest;
 import org.example.ticket.payment.response.PaymentStatusResponse;
 import org.example.ticket.payment.response.PaymentVerificationResponse;
+import org.example.ticket.reservation.service.ReservationCompletionService;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -22,7 +23,7 @@ public class PaymentVerificationService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final PaymentGatewayClient paymentGatewayClient;
-    private final PaymentFinalizationService paymentFinalizationService;
+    private final ReservationCompletionService reservationCompletionService;
 
     public PaymentVerificationResponse verify(String walletAddress, Long paymentOrderId,
                                                PaymentVerifyRequest request) {
@@ -50,7 +51,7 @@ public class PaymentVerificationService {
                 request.providerTransactionId()
         );
 
-        return paymentFinalizationService.finalizePayment(paymentOrderId, walletAddress, snapshot);
+        return reservationCompletionService.complete(paymentOrderId, walletAddress, snapshot);
     }
 
     public PaymentStatusResponse getStatus(String walletAddress, Long paymentOrderId) {
