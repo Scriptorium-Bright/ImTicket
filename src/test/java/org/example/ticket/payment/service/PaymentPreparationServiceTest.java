@@ -5,6 +5,9 @@ import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.exception.PaymentErrorCode;
+import org.example.ticket.payment.gateway.FakePaymentGatewayClient;
+import org.example.ticket.payment.gateway.PaymentAuthorization;
+import org.example.ticket.payment.gateway.PaymentGatewayClient;
 import org.example.ticket.payment.model.PaymentOrder;
 import org.example.ticket.payment.repository.PaymentAttemptRepository;
 import org.example.ticket.payment.repository.PaymentOrderRepository;
@@ -19,6 +22,7 @@ import org.example.ticket.util.constant.ReservationStatus;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -35,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentPreparationServiceTest {
@@ -51,8 +56,20 @@ class PaymentPreparationServiceTest {
     @Mock
     private PaymentAttemptRepository paymentAttemptRepository;
 
+    @Mock
+    private PaymentGatewayClient paymentGatewayClient;
+
     @InjectMocks
     private PaymentPreparationService paymentPreparationService;
+
+    @BeforeEach
+    void setUpGateway() {
+        lenient().when(paymentGatewayClient.provider()).thenReturn(FakePaymentGatewayClient.PROVIDER);
+        lenient().when(paymentGatewayClient.providerPaymentId(any(PaymentAuthorization.class)))
+                .thenAnswer(invocation -> FakePaymentGatewayClient.approvalToken(
+                        invocation.getArgument(0, PaymentAuthorization.class).merchantOrderId()
+                ));
+    }
 
     @Test
     void createsServerPricedOrderAndFakeApprovalToken() {
@@ -74,7 +91,7 @@ class PaymentPreparationServiceTest {
         assertThat(savedOrder.getAmount()).isEqualTo(45000);
         assertThat(savedOrder.getStatus()).isEqualTo(PaymentOrderStatus.READY);
         assertThat(savedOrder.getCurrency()).isEqualTo("KRW");
-        assertThat(response.getFakeProviderTransactionId())
+        assertThat(response.getProviderPaymentId())
                 .isEqualTo("fake:" + savedOrder.getMerchantOrderId());
         verify(paymentAttemptRepository).save(any());
     }
