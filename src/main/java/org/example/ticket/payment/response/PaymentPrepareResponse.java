@@ -14,18 +14,18 @@ public class PaymentPrepareResponse {
     private Long reservationId;
     private String merchantOrderId;
     private String provider;
-    private String fakeProviderTransactionId;
+    private String providerPaymentId;
     private Integer amount;
     private String currency;
     private LocalDateTime paymentDeadline;
 
-    public static PaymentPrepareResponse from(PaymentOrder order, String provider, String fakeProviderTransactionId) {
+    public static PaymentPrepareResponse from(PaymentOrder order, String provider, String providerPaymentId) {
         return PaymentPrepareResponse.builder()
                 .paymentOrderId(order.getId())
                 .reservationId(order.getReservation().getId())
                 .merchantOrderId(order.getMerchantOrderId())
                 .provider(provider)
-                .fakeProviderTransactionId(fakeProviderTransactionId)
+                .providerPaymentId(providerPaymentId)
                 .amount(order.getAmount())
                 .currency(order.getCurrency())
                 .paymentDeadline(order.getReservation().getExpiredTime())

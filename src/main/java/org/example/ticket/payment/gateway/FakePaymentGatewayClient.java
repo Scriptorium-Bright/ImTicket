@@ -2,26 +2,34 @@ package org.example.ticket.payment.gateway;
 
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.payment.exception.PaymentErrorCode;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
-@Component
 public class FakePaymentGatewayClient implements PaymentGatewayClient {
 
     public static final String PROVIDER = "FAKE";
     private static final String TOKEN_PREFIX = "fake:";
 
     @Override
-    public VerifiedPaymentSnapshot verify(PaymentAuthorization authorization, String providerTransactionId) {
+    public String provider() {
+        return PROVIDER;
+    }
+
+    @Override
+    public String providerPaymentId(PaymentAuthorization authorization) {
+        return approvalToken(authorization.merchantOrderId());
+    }
+
+    @Override
+    public VerifiedPaymentSnapshot verify(PaymentAuthorization authorization, String providerPaymentId) {
         String expectedToken = approvalToken(authorization.merchantOrderId());
-        if (!expectedToken.equals(providerTransactionId)) {
+        if (!expectedToken.equals(providerPaymentId)) {
             throw new BusinessException(PaymentErrorCode.PAYMENT_PROVIDER_REJECTED);
         }
 
         return new VerifiedPaymentSnapshot(
                 authorization.merchantOrderId(),
-                providerTransactionId,
+                providerPaymentId,
                 authorization.amount(),
                 authorization.currency(),
                 LocalDateTime.now()

@@ -7,7 +7,8 @@ import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.payment.constant.PaymentAttemptStatus;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.exception.PaymentErrorCode;
-import org.example.ticket.payment.gateway.FakePaymentGatewayClient;
+import org.example.ticket.payment.gateway.PaymentAuthorization;
+import org.example.ticket.payment.gateway.PaymentGatewayClient;
 import org.example.ticket.payment.model.PaymentAttempt;
 import org.example.ticket.payment.model.PaymentOrder;
 import org.example.ticket.payment.repository.PaymentAttemptRepository;
@@ -36,6 +37,7 @@ public class PaymentPreparationService {
     private final ReservationRepository reservationRepository;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
+    private final PaymentGatewayClient paymentGatewayClient;
 
     @Transactional
     public PaymentPrepareResponse prepare(String walletAddress, PaymentPrepareRequest request, String idempotencyKey) {
@@ -75,7 +77,7 @@ public class PaymentPreparationService {
         paymentAttemptRepository.save(PaymentAttempt.builder()
                 .paymentOrder(order)
                 .attemptId(UUID.randomUUID().toString())
-                .provider(FakePaymentGatewayClient.PROVIDER)
+                .provider(paymentGatewayClient.provider())
                 .status(PaymentAttemptStatus.READY)
                 .build());
 
@@ -83,10 +85,17 @@ public class PaymentPreparationService {
     }
 
     private PaymentPrepareResponse response(PaymentOrder order) {
+        PaymentAuthorization authorization = new PaymentAuthorization(
+                order.getId(),
+                order.getReservation().getId(),
+                order.getMerchantOrderId(),
+                order.getAmount(),
+                order.getCurrency()
+        );
         return PaymentPrepareResponse.from(
                 order,
-                FakePaymentGatewayClient.PROVIDER,
-                FakePaymentGatewayClient.approvalToken(order.getMerchantOrderId())
+                paymentGatewayClient.provider(),
+                paymentGatewayClient.providerPaymentId(authorization)
         );
     }
 

@@ -49,7 +49,7 @@ public class PaymentVerificationService {
         );
         VerifiedPaymentSnapshot snapshot = paymentGatewayClient.verify(
                 authorization,
-                request.providerTransactionId()
+                request.providerPaymentId()
         );
 
         return reservationCompletionService.complete(paymentOrderId, walletAddress, snapshot);
