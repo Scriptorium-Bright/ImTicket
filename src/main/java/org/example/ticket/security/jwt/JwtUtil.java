@@ -1,6 +1,7 @@
 package org.example.ticket.security.jwt;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ public class JwtUtil {
     public static final String CLAIM_ROLE = "role";
 
     private final SecretKey secretKey;
+    private final JwtParser jwtParser;
     private final Long expiredMs;
 
     public JwtUtil(@Value("${spring.jwt.secret}") String secret, @Value("${spring.jwt.expired.time}") Long expiredMs) {
@@ -28,11 +30,12 @@ public class JwtUtil {
         }
         this.secretKey = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),
                 Jwts.SIG.HS256.key().build().getAlgorithm());
+        this.jwtParser = Jwts.parser().verifyWith(secretKey).build();
         this.expiredMs = expiredMs;
     }
 
     public Claims parseClaims(String token) {
-        return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload();
+        return jwtParser.parseSignedClaims(token).getPayload();
     }
 
     public String getUsername(Claims claim) {

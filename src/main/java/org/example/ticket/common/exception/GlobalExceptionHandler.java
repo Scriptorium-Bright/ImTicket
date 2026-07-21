@@ -6,11 +6,13 @@ import jakarta.persistence.OptimisticLockException;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.common.response.ApiResponse;
 import org.example.ticket.common.response.ErrorResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.example.ticket.reservation.exception.ReservationErrorCode;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -66,6 +68,21 @@ public class GlobalExceptionHandler {
 
         log.warn("ValidationException: {}", errorMessage);
         return toResponse(CommonErrorCode.VALIDATION_ERROR, errorMessage);
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
+        HttpHeaders headers = new HttpHeaders();
+        if (e.getSupportedHttpMethods() != null) {
+            headers.setAllow(e.getSupportedHttpMethods());
+        }
+        log.warn("Method not allowed: method={}, supported={}", e.getMethod(), e.getSupportedHttpMethods());
+        return ResponseEntity.status(CommonErrorCode.METHOD_NOT_ALLOWED.status())
+                .headers(headers)
+                .body(ApiResponse.fail(ErrorResponse.of(
+                        CommonErrorCode.METHOD_NOT_ALLOWED.code(),
+                        CommonErrorCode.METHOD_NOT_ALLOWED.message()
+                )));
     }
 
     @ExceptionHandler(RuntimeException.class)
