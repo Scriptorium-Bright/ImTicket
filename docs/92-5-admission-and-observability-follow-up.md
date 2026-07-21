@@ -92,6 +92,6 @@ JFR은 이 차이를 설명했다. burst 직후 Tomcat worker가 10개에서 200
 
 이 관찰 뒤에는 JWT parser를 application 생성 시 한 번 만들고, 부하 runner가 health 확인 뒤 인증·routing 경로를 상태 변경 없이 warm-up하도록 바꿨다. admission을 idempotency claim 앞으로 옮기는 문제는 같은 key의 동시 재시도가 어떤 응답으로 수렴해야 하는지부터 고정한 뒤에 다룬다.
 
-새 container가 ready 상태가 되기까지 걸린 164.578초도 이 과정에서 따로 기록했다. 이는 예약 요청의 p95가 아니라 deployment 직후 application context를 만드는 시간이다. runner의 health 대기 시간을 늘려 부팅 중인 container를 실패로 판단하지 않게 했고, 다음 기동에서는 JVM 시작부터 JFR과 Spring startup timeline을 함께 남겨 실제로 긴 초기화 단계 하나를 줄인다.
+새 container boot 시간은 예약 요청 p95와 분리해 launch-time JFR로 기록했다. 초기 `164.578초`는 application이 시작된 뒤 붙은 idle recording과 ready 시점을 섞은 값이라 boot 원인 수치로 사용하지 않는다. process 시작부터 남긴 기록에서는 `SecurityConfig`가 사용하지 않는 `MemberService`를 생성자 의존성으로 받으며 security filter 생성과 JPA 초기화를 함께 끌어오는 경로가 확인됐고, 해당 필드만 제거했다. event 비교와 측정 파일은 `docs/130-startup-jfr-security-wiring-result.md`에 남겼다.
 
 이 단계에서 좌석 선점 경로는 "DB row lock 뒤에서 모두 기다리는 구조"에서 "좌석별로 한 요청만 reservation transaction에 진입시키고 나머지는 즉시 결과를 받는 구조"로 바뀌었다. 이후에는 한 좌석이 아니라 여러 인기 좌석을 동시에 열었을 때도 이 경계가 유지되는지 확인했다.

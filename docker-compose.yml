@@ -23,6 +23,8 @@ services:
 
       SPRING_SERVLET_MULTIPART_LOCATION: /app/uploads
       TICKET_UPLOAD_PATH: /app/uploads
+      TICKET_STARTUP_JFR_ENABLED: ${TICKET_STARTUP_JFR_ENABLED:-false}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:-}
     depends_on:
       mysql:
         condition: service_healthy

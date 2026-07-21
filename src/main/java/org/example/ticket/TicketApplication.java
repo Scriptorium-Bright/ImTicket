@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.core.metrics.jfr.FlightRecorderApplicationStartup;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(exclude = SecurityAutoConfiguration.class)
@@ -15,8 +16,17 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class TicketApplication {
 
     public static void main(String[] args) {
-
-        SpringApplication.run(TicketApplication.class, args);
+        SpringApplication application = new SpringApplication(TicketApplication.class);
+        if (isStartupJfrEnabled()) {
+            application.setApplicationStartup(new FlightRecorderApplicationStartup());
+        }
+        application.run(args);
     }
 
+    private static boolean isStartupJfrEnabled() {
+        return Boolean.parseBoolean(System.getProperty(
+                "ticket.startup.jfr.enabled",
+                System.getenv().getOrDefault("TICKET_STARTUP_JFR_ENABLED", "false")
+        ));
+    }
 }

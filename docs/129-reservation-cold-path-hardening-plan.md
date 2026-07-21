@@ -6,7 +6,7 @@
 
 ## 1. 이번 변경에서 해결하는 범위
 
-이번 커밋은 두 곳만 바꾼다. 첫째는 매 요청마다 새로 만들어지던 JWT parser다. 둘째는 application health만 확인하고 바로 burst를 시작하던 부하 실행기다. 둘 다 JFR에 직접 나타났고, 예약 상태·멱등성·좌석 락의 의미를 바꾸지 않는 변경이다.
+이번 변경은 네 가지를 연결한다. 매 요청마다 만들어지던 JWT parser를 application 생명주기로 올리고, application health만 확인하던 runner에 예약 route warm-up을 추가한다. 동시에 process 시작부터 기록하는 JFR 경로를 만들고, 그 기록에서 확인된 `SecurityConfig`의 사용하지 않는 `MemberService` 주입을 제거한다. 네 변경 모두 예약 상태·멱등성·좌석 락의 의미를 바꾸지 않는다.
 
 반대로 admission을 idempotency claim보다 앞으로 옮기거나 Tomcat의 최대 worker 수를 늘리는 일은 이번에 하지 않는다. 둘 다 timeout을 줄일 수 있다는 추측만으로 넣기에는 요청 재시도 계약과 CPU 경쟁의 의미를 바꾸는 변경이기 때문이다.
 
@@ -42,19 +42,19 @@ application health
 
 warm-up이 405가 아니면 runner는 burst를 보내지 않는다. 이 규칙은 유효하지 않은 JWT나 routing 실패를 부하 결과에 섞지 않기 위한 것이다. warm-up은 transaction·JSON 역직렬화·idempotency 저장까지 미리 수행하는 작업은 아니다. 상태를 바꾸지 않는 범위에서, 이번 JFR에서 관찰된 인증과 MVC 진입 비용을 분리하는 준비 단계다.
 
-같은 runner의 health 대기 시간도 90초 고정값에서 환경변수 `APP_READY_TIMEOUT_SECONDS`로 분리하고 기본값을 240초로 둔다. JFR attach 전 application이 실제로 기동되는 데 164.578초가 걸린 기록이 있었기 때문이다. 이 값은 성능 수치가 아니라, container가 아직 준비되지 않았다는 이유로 진단 자체가 시작되지 않는 일을 막는 실행 조건이다.
+같은 runner의 health 대기 시간도 90초 고정값에서 환경변수 `APP_READY_TIMEOUT_SECONDS`로 분리하고 기본값을 240초로 둔다. 초기 기록에서 application boot와 reservation path cold start가 섞여 있었고, 실제 boot 시간이 환경에 따라 크게 달라질 수 있었기 때문이다. 이 값은 성능 수치가 아니라, container가 아직 준비되지 않았다는 이유로 진단 자체가 시작되지 않는 일을 막는 실행 조건이다.
 
-health 대기 시간과 route warm-up은 여기까지다. 둘은 부하 테스트가 준비되지 않은 application을 대상으로 시작하지 않게 만들고, 첫 요청에만 붙는 비용을 비교 조건 밖으로 옮긴다. application process가 164초 동안 기동되는 문제 자체를 빠르게 만드는 방법은 아니다. 그 문제는 배포와 장애 복구의 관점에서 따로 닫아야 한다.
+health 대기 시간과 route warm-up은 여기까지다. 둘은 부하 테스트가 준비되지 않은 application을 대상으로 시작하지 않게 만들고, 첫 요청에만 붙는 비용을 비교 조건 밖으로 옮긴다. application boot 시간 자체는 launch-time JFR로 별도 측정하고, 그 결과에 해당하는 초기화 단계만 고친다.
 
-## 4. 164초 application boot는 대기 시간을 늘려서 해결하지 않는다
+## 4. application boot는 별도 시간축으로 측정한다
 
-새 image를 만든 뒤 application container만 다시 올린 실행에서, JVM process가 시작된 뒤 application이 실제 요청을 받을 수 있을 때까지 164.578초가 걸렸다. 이전 runner의 90초 health timeout은 이 구간보다 짧아서, k6나 JFR이 시작되기도 전에 실행을 실패로 끝냈다. `APP_READY_TIMEOUT_SECONDS=240`은 이 잘못된 실패 판정을 고친 것이다. 부팅 시간을 164초에서 240초로 만든 것이 아니다.
+처음 기록한 `164.578초`는 application이 시작된 뒤 붙은 idle JFR과 container ready 시점을 혼합한 값이었다. 이 값은 boot 원인을 설명하는 수치로 사용할 수 없으므로 폐기했다. `APP_READY_TIMEOUT_SECONDS=240`은 부팅 중인 container를 성능 실패로 판단하지 않도록 실행 조건을 고친 것이며, boot 시간을 줄인 결과가 아니다.
 
-이 시간은 같은 좌석을 두고 15초 동안 기다린 문제와도 다른 층에 있다. 전자는 deployment 직후 새 JVM이 service-ready 상태에 도달하는 시간이고, 후자는 준비된 JVM의 첫 reservation path에 burst가 들어왔을 때의 요청 처리 시간이다. 둘을 하나의 cold-start라는 이름으로 섞으면, Tomcat thread·JWT·class loading을 고치다가 schema 초기화나 외부 연결 재시도를 놓칠 수 있다.
+application boot와 첫 reservation 요청은 다른 시간축이다. 전자는 새 JVM이 context와 외부 연결을 준비하는 시간이고, 후자는 준비된 JVM에 첫 요청이 들어올 때의 class loading·JWT·MVC 비용이다. 둘을 하나의 cold-start로 묶지 않고 각각 기록해야 lock 대기와 초기화 비용을 섞지 않는다.
 
-당시 thread dump에서 main thread는 Spring AOP advisor discovery의 `Class.getMethodsRecursive`와 `AopUtils.canApply` 근처에 있었다. 이것은 application context와 proxy 후보를 만드는 단계가 길었다는 단서다. 다만 startup JFR은 `Started TicketApplication` 이후에 붙은 idle recording이어서, 이 stack 하나만으로 AOP가 164초의 원인이라고 결론 내릴 수는 없다.
+과거 thread dump에서 Spring AOP advisor discovery가 보였지만, 그 stack만으로 전체 boot 원인을 정할 수는 없었다. 그래서 이번에는 JVM 시작 시점부터 `-XX:StartFlightRecording`을 켜고, `FlightRecorderApplicationStartup`으로 Spring startup step을 같은 시간축에 남겼다.
 
-그래서 다음 부팅에서는 시작과 동시에 JVM recording을 켠다. container의 `java` command에 1회성 `-XX:StartFlightRecording`을 붙여 process 생성부터 `Started TicketApplication`까지 class loading, thread start, GC, socket connect, monitor contention을 남긴다. 동시에 `FlightRecorderApplicationStartup`으로 Spring의 bean factory·configuration class parsing·repository 초기화 같은 startup step 이름을 JFR event와 겹쳐 본다. 둘을 함께 남겨야 "어느 thread가 오래 걸렸는가"와 "Spring이 어떤 단계에 있었는가"를 같은 시간축에서 연결할 수 있다.
+container의 `java` command에 1회성 `-XX:StartFlightRecording`을 붙여 process 생성부터 `Started TicketApplication`까지 class loading, thread start, GC, socket connect, monitor contention을 남긴다. `FlightRecorderApplicationStartup`은 bean factory·configuration class parsing·repository 초기화의 이름과 부모 관계를 기록한다. 이번 캡처 스크립트의 기본 recording 시간은 180초로 두어, 느린 환경에서도 `Started TicketApplication` 이후까지 파일에 포함되게 했다.
 
 ```java
 SpringApplication application = new SpringApplication(TicketApplication.class);
@@ -62,7 +62,7 @@ application.setApplicationStartup(new FlightRecorderApplicationStartup());
 application.run(args);
 ```
 
-이 instrumentation은 상시 기능이 아니다. 현재 image와 같은 MySQL·Redis 조건에서 한 번의 clean boot을 기록하고, 선택한 개선을 적용한 뒤 같은 조건에서 한 번만 다시 확인한다. cold boot를 수십 번 반복해서 평균을 만드는 대신, process 시작부터 ready까지의 구간을 원인별로 분해한 뒤 그 원인에 해당하는 변경만 적용한다.
+이 instrumentation은 상시 기능이 아니다. 정상 실행에서는 환경변수 기본값이 `false`라 JFR을 켜지 않는다. 같은 image와 MySQL·Redis 조건에서 기준 boot을 기록하고, 선택한 개선을 적용한 뒤 한 번 다시 확인해 원인에 해당하는 변경만 남긴다.
 
 기록에서 확인할 후보와 조치는 다음처럼 연결한다.
 
@@ -73,7 +73,7 @@ application.run(args);
 | MySQL·Redis·외부 API 연결 또는 재시도가 길게 이어짐 | 예약 API가 시작에 반드시 필요로 하는 의존성과 그렇지 않은 의존성을 나누고, 후자는 ready 이전의 동기 초기화에서 분리한다. | 외부 시스템의 일시적 지연이 API process 전체의 기동을 붙잡지 않게 한다. |
 | DispatcherServlet과 MVC mapping 초기화가 첫 요청에 남아 있음 | `spring.mvc.servlet.load-on-startup=1`로 servlet과 handler mapping을 application startup 시점에 올리고, readiness는 그 초기화 뒤에 열리게 한다. | 첫 사용자가 MVC 초기화 비용을 지불하지 않게 한다. |
 
-이 표의 항목을 한꺼번에 넣지는 않는다. 현재 설정에는 `spring.jpa.hibernate.ddl-auto=update`가 있어 Hibernate schema 작업은 반드시 확인할 후보이고, `spring-boot-starter-aop`과 Swagger·Redis·JPA도 context 생성 비용에 참여한다. 하지만 어떤 항목이 164초 중 얼마를 차지했는지는 launch-time JFR을 보기 전에는 알 수 없다. 예를 들어 AOP가 일부 stack에 보였다는 이유로 aspect를 없애면 예약 lock의 정합성 경계까지 훼손할 수 있다. 원인이 확인된 한 경로만 고치고, 그 다음 boot recording에서 시간축이 짧아졌는지 확인한다.
+이 표의 항목을 한꺼번에 넣지는 않는다. 이번 recording에서 가장 선명했던 것은 `SecurityConfig` 생성 시 사용하지 않는 `MemberService`까지 생성자 의존성으로 끌어오던 경로였다. 그 필드만 제거하고 다시 기록했으며, AOP·schema·Tomcat 설정은 손대지 않았다. 실제 이벤트 결과는 별도 기록 문서에 남겼다.
 
 부팅이 끝났다는 판단도 TCP port가 열렸다는 사실만으로 두지 않는다. 최종 흐름은 아래처럼 둔다.
 
@@ -128,7 +128,7 @@ JFR 실행에서 Tomcat은 이미 `max-threads=200`에 도달했다. 이 값을 
 
 application을 여러 대로 늘리는 선택도 이번 작업의 대체안이 아니다. 실제 배포가 두 JVM 이상을 요구하거나, warm reservation path와 고정된 부하 발생 조건에서도 응답 계약이 반복해서 깨지고, 같은 좌석의 진입 제어를 JVM 밖에서 공유해야 할 때 전환한다. 그 시점에는 `ReentrantLock`과 local admission을 공통 제어로 바꾸고 MySQL은 최종 정합성 경계로 유지한다.
 
-## 7. 이번 커밋의 완료 기준
+## 7. 이번 변경의 완료 기준
 
 이번 변경은 다음이 충족되면 닫는다.
 
@@ -136,9 +136,11 @@ application을 여러 대로 늘리는 선택도 이번 작업의 대체안이 �
 | --- | --- |
 | JWT | parser가 application 생성 시 한 번 만들어지고 기존 token 검증 결과가 유지된다. |
 | runner | 준비 시간은 설정 가능하며, reservation API warm-up이 405를 확인하지 못하면 burst를 시작하지 않는다. |
+| boot 진단 | process 시작부터 기록한 JFR에 `Started TicketApplication`과 Spring startup step이 함께 남는다. |
+| boot 개선 | `SecurityConfig`가 사용하지 않는 `MemberService`를 주입하지 않고, 인증 provider가 실제 로그인에 필요한 의존성은 그대로 유지한다. |
 | 회귀 검증 | JWT 단위 테스트, Gradle 컴파일, warm-up k6 script 구문 검사, runner shell 구문 검사가 통과한다. |
-| 문서 | 92-5에 admission이 보호하는 경계를 JFR 결과에 맞게 보정한다. |
+| 문서 | boot JFR의 원시 위치, event 비교, 해석 범위를 기록한다. |
 
-application boot 자체는 다음 작업에서 launch-time JFR을 한 번 남긴 뒤, 위 표에서 실제로 긴 단계 하나를 선택해 개선한다. 그 확인은 2,000 VU burst가 아니라 같은 image·같은 의존성에서 process start부터 readiness까지 걸린 시간으로 끝낸다.
+이번 기록에서 선택한 단계는 `SecurityConfig`의 불필요한 생성자 의존성이었다. 2,000 VU를 다시 통과시키는 것이 아니라, process start부터 readiness까지의 흐름을 확인하고 reservation path 비교가 같은 준비 상태에서 시작되게 하는 것으로 이 작업을 닫는다. 측정 원문과 해석은 `docs/130-startup-jfr-security-wiring-result.md`에 정리했다.
 
 이 완료 기준은 2,000 VU를 다시 통과시키는 조건이 아니다. 이번 작업은 JFR이 드러낸 cold path 비용을 제거하고, 다음 성능 비교가 같은 준비 상태에서 시작되게 만드는 것으로 끝낸다.

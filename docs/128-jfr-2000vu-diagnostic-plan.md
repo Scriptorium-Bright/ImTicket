@@ -61,7 +61,7 @@ Tomcat `max-threads`는 이미 200까지 도달해 있었다. 이 값을 더 키
 
 따라서 이 실행의 결론은 단순하다. **14.684초는 좌석 락 처리시간이 아니라, cold reservation path에 2,000개의 인증 요청이 동시에 진입했을 때 Tomcat과 JVM이 먼저 포화된 시간이다.** 이 JFR 진단은 여기서 종료하며, 포트폴리오에는 DB lock 병목으로 잘못 해석하지 않고 “lock 비교 전 JVM 실행 경로를 분리해 확인했다”는 근거로만 사용한다.
 
-여기서 말하는 reservation path cold 상태는 application boot와 구분한다. 별도 실행에서는 새 JVM이 ready 상태가 되기까지 164.578초가 걸렸고, 당시 확보한 startup JFR은 시작 이후에 붙어 원인을 확정하지 못했다. runner의 health timeout을 늘린 것은 부팅 중인 container를 성능 실패로 오인하지 않기 위한 조치다. 실제 boot 개선은 다음 시작부터 JVM launch-time JFR과 Spring startup timeline을 함께 기록한 뒤 진행한다.
+여기서 말하는 reservation path cold 상태는 application boot와 구분한다. 초기 `164.578초` 기록은 application이 시작된 뒤 붙은 idle JFR과 container ready 시점을 섞은 값이라 boot 원인 수치로 사용하지 않는다. runner의 health timeout을 늘린 것은 부팅 중인 container를 성능 실패로 오인하지 않기 위한 조치다. application boot은 JVM 시작부터 recording하는 별도 실행으로 측정했고, 그 결과와 `SecurityConfig` 의존성 제거 근거는 `docs/130-startup-jfr-security-wiring-result.md`에 남겼다.
 
 ## 여기서 결정한 다음 순서
 
