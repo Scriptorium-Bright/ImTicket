@@ -5,6 +5,7 @@ import org.example.ticket.reservation.exception.ReservationErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,5 +46,17 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getError().getCode()).isEqualTo("SEAT_LOCK_TIMEOUT");
+    }
+
+    @Test
+    void unsupportedHttpMethodUses405AndAllowHeader() {
+        ResponseEntity<ApiResponse<Void>> response = handler.handleMethodNotAllowed(
+                new HttpRequestMethodNotSupportedException("GET", java.util.List.of("POST"))
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
+        assertThat(response.getHeaders().getAllow()).containsExactly(org.springframework.http.HttpMethod.POST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError().getCode()).isEqualTo("METHOD_NOT_ALLOWED");
     }
 }

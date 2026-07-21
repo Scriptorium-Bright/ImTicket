@@ -26,6 +26,8 @@ MYSQL_PASSWORD="${MYSQL_PASSWORD:-${MYSQL_LOCK_TEST_PASSWORD:-}}"
 JWT_SECRET="${JWT_SECRET:-}"
 REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-15s}"
 MAX_DURATION="${MAX_DURATION:-2m}"
+APP_READY_TIMEOUT_SECONDS="${APP_READY_TIMEOUT_SECONDS:-240}"
+RESERVATION_PATH_WARMUP="${RESERVATION_PATH_WARMUP:-true}"
 SAMPLE_INTERVAL_SECONDS="${SAMPLE_INTERVAL_SECONDS:-1}"
 IDLE_SECONDS="${IDLE_SECONDS:-10}"
 TAIL_SECONDS="${TAIL_SECONDS:-30}"
@@ -77,6 +79,14 @@ if [[ ! "${BUILD_APP_IMAGE}" =~ ^(true|false)$ ]]; then
 fi
 if [[ ! "${SAMPLE_INTERVAL_SECONDS}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   echo "SAMPLE_INTERVAL_SECONDS는 양의 숫자여야 합니다." >&2
+  exit 1
+fi
+if [[ ! "${APP_READY_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "APP_READY_TIMEOUT_SECONDS는 양의 정수여야 합니다." >&2
+  exit 1
+fi
+if [[ ! "${RESERVATION_PATH_WARMUP}" =~ ^(true|false)$ ]]; then
+  echo "RESERVATION_PATH_WARMUP은 true 또는 false여야 합니다." >&2
   exit 1
 fi
 if [[ ! "${K6_EXECUTION_MODE}" =~ ^(host|docker)$ ]]; then
@@ -320,7 +330,7 @@ docker_stats_collector_loop() {
 
 wait_until_healthy() {
   local attempt payload observed_hikari
-  for attempt in $(seq 1 90); do
+  for attempt in $(seq 1 "${APP_READY_TIMEOUT_SECONDS}"); do
     if curl -fsS --connect-timeout 1 --max-time 2 "${MANAGEMENT_BASE_URL}/actuator/health" > "${RUN_DIR}/health-${attempt}.json" 2>/dev/null; then
       payload="$(curl -fsS --connect-timeout 1 --max-time 2 "${MANAGEMENT_BASE_URL}/actuator/prometheus" 2>/dev/null || true)"
       observed_hikari="$(metric_max "${payload}" hikaricp_connections_max)"
@@ -331,8 +341,43 @@ wait_until_healthy() {
     fi
     sleep 1
   done
-  echo "앱 health 또는 Hikari max=${HIKARI_POOL_SIZE} 확인에 실패했습니다." >&2
+  echo "${APP_READY_TIMEOUT_SECONDS}초 안에 앱 health 또는 Hikari max=${HIKARI_POOL_SIZE} 확인에 실패했습니다." >&2
   return 1
+}
+
+warm_reservation_path() {
+  local warmup_log="${RUN_DIR}/reservation-path-warmup.log"
+  local warmup_summary="${RUN_DIR}/reservation-path-warmup-summary.json"
+
+  if [[ "${RESERVATION_PATH_WARMUP}" == "false" ]]; then
+    printf 'reservation_path_warmup=skipped\n' >> "${MANIFEST_FILE}"
+    return 0
+  fi
+
+  if [[ "${K6_EXECUTION_MODE}" == "host" ]]; then
+    k6 run \
+      -e "BASE_URL=${BASE_URL}" \
+      -e "JWT_SECRET=${JWT_SECRET}" \
+      -e "REQUEST_TIMEOUT=${REQUEST_TIMEOUT}" \
+      --summary-export "${warmup_summary}" \
+      "${ROOT_DIR}/scripts/test/08-reservation-path-warmup.js" \
+      > "${warmup_log}" 2>&1
+  else
+    docker run --rm \
+      --name "${K6_DOCKER_CONTAINER_NAME}-warmup" \
+      --network "${K6_DOCKER_NETWORK}" \
+      -v "${ROOT_DIR}/scripts/test:/scripts:ro" \
+      -v "${RUN_DIR}:/results" \
+      "${K6_DOCKER_IMAGE}" run \
+      -e "BASE_URL=${K6_DOCKER_BASE_URL}" \
+      -e "JWT_SECRET=${JWT_SECRET}" \
+      -e "REQUEST_TIMEOUT=${REQUEST_TIMEOUT}" \
+      --summary-export /results/reservation-path-warmup-summary.json \
+      /scripts/08-reservation-path-warmup.js \
+      > "${warmup_log}" 2>&1
+  fi
+
+  printf 'reservation_path_warmup=passed\n' >> "${MANIFEST_FILE}"
 }
 
 peak_column() {
@@ -386,6 +431,8 @@ printf 'run_id=%s\nrun_label=%s\n' "${RUN_ID}" "${RUN_LABEL}" > "${MANIFEST_FILE
   printf 'configured_admission_per_seat_permits=%s\n' "${ADMISSION_PER_SEAT_PERMITS}"
   printf 'configured_concurrency=%s\n' "${CONCURRENCY}"
   printf 'configured_request_timeout=%s\n' "${REQUEST_TIMEOUT}"
+  printf 'configured_app_ready_timeout_seconds=%s\n' "${APP_READY_TIMEOUT_SECONDS}"
+  printf 'configured_reservation_path_warmup=%s\n' "${RESERVATION_PATH_WARMUP}"
   printf 'configured_management_base_url=%s\n' "${MANAGEMENT_BASE_URL}"
   printf 'configured_management_server_port=%s\n' "${MANAGEMENT_SERVER_PORT:-same-business-port}"
   printf 'configured_prometheus_config_file=%s\n' "${PROMETHEUS_CONFIG_FILE}"
@@ -431,6 +478,7 @@ if [[ -z "${app_container}" || -z "${mysql_container}" || -z "${redis_container}
   exit 1
 fi
 wait_until_healthy
+warm_reservation_path
 
 if [[ "${RECREATE_PROMETHEUS}" == "true" ]]; then
   PROMETHEUS_CONFIG_FILE="${PROMETHEUS_CONFIG_FILE}" \
