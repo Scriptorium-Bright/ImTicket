@@ -4,7 +4,7 @@ import lombok.Builder;
 import lombok.Getter;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.model.PaymentOrder;
-import org.example.ticket.reservation.model.Reservation;
+import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.util.constant.ReservationStatus;
 
 @Getter

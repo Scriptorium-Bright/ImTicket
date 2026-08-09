@@ -2,8 +2,8 @@ package org.example.ticket.entry.service;
 
 import org.example.ticket.entry.repository.EntryLogRepository;
 import org.example.ticket.member.model.Member;
-import org.example.ticket.reservation.model.Reservation;
-import org.example.ticket.reservation.repository.ReservationRepository;
+import org.example.ticket.reservation.booking.domain.Reservation;
+import org.example.ticket.reservation.booking.persistence.ReservationRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

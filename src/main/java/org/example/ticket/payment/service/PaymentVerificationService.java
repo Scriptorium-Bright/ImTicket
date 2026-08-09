@@ -14,7 +14,7 @@ import org.example.ticket.payment.repository.PaymentOrderRepository;
 import org.example.ticket.payment.request.PaymentVerifyRequest;
 import org.example.ticket.payment.response.PaymentStatusResponse;
 import org.example.ticket.payment.response.PaymentVerificationResponse;
-import org.example.ticket.reservation.service.ReservationCompletionService;
+import org.example.ticket.reservation.booking.application.ReservationCompletionService;
 import org.springframework.stereotype.Service;
 
 @Service

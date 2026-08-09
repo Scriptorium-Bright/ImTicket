@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
-import org.example.ticket.reservation.model.Reservation;
+import org.example.ticket.reservation.booking.domain.Reservation;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 

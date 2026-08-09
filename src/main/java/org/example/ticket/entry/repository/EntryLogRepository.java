@@ -1,7 +1,7 @@
 package org.example.ticket.entry.repository;
 
 import org.example.ticket.entry.model.EntryLog;
-import org.example.ticket.reservation.model.Reservation;
+import org.example.ticket.reservation.booking.domain.Reservation;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
