@@ -12,7 +12,9 @@ import org.example.ticket.reservation.queue.repository.redis.RedisReservationQue
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.repository.redis.ReservationQueueKeyFactory;
 import org.example.ticket.reservation.queue.util.scheduler.ReservationQueueExpiryScheduler;
+import org.example.ticket.reservation.common.domain.ReservationProcessingLeasePolicy;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -21,12 +23,28 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Clock;
+import java.time.Duration;
 
 /** Queue feature flag가 켜진 경우에만 Redis queue bean을 구성한다. */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "reservation.queue", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(ReservationQueueProperties.class)
 public class ReservationQueueConfiguration {
+
+    /**
+     * MySQL claim과 Redis processing lease의 공통 시간 정책을 구성한다.
+     * Claim lease가 짧은 설정은 Queue Worker bean을 만들기 전에 시작 실패로 처리한다.
+     */
+    @Bean
+    public ReservationProcessingLeasePolicy reservationProcessingLeasePolicy(
+            ReservationQueueProperties properties,
+            @Value("${reservation.idempotency.processing-lease-seconds:30}") long claimLeaseSeconds
+    ) {
+        return new ReservationProcessingLeasePolicy(
+                Duration.ofSeconds(claimLeaseSeconds),
+                properties.processingLease()
+        );
+    }
 
     /**
      * Queue Redis key 형식을 생성하는 factory를 등록한다.

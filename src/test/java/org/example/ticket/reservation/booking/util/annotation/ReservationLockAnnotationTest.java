@@ -33,7 +33,6 @@ class ReservationLockAnnotationTest {
         Method outerMethod = ReservationIdempotentCreationService.class.getMethod(
                 "create",
                 Long.class,
-                String.class,
                 ReservationRequest.class,
                 String.class,
                 Long.class,
@@ -51,7 +50,7 @@ class ReservationLockAnnotationTest {
     void innerReservationMutationRequiresExistingOuterTransaction() throws NoSuchMethodException {
         Method innerMethod = ReservationService.class.getMethod(
                 "createReservationWithinTransaction",
-                String.class,
+                Long.class,
                 ReservationRequest.class
         );
         Transactional transaction = innerMethod.getAnnotation(Transactional.class);

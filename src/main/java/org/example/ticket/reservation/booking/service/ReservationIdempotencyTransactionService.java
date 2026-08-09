@@ -85,19 +85,42 @@ public class ReservationIdempotencyTransactionService {
      * 이미 다른 요청이 회수했거나 성공 처리한 claim은 변경하지 않는다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public boolean markFailedIfOwned(
+    public boolean markRetryableFailureIfOwned(
             Long claimId,
             String attemptToken,
             String errorCode,
             LocalDateTime failedAt
     ) {
-        return idempotencyRepository.markFailedIfOwned(
+        return idempotencyRepository.markRetryableFailureIfOwned(
                 claimId,
                 attemptToken,
                 errorCode,
                 failedAt,
                 ReservationIdempotencyStatus.PROCESSING,
                 ReservationIdempotencyStatus.FAILED_RETRYABLE
+        ) == 1;
+    }
+
+    /**
+     * 현재 attempt token이 소유한 처리 중 claim을 versioned 최종 실패로 전환한다.
+     * 저장된 공개 code는 같은 key의 후속 호출에서 원래 결과를 재생하는 데 사용한다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public boolean markFinalFailureIfOwned(
+            Long claimId,
+            String attemptToken,
+            String errorCode,
+            int failureSchemaVersion,
+            LocalDateTime failedAt
+    ) {
+        return idempotencyRepository.markFinalFailureIfOwned(
+                claimId,
+                attemptToken,
+                errorCode,
+                failureSchemaVersion,
+                failedAt,
+                ReservationIdempotencyStatus.PROCESSING,
+                ReservationIdempotencyStatus.FAILED_FINAL
         ) == 1;
     }
 

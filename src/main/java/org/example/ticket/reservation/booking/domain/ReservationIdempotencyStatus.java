@@ -4,5 +4,6 @@ public enum ReservationIdempotencyStatus {
 
     PROCESSING,
     SUCCEEDED,
-    FAILED_RETRYABLE
+    FAILED_RETRYABLE,
+    FAILED_FINAL
 }

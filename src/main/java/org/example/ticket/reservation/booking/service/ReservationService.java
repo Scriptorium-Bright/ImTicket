@@ -4,10 +4,12 @@ package org.example.ticket.reservation.booking.service;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.ticket.common.exception.BusinessException;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
+import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.ReservedSeat;
@@ -109,6 +111,22 @@ public class ReservationService {
     }
 
     /**
+     * 검증된 회원 ID를 사용해 이미 시작된 transaction 안에서 예매 생성 규칙을 실행한다.
+     * Queue Worker가 wallet 조회 없이 signed member identity를 예약 소유자로 연결할 때 사용한다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ReservationCreateResponse createReservationWithinTransaction(
+            Long memberId,
+            ReservationRequest request
+    ) {
+        ReservationValidator.validateCreateRequest(request);
+        List<Long> seatIds = normalizedSeatIds(request);
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new BusinessException(ReservationErrorCode.RESERVATION_MEMBER_NOT_FOUND));
+        return createReservationForMember(member, request, seatIds);
+    }
+
+    /**
      * 요청 검증부터 좌석 잠금, 상태 변경과 예약 저장까지의 공통 예매 생성 흐름을 수행한다.
      * 호출자가 보장한 lock 및 트랜잭션 경계 안에서만 실행하며, 성공하면 좌석은 {@code LOCKED}, 예약은 {@code PENDING_PAYMENT} 상태가 된다.
      */
@@ -119,16 +137,37 @@ public class ReservationService {
 
         ReservationValidator.validateCreateRequest(request);
 
+        List<Long> seatIds = normalizedSeatIds(request);
+
+        Member member = memberRepository.findByWalletAddressIgnoreCase(walletAddress)
+                .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
+
+        return createReservationForMember(member, request, seatIds);
+    }
+
+    /**
+     * 요청 좌석 ID를 중복 제거와 정렬 순서로 정규화하고 원본의 중복 여부를 검사한다.
+     * 모든 예약 생성 경로가 같은 좌석 잠금 순서를 사용하게 한다.
+     */
+    private List<Long> normalizedSeatIds(ReservationRequest request) {
         List<Long> seatIds = request.getSeatIds()
                 .stream()
                 .distinct()
                 .sorted()
                 .toList();
-
         ReservationValidator.validateNoDuplicateSeatIds(request.getSeatIds(), seatIds);
+        return seatIds;
+    }
 
-        Member member = memberRepository.findByWalletAddressIgnoreCase(walletAddress)
-                .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
+    /**
+     * 확인된 회원과 정규화한 좌석으로 실제 좌석 잠금, 상태 변경과 예약 저장을 수행한다.
+     * 호출자가 연 transaction과 lock 경계 안에서 예약과 결제 대기 만료 시각을 만든다.
+     */
+    private ReservationCreateResponse createReservationForMember(
+            Member member,
+            ReservationRequest request,
+            List<Long> seatIds
+    ) {
 
         List<Seat> seats = seatService.findAndLockSeatsByPerformanceTime(request.getPerformanceTimeId(), seatIds);
         checkSeatsAvailability(seats);

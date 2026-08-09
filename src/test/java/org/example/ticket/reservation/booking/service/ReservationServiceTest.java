@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.example.ticket.util.constant.SeatStatus.AVAILABLE;
 import static org.example.ticket.util.constant.SeatStatus.LOCKED;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -124,6 +125,36 @@ class ReservationServiceTest {
         reservationService.createReservation("0xOWNER", new ReservationRequest(10L, List.of(1L)));
 
         verify(memberRepository).findByWalletAddressIgnoreCase("0xOWNER");
+    }
+
+    @Test
+    void memberIdCreationUsesPersistedIdentityDirectly() {
+        Member member = Member.builder().id(7L).walletAddress("0xowner").role("ROLE_USER").build();
+        Seat seat = Seat.builder()
+                .id(1L)
+                .seatType(SeatInfo.VIP)
+                .price(10000)
+                .seatStatus(AVAILABLE)
+                .build();
+        ReservationRequest request = new ReservationRequest(10L, List.of(1L));
+        when(memberRepository.findById(7L)).thenReturn(Optional.of(member));
+        when(seatService.findAndLockSeatsByPerformanceTime(10L, List.of(1L))).thenReturn(List.of(seat));
+
+        ReservationCreateResponse response = reservationService.createReservationWithinTransaction(7L, request);
+
+        assertThat(response.getTotalPrice()).isEqualTo(10000);
+        verify(memberRepository).findById(7L);
+    }
+
+    @Test
+    void missingMemberIdReturnsStableFinalError() {
+        ReservationRequest request = new ReservationRequest(10L, List.of(1L));
+        when(memberRepository.findById(7L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> reservationService.createReservationWithinTransaction(7L, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ReservationErrorCode.RESERVATION_MEMBER_NOT_FOUND));
     }
 
     @Test

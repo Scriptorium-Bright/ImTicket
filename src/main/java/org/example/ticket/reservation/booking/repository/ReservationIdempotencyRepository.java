@@ -39,6 +39,7 @@ public interface ReservationIdempotencyRepository extends JpaRepository<Reservat
                 ri.attemptToken = :attemptToken,
                 ri.leaseExpiresAt = :leaseExpiresAt,
                 ri.lastErrorCode = null,
+                ri.failureSchemaVersion = null,
                 ri.version = ri.version + 1
             where ri.id = :id
               and ri.requestHash = :requestHash
@@ -72,12 +73,38 @@ public interface ReservationIdempotencyRepository extends JpaRepository<Reservat
               and ri.status = :processing
               and ri.attemptToken = :attemptToken
             """)
-    int markFailedIfOwned(
+    int markRetryableFailureIfOwned(
             @Param("id") Long id,
             @Param("attemptToken") String attemptToken,
             @Param("errorCode") String errorCode,
             @Param("failedAt") LocalDateTime failedAt,
             @Param("processing") ReservationIdempotencyStatus processing,
             @Param("failedRetryable") ReservationIdempotencyStatus failedRetryable
+    );
+
+    /**
+     * 현재 attempt가 소유한 PROCESSING claim을 versioned 최종 실패로 기록한다.
+     * 공개 오류 code와 schema를 함께 저장해 재호출이 같은 결과를 재생하게 한다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update ReservationIdempotency ri
+            set ri.status = :failedFinal,
+                ri.leaseExpiresAt = :failedAt,
+                ri.lastErrorCode = :errorCode,
+                ri.failureSchemaVersion = :failureSchemaVersion,
+                ri.version = ri.version + 1
+            where ri.id = :id
+              and ri.status = :processing
+              and ri.attemptToken = :attemptToken
+            """)
+    int markFinalFailureIfOwned(
+            @Param("id") Long id,
+            @Param("attemptToken") String attemptToken,
+            @Param("errorCode") String errorCode,
+            @Param("failureSchemaVersion") int failureSchemaVersion,
+            @Param("failedAt") LocalDateTime failedAt,
+            @Param("processing") ReservationIdempotencyStatus processing,
+            @Param("failedFinal") ReservationIdempotencyStatus failedFinal
     );
 }

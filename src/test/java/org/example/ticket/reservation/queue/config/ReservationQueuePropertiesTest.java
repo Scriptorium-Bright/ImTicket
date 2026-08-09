@@ -25,6 +25,7 @@ class ReservationQueuePropertiesTest {
         assertThat(properties.pollInterval()).isEqualTo(Duration.ofSeconds(1));
         assertThat(properties.expiryScanInterval()).isEqualTo(Duration.ofSeconds(1));
         assertThat(properties.expiryBatchSize()).isEqualTo(200);
+        assertThat(properties.processingLease()).isEqualTo(Duration.ofSeconds(30));
     }
 
     @Test
@@ -50,7 +51,8 @@ class ReservationQueuePropertiesTest {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
                 "reservation.queue.enabled", "true",
                 "reservation.queue.max-depth", "2000",
-                "reservation.queue.expiry-batch-size", "500"
+                "reservation.queue.expiry-batch-size", "500",
+                "reservation.queue.processing-lease", "45s"
         ));
 
         ReservationQueueProperties properties = new Binder(source)
@@ -61,5 +63,17 @@ class ReservationQueuePropertiesTest {
         assertThat(properties.maxDepth()).isEqualTo(2_000);
         assertThat(properties.expiryBatchSize()).isEqualTo(500);
         assertThat(properties.maxWait()).isEqualTo(Duration.ofMinutes(10));
+        assertThat(properties.processingLease()).isEqualTo(Duration.ofSeconds(45));
+    }
+
+    @Test
+    void queueConfigurationRejectsShorterDatabaseClaimLease() {
+        ReservationQueueConfiguration configuration = new ReservationQueueConfiguration();
+
+        assertThatThrownBy(() -> configuration.reservationProcessingLeasePolicy(
+                ReservationQueueProperties.defaults(),
+                29
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("claimLease");
     }
 }

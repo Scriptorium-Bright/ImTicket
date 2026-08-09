@@ -26,6 +26,7 @@ class ReservationBookingPackageBoundaryTest {
             BOOKING_PACKAGE + ".service.ReservationExpirationService",
             BOOKING_PACKAGE + ".service.ReservationIdempotencyTransactionService",
             BOOKING_PACKAGE + ".service.ReservationIdempotentCreationService",
+            BOOKING_PACKAGE + ".service.ReservationClaimExecutionService",
             BOOKING_PACKAGE + ".service.ReservationPreReserveService",
             BOOKING_PACKAGE + ".service.ReservationService",
             BOOKING_PACKAGE + ".service.SeatService",
@@ -42,6 +43,7 @@ class ReservationBookingPackageBoundaryTest {
             BOOKING_PACKAGE + ".repository.ReservationRepository",
             BOOKING_PACKAGE + ".repository.SeatRepository",
             BOOKING_PACKAGE + ".constant.ReservationErrorCode",
+            BOOKING_PACKAGE + ".constant.ReservationFailureType",
             BOOKING_PACKAGE + ".exception.ReservationSnapshotException",
             BOOKING_PACKAGE + ".util.admission.SeatAdmission",
             BOOKING_PACKAGE + ".util.admission.SeatAdmissionPermit",
@@ -53,8 +55,11 @@ class ReservationBookingPackageBoundaryTest {
             BOOKING_PACKAGE + ".util.lock.ReservationLockStrategy",
             BOOKING_PACKAGE + ".util.lock.ReservationLockStrategyContext",
             BOOKING_PACKAGE + ".util.ReservationRequestHasher",
+            BOOKING_PACKAGE + ".util.ReservationFailureClassifier",
+            BOOKING_PACKAGE + ".util.ReservationFailureSnapshotCodec",
             BOOKING_PACKAGE + ".util.ReservationResponseSnapshotCodec",
-            BOOKING_PACKAGE + ".util.ReservationValidator"
+            BOOKING_PACKAGE + ".util.ReservationValidator",
+            "org.example.ticket.reservation.common.domain.ReservationProcessingLeasePolicy"
     );
 
     private static final List<String> LEGACY_PACKAGES = List.of(
@@ -94,7 +99,7 @@ class ReservationBookingPackageBoundaryTest {
     void queueAndBookingApplicationsDoNotDependOnEachOthersInfrastructure() throws IOException {
         assertSourcesDoNotContain(
                 RESERVATION_SOURCE.resolve("booking/service"),
-                "org.example.ticket.reservation.queue.repository.redis"
+                "org.example.ticket.reservation.queue"
         );
         assertSourcesDoNotContain(
                 RESERVATION_SOURCE.resolve("queue/service"),

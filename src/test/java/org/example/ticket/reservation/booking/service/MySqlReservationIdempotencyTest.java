@@ -23,6 +23,8 @@ import org.example.ticket.reservation.booking.repository.ReservationRepository;
 import org.example.ticket.reservation.booking.repository.SeatRepository;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.util.ReservationRequestHasher;
+import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
+import org.example.ticket.reservation.booking.util.ReservationFailureSnapshotCodec;
 import org.example.ticket.reservation.booking.util.ReservationResponseSnapshotCodec;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
@@ -89,8 +91,11 @@ import static org.mockito.Mockito.when;
 @Import({
         ReservationIdempotencyTransactionService.class,
         ReservationIdempotentCreationService.class,
+        ReservationClaimExecutionService.class,
         ReservationPreReserveService.class,
         ReservationRequestHasher.class,
+        ReservationFailureClassifier.class,
+        ReservationFailureSnapshotCodec.class,
         ReservationResponseSnapshotCodec.class,
         SeatAdmissionService.class,
         ReservationService.class,
@@ -193,6 +198,12 @@ class MySqlReservationIdempotencyTest {
                             "scripts/db/migrations/V20260718_02__create_reservation_idempotency.sql"
                     )
             );
+            ScriptUtils.executeSqlScript(
+                    connection,
+                    new FileSystemResource(
+                            "scripts/db/migrations/V20260810_01__add_reservation_final_failure.sql"
+                    )
+            );
         }
 
         var claim = transactionService.createClaim(
@@ -218,7 +229,9 @@ class MySqlReservationIdempotencyTest {
                 .isEqualTo(ReservationIdempotencyStatus.SUCCEEDED);
         assertThat(createTable)
                 .contains("uk_reservation_idempotency_member_key")
-                .contains("chk_reservation_idempotency_success_snapshot")
+                .contains("chk_reservation_idempotency_snapshot")
+                .contains("failure_schema_version")
+                .contains("FAILED_FINAL")
                 .contains("ascii_bin");
         entityManager.getEntityManagerFactory()
                 .unwrap(SessionFactory.class)
@@ -294,7 +307,7 @@ class MySqlReservationIdempotencyTest {
         var claim = transactionService.createClaim(
                 member.getId(), KEY, HASH, firstToken, LocalDateTime.now().plusSeconds(30)
         );
-        assertThat(transactionService.markFailedIfOwned(
+        assertThat(transactionService.markRetryableFailureIfOwned(
                 claim.id(), firstToken, "SEAT_ADMISSION_REJECTED", LocalDateTime.now()
         )).isTrue();
 
@@ -319,6 +332,46 @@ class MySqlReservationIdempotencyTest {
     }
 
     @Test
+    void finalFailureIsPersistedReplayedAndExcludedFromReclaim() {
+        CreationBase base = createCreationBase("final-replay");
+        ReservationRequest request = new ReservationRequest(base.performanceTimeId(), List.of(base.seatId()));
+        CreationFixture fixture = new CreationFixture(
+                base.memberId(), base.walletAddress(), base.seatId(), null, null, request
+        );
+        stubSeatCreation(fixture);
+        requiresNewTransaction().executeWithoutResult(status -> {
+            Seat seat = seatRepository.findById(base.seatId()).orElseThrow();
+            seat.markAsReserved(SeatStatus.LOCKED);
+        });
+
+        assertThatThrownBy(() -> preReserveService.preReserve(base.walletAddress(), KEY, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ReservationErrorCode.SEAT_ALREADY_RESERVED));
+
+        var claim = idempotencyRepository.findByMemberIdAndIdempotencyKey(base.memberId(), KEY)
+                .orElseThrow();
+        assertThat(claim.getStatus()).isEqualTo(ReservationIdempotencyStatus.FAILED_FINAL);
+        assertThat(claim.getFailureSchemaVersion())
+                .isEqualTo(ReservationFailureSnapshotCodec.CURRENT_SCHEMA_VERSION);
+        assertThat(claim.getLastErrorCode()).isEqualTo("SEAT_ALREADY_RESERVED");
+        assertThat(transactionService.tryReclaim(
+                claim.getId(),
+                claim.getRequestHash(),
+                UUID.randomUUID().toString(),
+                LocalDateTime.now(),
+                LocalDateTime.now().plusSeconds(30)
+        )).isFalse();
+
+        assertThatThrownBy(() -> preReserveService.preReserve(base.walletAddress(), KEY, request))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ReservationErrorCode.SEAT_ALREADY_RESERVED));
+        verify(seatAdmissionService, times(1)).execute(eq(request), any());
+        assertThat(reservationRepository.count()).isZero();
+    }
+
+    @Test
     void staleProcessingReclaimFencesOldAttemptBeforeReservationCreation() {
         Member member = createMember("fence");
         String oldToken = UUID.randomUUID().toString();
@@ -332,7 +385,6 @@ class MySqlReservationIdempotencyTest {
 
         assertThatThrownBy(() -> creationService.create(
                 member.getId(),
-                member.getWalletAddress(),
                 new ReservationRequest(1L, List.of(1L)),
                 HASH,
                 claim.id(),
@@ -409,7 +461,6 @@ class MySqlReservationIdempotencyTest {
 
         var response = creationService.create(
                 fixture.memberId(),
-                fixture.walletAddress(),
                 fixture.request(),
                 HASH,
                 fixture.claimId(),
@@ -434,7 +485,6 @@ class MySqlReservationIdempotencyTest {
 
         assertThatThrownBy(() -> creationService.create(
                 fixture.memberId(),
-                fixture.walletAddress(),
                 fixture.request(),
                 HASH,
                 fixture.claimId(),

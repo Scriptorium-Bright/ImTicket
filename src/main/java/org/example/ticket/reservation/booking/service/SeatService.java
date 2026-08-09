@@ -3,11 +3,13 @@ package org.example.ticket.reservation.booking.service;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.model.PerformanceTime;
 import org.example.ticket.performance.model.SeatPrice;
 import org.example.ticket.performance.repository.PerformanceTimeRepository;
 import org.example.ticket.reservation.booking.dto.response.SeatResponse;
+import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.example.ticket.reservation.booking.domain.Seat;
 import org.example.ticket.reservation.booking.repository.SeatRepository;
 import org.example.ticket.reservation.booking.util.lock.ReservationLockStrategy;
@@ -50,7 +52,7 @@ public class SeatService {
                 ? repository.findByPerformanceTimeIdAndIdsForUpdate(performanceTimeId, seatIds)
                 : repository.findByPerformanceTimeIdAndIds(performanceTimeId, seatIds);
         if (seats.size() != seatIds.size()) {
-            throw new EntityNotFoundException("요청한 공연 회차에 속하지 않는 좌석이 포함되어 있습니다.");
+            throw new BusinessException(ReservationErrorCode.RESERVATION_SEAT_NOT_FOUND);
         }
         return seats;
     }

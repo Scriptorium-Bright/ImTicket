@@ -14,7 +14,9 @@ public record ReservationClaimSnapshot(
         String attemptToken,
         LocalDateTime leaseExpiresAt,
         Integer responseSchemaVersion,
-        String responsePayload
+        String responsePayload,
+        Integer failureSchemaVersion,
+        String lastErrorCode
 ) {
 
     /**
@@ -30,7 +32,9 @@ public record ReservationClaimSnapshot(
                 claim.getAttemptToken(),
                 claim.getLeaseExpiresAt(),
                 claim.getResponseSchemaVersion(),
-                claim.getResponsePayload()
+                claim.getResponsePayload(),
+                claim.getFailureSchemaVersion(),
+                claim.getLastErrorCode()
         );
     }
 }

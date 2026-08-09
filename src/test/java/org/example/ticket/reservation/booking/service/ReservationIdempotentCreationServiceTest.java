@@ -57,12 +57,12 @@ class ReservationIdempotentCreationServiceTest {
                 .build();
         Reservation reservation = Reservation.builder().id(20L).build();
         when(idempotencyRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(claim));
-        when(reservationService.createReservationWithinTransaction("0xowner", request)).thenReturn(response);
+        when(reservationService.createReservationWithinTransaction(7L, request)).thenReturn(response);
         when(snapshotCodec.encode(response)).thenReturn("snapshot");
         when(reservationRepository.getReferenceById(20L)).thenReturn(reservation);
 
         assertThat(creationService.create(
-                7L, "0xowner", request, "hash-1", 11L, "token-1"
+                7L, request, "hash-1", 11L, "token-1"
         )).isSameAs(response);
 
         assertThat(claim.getStatus()).isEqualTo(ReservationIdempotencyStatus.SUCCEEDED);
@@ -80,12 +80,12 @@ class ReservationIdempotentCreationServiceTest {
         when(idempotencyRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(claim));
 
         assertThatThrownBy(() -> creationService.create(
-                7L, "0xowner", request, "hash-1", 11L, "old-token"
+                7L, request, "hash-1", 11L, "old-token"
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode())
                         .isEqualTo(ReservationErrorCode.IDEMPOTENCY_PROCESSING));
 
-        verify(reservationService, never()).createReservationWithinTransaction("0xowner", request);
+        verify(reservationService, never()).createReservationWithinTransaction(7L, request);
     }
 
     private ReservationIdempotency processingClaim(Member member, String token) {

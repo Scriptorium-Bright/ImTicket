@@ -32,7 +32,6 @@ public class ReservationIdempotentCreationService {
     @Transactional
     public ReservationCreateResponse create(
             Long memberId,
-            String walletAddress,
             ReservationRequest request,
             String requestHash,
             Long claimId,
@@ -44,10 +43,7 @@ public class ReservationIdempotentCreationService {
             throw new BusinessException(ReservationErrorCode.IDEMPOTENCY_PROCESSING);
         }
 
-        ReservationCreateResponse response = reservationService.createReservationWithinTransaction(
-                walletAddress,
-                request
-        );
+        ReservationCreateResponse response = reservationService.createReservationWithinTransaction(memberId, request);
         String payload = snapshotCodec.encode(response);
         Reservation reservation = reservationRepository.getReferenceById(response.getId());
         claim.markSucceeded(

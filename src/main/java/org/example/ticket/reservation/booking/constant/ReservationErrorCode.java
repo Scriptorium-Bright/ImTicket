@@ -17,6 +17,8 @@ public enum ReservationErrorCode implements ErrorCode {
     IDEMPOTENCY_KEY_INVALID(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_INVALID", "Idempotency-Key는 canonical UUID여야 합니다."),
     IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT", "같은 Idempotency-Key에 다른 예약 요청을 사용할 수 없습니다."),
     IDEMPOTENCY_PROCESSING(HttpStatus.CONFLICT, "IDEMPOTENCY_PROCESSING", "같은 예약 요청이 처리 중입니다."),
+    RESERVATION_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "RESERVATION_MEMBER_NOT_FOUND", "예약 회원을 찾을 수 없습니다."),
+    RESERVATION_SEAT_NOT_FOUND(HttpStatus.NOT_FOUND, "RESERVATION_SEAT_NOT_FOUND", "공연 회차에 속한 좌석을 찾을 수 없습니다."),
     SEAT_ALREADY_RESERVED(HttpStatus.CONFLICT, "SEAT_ALREADY_RESERVED", "이미 예약 완료된 좌석입니다."),
     SEAT_ADMISSION_REJECTED(HttpStatus.TOO_MANY_REQUESTS, "SEAT_ADMISSION_REJECTED", "좌석 예매 요청이 동시에 몰려 즉시 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     SEAT_LOCK_TIMEOUT(HttpStatus.TOO_MANY_REQUESTS, "SEAT_LOCK_TIMEOUT", "요청이 몰려 좌석 선점 대기 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."),

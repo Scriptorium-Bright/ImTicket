@@ -16,7 +16,8 @@ public record ReservationQueueProperties(
         @DefaultValue("60m") Duration idempotencyRetention,
         @DefaultValue("1s") Duration pollInterval,
         @DefaultValue("1s") Duration expiryScanInterval,
-        @DefaultValue("200") int expiryBatchSize
+        @DefaultValue("200") int expiryBatchSize,
+        @DefaultValue("30s") Duration processingLease
 ) {
 
     /**
@@ -32,6 +33,7 @@ public record ReservationQueueProperties(
         requirePositive(pollInterval, "pollInterval");
         requirePositive(expiryScanInterval, "expiryScanInterval");
         requirePositive(expiryBatchSize, "expiryBatchSize");
+        requirePositive(processingLease, "processingLease");
         if (ticketRetention.compareTo(maxWait) < 0) {
             throw new IllegalArgumentException("ticketRetention must be at least maxWait");
         }
@@ -59,7 +61,8 @@ public record ReservationQueueProperties(
                 idempotencyRetention,
                 Duration.ofSeconds(1),
                 Duration.ofSeconds(1),
-                200
+                200,
+                Duration.ofSeconds(30)
         );
     }
 
@@ -76,7 +79,8 @@ public record ReservationQueueProperties(
                 Duration.ofMinutes(60),
                 Duration.ofSeconds(1),
                 Duration.ofSeconds(1),
-                200
+                200,
+                Duration.ofSeconds(30)
         );
     }
 

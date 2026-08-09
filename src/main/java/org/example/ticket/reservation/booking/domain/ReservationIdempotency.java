@@ -86,6 +86,9 @@ public class ReservationIdempotency {
     @Column(name = "last_error_code", length = 64)
     private String lastErrorCode;
 
+    @Column(name = "failure_schema_version")
+    private Integer failureSchemaVersion;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -131,5 +134,6 @@ public class ReservationIdempotency {
         this.responseSchemaVersion = responseSchemaVersion;
         this.responsePayload = responsePayload;
         this.lastErrorCode = null;
+        this.failureSchemaVersion = null;
     }
 }
