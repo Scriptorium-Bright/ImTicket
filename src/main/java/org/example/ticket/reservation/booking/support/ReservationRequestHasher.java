@@ -2,22 +2,17 @@ package org.example.ticket.reservation.booking.support;
 
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.reservation.booking.application.ReservationRequestFingerprint;
-import org.example.ticket.reservation.booking.domain.ReservationErrorCode;
 import org.example.ticket.reservation.booking.api.ReservationRequest;
-import org.example.ticket.reservation.booking.support.ReservationValidator;
+import org.example.ticket.reservation.booking.domain.ReservationErrorCode;
+import org.example.ticket.reservation.shared.intent.ReservationIntentFingerprint;
+import org.example.ticket.reservation.shared.intent.ReservationIntentFingerprintFactory;
 import org.springframework.stereotype.Component;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
-import java.util.List;
+import java.util.HashSet;
 import java.util.UUID;
 
 @Component
 public class ReservationRequestHasher {
-
-    private static final String SCHEMA = "reservation-pre-reserve:v1";
 
     /**
      * 외부 멱등성 키를 공백 없는 canonical UUID 문자열로 정규화한다.
@@ -45,28 +40,20 @@ public class ReservationRequestHasher {
      */
     public ReservationRequestFingerprint fingerprint(ReservationRequest request) {
         ReservationValidator.validateCreateRequest(request);
-        if (request.getSeatIds().stream().anyMatch(java.util.Objects::isNull)) {
+        if (request.getSeatIds().stream().anyMatch(seatId -> seatId == null || seatId <= 0)) {
             throw new BusinessException(ReservationErrorCode.INVALID_SEAT_ID);
         }
-
-        List<Long> normalizedSeatIds = request.getSeatIds().stream().sorted().toList();
-        ReservationValidator.validateNoDuplicateSeatIds(request.getSeatIds(), normalizedSeatIds.stream().distinct().toList());
-
-        String canonical = SCHEMA + "\n"
-                + "performanceTimeId=" + request.getPerformanceTimeId() + "\n"
-                + "seatIds=" + normalizedSeatIds.stream()
-                .map(String::valueOf)
-                .collect(java.util.stream.Collectors.joining(","));
-        return new ReservationRequestFingerprint(sha256(canonical), normalizedSeatIds);
-    }
-
-    /** UTF-8 canonical 본문을 SHA-256으로 해싱해 비교·저장에 사용할 16진수 문자열로 변환한다. */
-    private String sha256(String canonical) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(canonical.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("SHA-256을 사용할 수 없습니다.", exception);
+        if (new HashSet<>(request.getSeatIds()).size() != request.getSeatIds().size()) {
+            throw new BusinessException(ReservationErrorCode.DUPLICATE_SEAT_INCLUDED);
         }
+
+        ReservationIntentFingerprint fingerprint = ReservationIntentFingerprintFactory.create(
+                request.getPerformanceTimeId(),
+                request.getSeatIds()
+        );
+        return new ReservationRequestFingerprint(
+                fingerprint.requestHash(),
+                fingerprint.normalizedSeatIds()
+        );
     }
 }

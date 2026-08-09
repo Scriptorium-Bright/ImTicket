@@ -35,9 +35,14 @@ class ReservationRequestHasherTest {
     }
 
     @Test
-    void rejectsNullAndDuplicateSeatIdsBeforeClaim() {
+    void rejectsNullNonPositiveAndDuplicateSeatIdsBeforeClaim() {
         assertThatThrownBy(() -> hasher.fingerprint(
                 new ReservationRequest(10L, Arrays.asList(1L, null))
+        )).isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ReservationErrorCode.INVALID_SEAT_ID));
+
+        assertThatThrownBy(() -> hasher.fingerprint(
+                new ReservationRequest(10L, List.of(-1L))
         )).isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ReservationErrorCode.INVALID_SEAT_ID));
 
