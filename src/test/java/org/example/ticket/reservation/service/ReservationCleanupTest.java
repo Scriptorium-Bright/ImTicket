@@ -18,6 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class ReservationCleanupTest extends ApiIntegrationTestBase {
 
+    private static final String TEST_LOCK_NAME = "cleanupExpiredReservation-test";
+
     @Autowired
     private LockProvider lockProvider;
 
@@ -27,7 +29,7 @@ public class ReservationCleanupTest extends ApiIntegrationTestBase {
     @Test
     @DisplayName("만료 예약 정리: ShedLock provider는 같은 cleanup lock을 중복 획득하지 않는다")
     public void cleanupExpiredReservationLockIsExclusive() {
-        jdbcTemplate.update("delete from shedlock where name = ?", "cleanupExpiredReservation");
+        jdbcTemplate.update("delete from shedlock where name = ?", TEST_LOCK_NAME);
         if (lockProvider instanceof StorageBasedLockProvider storageBasedLockProvider) {
             storageBasedLockProvider.clearCache();
         }
@@ -35,7 +37,7 @@ public class ReservationCleanupTest extends ApiIntegrationTestBase {
         Instant now = Instant.now();
         LockConfiguration configuration = new LockConfiguration(
                 now,
-                "cleanupExpiredReservation",
+                TEST_LOCK_NAME,
                 Duration.ofMinutes(6),
                 Duration.ZERO
         );
