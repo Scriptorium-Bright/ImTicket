@@ -1,0 +1,61 @@
+-- KEYS: admitted ZSET, waiting ZSET, deadline ZSET, sequence STRING, ticket HASH, stream
+-- ARGV: ticketId, performanceTimeId, ownerHash, requestHash, seatIds,
+--       enqueuedAtMs, deadlineAtMs, maxDepth, retentionMs
+local function type_name(key)
+    local value = redis.call('TYPE', key)
+    if type(value) == 'table' then
+        return value['ok']
+    end
+    return value
+end
+
+local function has_expected_type(key, expected)
+    local actual = type_name(key)
+    return actual == 'none' or actual == expected
+end
+
+if not has_expected_type(KEYS[1], 'zset')
+        or not has_expected_type(KEYS[2], 'zset')
+        or not has_expected_type(KEYS[3], 'zset')
+        or not has_expected_type(KEYS[4], 'string')
+        or not has_expected_type(KEYS[5], 'hash')
+        or not has_expected_type(KEYS[6], 'stream') then
+    return 'KEY_TYPE_ERROR'
+end
+if redis.call('EXISTS', KEYS[5]) == 1 then
+    return 'TICKET_EXISTS'
+end
+if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[8]) then
+    return 'FULL'
+end
+
+local sequence = redis.call('INCR', KEYS[4])
+local stream_id = redis.call('XADD', KEYS[6], '*',
+        'ticketId', ARGV[1],
+        'performanceTimeId', ARGV[2],
+        'ownerHash', ARGV[3],
+        'requestHash', ARGV[4],
+        'seatIds', ARGV[5],
+        'sequence', tostring(sequence),
+        'enqueuedAt', ARGV[6])
+
+redis.call('HSET', KEYS[5],
+        'ticketId', ARGV[1],
+        'performanceTimeId', ARGV[2],
+        'ownerHash', ARGV[3],
+        'requestHash', ARGV[4],
+        'seatIds', ARGV[5],
+        'status', 'WAITING',
+        'sequence', tostring(sequence),
+        'streamId', stream_id,
+        'enqueuedAt', ARGV[6],
+        'deadlineAt', ARGV[7])
+redis.call('ZADD', KEYS[1], sequence, ARGV[1])
+redis.call('ZADD', KEYS[2], sequence, ARGV[1])
+redis.call('ZADD', KEYS[3], ARGV[7], ARGV[1])
+
+for index = 1, 6 do
+    redis.call('PEXPIRE', KEYS[index], ARGV[9])
+end
+
+return 'ACCEPTED|' .. tostring(sequence) .. '|' .. stream_id
