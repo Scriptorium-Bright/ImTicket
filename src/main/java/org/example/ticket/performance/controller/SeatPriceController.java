@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.performance.request.SeatPriceRequest;
 import org.example.ticket.performance.service.SeatPriceService;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

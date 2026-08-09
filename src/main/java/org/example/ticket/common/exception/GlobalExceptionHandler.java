@@ -9,6 +9,7 @@ import org.example.ticket.common.response.ErrorResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.example.ticket.reservation.exception.ReservationErrorCode;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -45,6 +46,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleOptimisticLockException(RuntimeException e) {
         log.warn("Optimistic lock conflict: {}", e.getMessage());
         return toResponse(ReservationErrorCode.SEAT_ALREADY_RESERVED);
+    }
+
+    @ExceptionHandler({
+            PessimisticLockingFailureException.class,
+            jakarta.persistence.PessimisticLockException.class,
+            jakarta.persistence.LockTimeoutException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handlePessimisticLockException(RuntimeException e) {
+        log.warn("Pessimistic lock acquisition failed: {}", e.getMessage());
+        return toResponse(ReservationErrorCode.SEAT_LOCK_TIMEOUT);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

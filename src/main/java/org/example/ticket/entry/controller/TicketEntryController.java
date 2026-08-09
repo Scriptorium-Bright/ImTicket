@@ -3,7 +3,7 @@ package org.example.ticket.entry.controller;
 import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletRequest;
 import org.example.ticket.entry.service.TicketEntryService;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;

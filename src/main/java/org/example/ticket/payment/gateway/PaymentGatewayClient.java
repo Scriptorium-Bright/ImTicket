@@ -1,5 +1,8 @@
 package org.example.ticket.payment.gateway;
 
+import org.example.ticket.payment.dto.PaymentAuthorization;
+import org.example.ticket.payment.dto.VerifiedPaymentSnapshot;
+
 public interface PaymentGatewayClient {
 
     String provider();

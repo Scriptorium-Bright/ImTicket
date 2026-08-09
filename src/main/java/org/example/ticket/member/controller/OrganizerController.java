@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.request.OrganizerRequest;
 import org.example.ticket.member.service.OrganizerService;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;

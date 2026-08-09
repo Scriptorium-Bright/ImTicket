@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.request.RegisterRequest;
 import org.example.ticket.member.service.AuthenticationService;
 import org.example.ticket.member.service.MemberService;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;

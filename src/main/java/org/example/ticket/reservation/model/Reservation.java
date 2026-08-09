@@ -50,17 +50,28 @@ public class Reservation {
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL)
     private List<ReservedSeat> reservedSeats = new ArrayList<>();
 
+    /** 예약 상태만 변경한다. 만료 시각은 함께 조정하지 않는다. */
     public void changeReservationStatus(ReservationStatus reservationStatus) {
         this.reservationStatus = reservationStatus;
     }
 
+    /** 예약에 연결된 좌석 목록을 교체한다. */
     public void setReservedSeats(List<ReservedSeat> reservedSeats) {
         this.reservedSeats = reservedSeats;
     }
 
+    /** 예약 상태와 결제 대기 만료 시각을 함께 변경한다. */
     public void manageReservationStatus(ReservationStatus reservationStatus, LocalDateTime expiredTime) {
         this.reservationStatus = reservationStatus;
         this.expiredTime = expiredTime;
+    }
+
+    /** 결제 대기 중인 예약을 만료 상태로 전환한다. */
+    public void expire() {
+        if (reservationStatus != ReservationStatus.PENDING_PAYMENT) {
+            throw new IllegalStateException("결제 대기 예약만 만료할 수 있습니다.");
+        }
+        this.reservationStatus = ReservationStatus.EXPIRED;
     }
 
 /*

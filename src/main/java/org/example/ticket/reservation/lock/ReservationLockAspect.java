@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.stereotype.Component;
@@ -40,6 +41,7 @@ public class ReservationLockAspect {
     private final AsyncTaskExecutor reservationSingleThreadExecutor;
     private final ReservationLockStrategyContext strategyContext;
 
+    /** lock 전략별 실행기와 DB named lock에 필요한 의존성을 주입한다. */
     public ReservationLockAspect(
             DataSource dataSource,
             @Qualifier("reservationSingleThreadTaskExecutor") AsyncTaskExecutor reservationSingleThreadExecutor,
@@ -50,7 +52,7 @@ public class ReservationLockAspect {
         this.strategyContext = strategyContext;
     }
 
-    @Value("${reservation.lock-strategy:pessimistic}")
+    @Value("${reservation.lock-strategy:reentrant}")
     private String configuredStrategy;
 
     @Value("${reservation.lock.named-timeout-seconds:5}")
@@ -62,7 +64,22 @@ public class ReservationLockAspect {
     private final ConcurrentMap<Long, Object> monitors = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, ReentrantLock> reentrantLocks = new ConcurrentHashMap<>();
 
-    @Around(value = "@annotation(reservationLock)", argNames = "joinPoint,reservationLock")
+    @Around("@annotation(org.example.ticket.reservation.lock.ReservationLock)")
+    /** @ReservationLock이 붙은 예매 메서드를 가로채 실제 lock 전략을 적용한다. */
+    public Object lockReservationSeats(ProceedingJoinPoint joinPoint) throws Throwable {
+        ReservationLock reservationLock = ((MethodSignature) joinPoint.getSignature())
+                .getMethod()
+                .getAnnotation(ReservationLock.class);
+        if (reservationLock == null) {
+            throw new IllegalStateException("@ReservationLock 어노테이션을 읽지 못했습니다.");
+        }
+        return lockReservationSeats(joinPoint, reservationLock);
+    }
+
+    /**
+     * 테스트와 명시적 호출에서 전략을 주입할 수 있도록 남겨 둔 순수 실행 경계다.
+     * Spring AOP 진입점은 위 메서드에서 실제 메서드 어노테이션을 읽어 이 경계를 호출한다.
+     */
     public Object lockReservationSeats(
             ProceedingJoinPoint joinPoint,
             ReservationLock reservationLock
@@ -79,7 +96,7 @@ public class ReservationLockAspect {
         }
 
         ReservationLockStrategy strategy = resolveStrategy(reservationLock.strategy());
-        ThrowingOperation operation = () -> strategyContext.withStrategy(strategy, joinPoint::proceed);
+        ReservationLockOperation<Object> operation = () -> strategyContext.withStrategy(strategy, joinPoint::proceed);
 
         return switch (strategy) {
             case SYNCHRONIZED -> withSynchronizedLocks(seatIds, operation, 0);
@@ -91,7 +108,8 @@ public class ReservationLockAspect {
         };
     }
 
-    private Object withSingleThread(ThrowingOperation operation) throws Throwable {
+    /** 하나의 executor로 예매 작업을 직렬화하고 작업 예외·interrupt를 원래 호출자에게 전달한다. */
+    private Object withSingleThread(ReservationLockOperation<Object> operation) throws Throwable {
         Future<Object> future = reservationSingleThreadExecutor.submit(() -> {
             try {
                 return operation.run();
@@ -115,9 +133,10 @@ public class ReservationLockAspect {
         }
     }
 
+    /** 좌석 ID 순서대로 JVM monitor를 중첩 획득해 다중 좌석 요청의 lock 순서를 통일한다. */
     private Object withSynchronizedLocks(
             List<Long> seatIds,
-            ThrowingOperation operation,
+            ReservationLockOperation<Object> operation,
             int index
     ) throws Throwable {
         if (index == seatIds.size()) {
@@ -130,9 +149,10 @@ public class ReservationLockAspect {
         }
     }
 
+    /** 좌석별 공정 ReentrantLock을 timeout과 함께 순서대로 획득하고 완료 시 역순으로 반납한다. */
     private Object withReentrantLocks(
             List<Long> seatIds,
-            ThrowingOperation operation,
+            ReservationLockOperation<Object> operation,
             int index
     ) throws Throwable {
         if (index == seatIds.size()) {
@@ -160,7 +180,8 @@ public class ReservationLockAspect {
         }
     }
 
-    private Object withMysqlNamedLocks(List<Long> seatIds, ThrowingOperation operation) throws Throwable {
+    /** MySQL named lock을 좌석별로 획득해 JVM 밖에서도 공유되는 lock 경계를 사용한다. */
+    private Object withMysqlNamedLocks(List<Long> seatIds, ReservationLockOperation<Object> operation) throws Throwable {
         Connection connection = DataSourceUtils.getConnection(dataSource);
         List<String> acquiredNames = new ArrayList<>();
         try {
@@ -180,6 +201,7 @@ public class ReservationLockAspect {
         }
     }
 
+    /** GET_LOCK으로 하나의 MySQL named lock을 timeout 안에 획득했는지 확인한다. */
     private boolean acquireNamedLock(Connection connection, String lockName) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement("SELECT GET_LOCK(?, ?)");) {
             statement.setString(1, lockName);
@@ -190,6 +212,7 @@ public class ReservationLockAspect {
         }
     }
 
+    /** 획득한 MySQL named lock을 해제하되 원래 예외가 있으면 해제 실패로 덮어쓰지 않는다. */
     private void releaseNamedLock(Connection connection, String lockName) {
         try (PreparedStatement statement = connection.prepareStatement("SELECT RELEASE_LOCK(?)")) {
             statement.setString(1, lockName);
@@ -199,6 +222,7 @@ public class ReservationLockAspect {
         }
     }
 
+    /** 어노테이션 설정을 우선 적용하고 CONFIGURED인 경우 애플리케이션 설정을 읽는다. */
     private ReservationLockStrategy resolveStrategy(ReservationLockStrategy annotationStrategy) {
         if (annotationStrategy == ReservationLockStrategy.CONFIGURED) {
             return ReservationLockStrategy.from(configuredStrategy);
@@ -206,6 +230,7 @@ public class ReservationLockAspect {
         return annotationStrategy;
     }
 
+    /** AOP 대상 메서드 인자 중 예약 요청을 찾아 lock 대상 좌석을 얻는다. */
     private ReservationRequest findRequest(Object[] arguments) {
         for (Object argument : arguments) {
             if (argument instanceof ReservationRequest request) {
@@ -215,6 +240,7 @@ public class ReservationLockAspect {
         return null;
     }
 
+    /** null·중복 좌석을 제거하고 정렬해 모든 lock 전략이 같은 획득 순서를 사용하게 한다. */
     private List<Long> normalizeSeatIds(ReservationRequest request) {
         if (request == null || request.getSeatIds() == null || request.getSeatIds().isEmpty()) {
             return List.of();
@@ -224,10 +250,5 @@ public class ReservationLockAspect {
                 .distinct()
                 .sorted()
                 .toList();
-    }
-
-    @FunctionalInterface
-    private interface ThrowingOperation {
-        Object run() throws Throwable;
     }
 }

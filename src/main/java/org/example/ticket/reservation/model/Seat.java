@@ -3,7 +3,7 @@ package org.example.ticket.reservation.model;
 import jakarta.persistence.*;
 import lombok.*;
 import org.example.ticket.performance.model.PerformanceTime;
-import org.example.ticket.reservation.request.SeatRequest;
+import org.example.ticket.reservation.dto.SeatCreationData;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
 
@@ -59,7 +59,8 @@ public class Seat {
     @JoinColumn(name = "performance_time_id", nullable = false)
     private PerformanceTime performanceTime; // 이 좌석이 속한 특정 공연 회차
 
-    public static Seat from(SeatRequest seat, Boolean isReservation) {
+    /** 내부 좌석 생성 데이터를 JPA entity로 변환한다. */
+    public static Seat from(SeatCreationData seat, Boolean isReservation) {
         return Seat.builder()
                 .seatFloor(seat.getSeatFloor())
                 .seatSection(seat.getSeatSection())
@@ -71,6 +72,7 @@ public class Seat {
                 .build();
     }
 
+    /** 좌석의 예약 가능 상태를 변경한다. */
     public void markAsReserved(SeatStatus seatStatus) {
         this.seatStatus = seatStatus;
     }

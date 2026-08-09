@@ -38,9 +38,13 @@ public class SeatService {
     private final VenueHallSeatTemplateRepository seatTemplateRepository;
     private final ReservationLockStrategyContext lockStrategyContext;
 
-    @Value("${reservation.lock-strategy:pessimistic}")
+    @Value("${reservation.lock-strategy:reentrant}")
     private String reservationLockStrategy;
 
+    /**
+     * 요청한 공연 회차의 좌석을 조회하고, 비관적 잠금 전략일 때는 DB 행 잠금까지 획득한다.
+     * 조회된 수가 요청 수와 다르면 다른 회차의 좌석 또는 존재하지 않는 좌석이 포함된 것으로 처리한다.
+     */
     public List<Seat> findAndLockSeatsByPerformanceTime(Long performanceTimeId, List<Long> seatIds) {
         List<Seat> seats = usesDatabasePessimisticLock()
                 ? repository.findByPerformanceTimeIdAndIdsForUpdate(performanceTimeId, seatIds)
@@ -51,21 +55,28 @@ public class SeatService {
         return seats;
     }
 
+    /** 현재 요청에 적용된 잠금 전략을 우선 사용하고, 없으면 설정값으로 DB 비관적 잠금 사용 여부를 결정한다. */
     private boolean usesDatabasePessimisticLock() {
         ReservationLockStrategy strategy = lockStrategyContext.currentStrategy()
                 .orElseGet(() -> ReservationLockStrategy.from(reservationLockStrategy));
         return strategy == ReservationLockStrategy.PESSIMISTIC;
     }
 
+    /** 이미 조회·잠금된 좌석 목록의 예약 상태를 같은 영속성 컨텍스트에서 일괄 변경한다. */
     public void changeSeatsState(List<Seat> seats, SeatStatus seatStatus) {
         seats.forEach(seat -> seat.markAsReserved(seatStatus));
     }
 
+    /** 공연 회차의 좌석 배치와 현재 상태를 변경 없이 조회해 좌석도 응답으로 반환한다. */
     @Transactional(readOnly = true)
     public List<SeatResponse> viewSeatMap(Long performanceTimeId) {
         return repository.findSeatMapByPerformanceTimeId(performanceTimeId);
     }
 
+    /**
+     * 공연장 좌석 템플릿과 공연별 가격 정보를 조합해 한 공연 회차의 초기 좌석 데이터를 비동기로 생성한다.
+     * 템플릿이나 가격 정보가 불완전하면 완료된 미래값에 예외를 담아 호출자가 실패를 확인할 수 있게 한다.
+     */
     @Async("seatCreationTaskExecutor")
     @Transactional
     public CompletableFuture<Void> preprocessSeatData(Long performanceTimeId, String walletAddress) {
@@ -105,6 +116,7 @@ public class SeatService {
         return CompletableFuture.completedFuture(null);
     }
 
+    /** 공연에 정의된 좌석 등급별 가격을 좌석 생성에 쓰기 쉬운 맵으로 변환한다. */
     @NotNull
     private static Map<SeatInfo, Integer> getPriceInfo(Performance performance) {
         return performance.getSeatPrices()
@@ -118,6 +130,7 @@ public class SeatService {
     }
 
 
+    /** 좌석 템플릿 하나에 해당 등급의 가격과 기본 AVAILABLE 상태를 적용해 회차 좌석 엔티티를 만든다. */
     private static Seat processSeat(
             VenueHallSeatTemplate seatTemplate,
             PerformanceTime performanceTime,

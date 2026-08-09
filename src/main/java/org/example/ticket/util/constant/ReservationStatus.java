@@ -7,6 +7,7 @@ public enum ReservationStatus {
 
     SUCCESS,
     LOCKED,
-    PENDING_PAYMENT;
+    PENDING_PAYMENT,
+    EXPIRED;
 
 }

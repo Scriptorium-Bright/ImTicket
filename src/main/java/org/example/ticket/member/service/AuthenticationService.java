@@ -5,8 +5,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.model.NoncePurpose;
 import org.example.ticket.member.request.RegisterRequest;
-import org.example.ticket.member.signature.request.SignatureVerifyRequest;
-import org.example.ticket.member.signature.service.SignatureService;
+import org.example.ticket.member.signature.dto.SignatureVerification;
+import org.example.ticket.member.signature.SignatureVerifier;
 import org.example.ticket.sms.service.SMSService;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 public class AuthenticationService {
 
     private final MemberService memberService;
-    private final SignatureService signatureService;
+    private final SignatureVerifier signatureVerifier;
     private final SMSService smsService;
 
 
@@ -36,14 +36,14 @@ public class AuthenticationService {
             throw new BadCredentialsException("Nonce challenge message mismatch.");
         }
 
-        SignatureVerifyRequest sig = SignatureVerifyRequest
+        SignatureVerification verification = SignatureVerification
                 .builder()
                 .signature(request.getSignature())
                 .walletAddress(request.getWalletAddress())
                 .message(expectedMessage)
                 .build();
 
-        if (!signatureService.verifySignature(sig)) {
+        if (!signatureVerifier.verifySignature(verification)) {
             throw new BadCredentialsException("Wallet signature verification failed.");
         }
 

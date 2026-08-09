@@ -24,5 +24,8 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long
     @Query("select po from PaymentOrder po where po.id = :id")
     Optional<PaymentOrder> findByIdForUpdate(@Param("id") Long id);
 
+    @Query("select po.reservation.id from PaymentOrder po where po.id = :id")
+    Optional<Long> findReservationIdById(@Param("id") Long id);
+
     Optional<PaymentOrder> findByMemberIdAndIdempotencyKey(Long memberId, String idempotencyKey);
 }

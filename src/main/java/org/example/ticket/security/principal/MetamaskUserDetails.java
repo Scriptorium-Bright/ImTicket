@@ -1,6 +1,5 @@
-package org.example.ticket.security.util;
+package org.example.ticket.security.principal;
 
-import lombok.Getter;
 import org.example.ticket.member.model.Member;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;

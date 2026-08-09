@@ -1,8 +1,8 @@
-package org.example.ticket.member.signature.service;
+package org.example.ticket.member.signature;
 
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.member.signature.request.SignatureVerifyRequest;
-import org.springframework.stereotype.Service;
+import org.example.ticket.member.signature.dto.SignatureVerification;
+import org.springframework.stereotype.Component;
 import org.web3j.crypto.ECDSASignature;
 import org.web3j.crypto.Hash;
 import org.web3j.crypto.Keys;
@@ -14,14 +14,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 @Slf4j
-@Service
-public class SignatureService {
+@Component
+public class SignatureVerifier {
 
-    public boolean verifySignature(SignatureVerifyRequest verifyRequest) {
+    public boolean verifySignature(SignatureVerification verification) {
         return isValidSignature(
-                verifyRequest.getWalletAddress(),
-                getMessageHash(String.valueOf(verifyRequest.getMessage())),
-                getSignatureData(verifyRequest.getSignature())
+                verification.getWalletAddress(),
+                getMessageHash(String.valueOf(verification.getMessage())),
+                getSignatureData(verification.getSignature())
         );
     }
 

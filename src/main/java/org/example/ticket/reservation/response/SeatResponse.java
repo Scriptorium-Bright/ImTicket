@@ -31,6 +31,7 @@ public class SeatResponse {
     private Boolean isReservation;
     private SeatStatus seatStatus;
 
+    /** 좌석 entity에서 API 응답에 필요한 좌석 정보를 복사한다. */
     public SeatResponse(Seat seat) {
         this.seatFloor = seat.getSeatFloor();
         this.seatNumber = seat.getSeatNumber();

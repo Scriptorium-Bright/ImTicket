@@ -1,13 +1,14 @@
 package org.example.ticket.payment.gateway;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.example.ticket.common.exception.BusinessException;
+import org.example.ticket.payment.dto.PaymentAuthorization;
+import org.example.ticket.payment.dto.PortOnePayment;
+import org.example.ticket.payment.dto.VerifiedPaymentSnapshot;
 import org.example.ticket.payment.exception.PaymentErrorCode;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 
 /**
  * PortOne V2 인증 결제의 서버 조회 검증 adapter다.
@@ -75,20 +76,5 @@ public class PortOnePaymentGatewayClient implements PaymentGatewayClient {
         } catch (RestClientException e) {
             throw new BusinessException(PaymentErrorCode.PAYMENT_PROVIDER_REJECTED);
         }
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record PortOnePayment(
-            String status,
-            String id,
-            String transactionId,
-            PortOneAmount amount,
-            String currency,
-            OffsetDateTime paidAt
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record PortOneAmount(Integer total) {
     }
 }

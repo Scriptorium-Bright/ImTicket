@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.performance.request.PerformanceTimeRequest;
 import org.example.ticket.performance.response.PerformanceTimeResponse;
 import org.example.ticket.performance.service.PerformanceTimeService;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

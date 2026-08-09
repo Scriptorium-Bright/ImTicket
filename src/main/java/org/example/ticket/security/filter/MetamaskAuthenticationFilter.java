@@ -6,7 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.security.dto.LoginRequest;
+import org.example.ticket.security.request.LoginRequest;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;

@@ -6,7 +6,7 @@ import org.example.ticket.performance.request.PerformanceDetailRequest;
 import org.example.ticket.performance.response.PerformanceDetailsResponse;
 import org.example.ticket.performance.response.PerformanceOverviewResponse;
 import org.example.ticket.performance.service.PerformanceService;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.example.ticket.common.response.ApiResponse;

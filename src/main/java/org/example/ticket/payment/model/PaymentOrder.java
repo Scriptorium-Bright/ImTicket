@@ -72,4 +72,8 @@ public class PaymentOrder {
     public void markApplied() {
         this.status = PaymentOrderStatus.APPLIED;
     }
+
+    public void markRefundPending() {
+        this.status = PaymentOrderStatus.REFUND_PENDING;
+    }
 }

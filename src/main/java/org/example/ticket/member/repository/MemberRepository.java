@@ -16,6 +16,10 @@ public interface MemberRepository extends JpaRepository<Member, Long> {
     Boolean existsMemberByWalletAddress(String walletAddress);
     Optional<Member> findByWalletAddress(String walletAddress);
     Optional<Member> findByWalletAddressIgnoreCase(String walletAddress);
+
+    @Query("select m.id from Member m where lower(m.walletAddress) = lower(:walletAddress)")
+    Optional<Long> findIdByWalletAddressIgnoreCase(@Param("walletAddress") String walletAddress);
+
     boolean existsMemberByPhoneNumber(String phoneNumber);
     Member findByNickname(String nickname);
 

@@ -1,4 +1,4 @@
-package org.example.ticket.security.dto;
+package org.example.ticket.security.request;
 
 public record LoginRequest(
         String walletAddress,

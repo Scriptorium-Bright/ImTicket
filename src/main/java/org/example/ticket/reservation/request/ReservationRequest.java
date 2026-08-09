@@ -18,6 +18,7 @@ public class ReservationRequest {
     @JsonProperty("seatIds")
     private List<Long> seatIds;
 
+    /** 공연 회차와 예약 대상 좌석 ID를 담은 요청 객체를 생성한다. */
     public ReservationRequest(Long performanceTimeId, List<Long> seatIds) {
         this.performanceTimeId = performanceTimeId;
         this.seatIds = seatIds;

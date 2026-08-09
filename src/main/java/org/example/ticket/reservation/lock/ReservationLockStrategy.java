@@ -9,9 +9,10 @@ public enum ReservationLockStrategy {
     MYSQL_NAMED,
     SINGLE_THREAD;
 
+    /** 설정 문자열을 실제 lock 전략 enum으로 변환하고 별칭·잘못된 값을 검증한다. */
     public static ReservationLockStrategy from(String value) {
         if (value == null || value.isBlank()) {
-            return PESSIMISTIC;
+            return REENTRANT;
         }
 
         String normalized = value.trim().toUpperCase().replace('-', '_');

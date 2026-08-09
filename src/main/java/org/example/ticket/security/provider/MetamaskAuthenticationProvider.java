@@ -6,9 +6,9 @@ import org.example.ticket.member.model.Member;
 import org.example.ticket.member.model.NoncePurpose;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.member.service.MemberService;
-import org.example.ticket.member.signature.request.SignatureVerifyRequest;
-import org.example.ticket.member.signature.service.SignatureService;
-import org.example.ticket.security.util.MetamaskUserDetails;
+import org.example.ticket.member.signature.dto.SignatureVerification;
+import org.example.ticket.member.signature.SignatureVerifier;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthenticationProvider {
 
-    private final SignatureService signatureService;
+    private final SignatureVerifier signatureVerifier;
     private final MemberRepository repository;
     private final MemberService memberService;
 
@@ -34,10 +34,10 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
         MetamaskUserDetails metamaskUserDetails = (MetamaskUserDetails) userDetails;
 
         String expectedMessage = getExpectedLoginMessage(metamaskUserDetails.member());
-        SignatureVerifyRequest request =
-                initSignatureVerifyRequest(authentication, token, expectedMessage);
+        SignatureVerification verification =
+                initSignatureVerification(authentication, token, expectedMessage);
 
-        if (!signatureService.verifySignature(request)) {
+        if (!signatureVerifier.verifySignature(verification)) {
             throw new BadCredentialsException("Signature is not valid");
         }
 
@@ -55,8 +55,8 @@ public class MetamaskAuthenticationProvider extends AbstractUserDetailsAuthentic
         }
     }
 
-    private static SignatureVerifyRequest initSignatureVerifyRequest(UsernamePasswordAuthenticationToken authentication, MetamaskAuthenticationToken token, String expectedMessage) {
-        return SignatureVerifyRequest.builder()
+    private static SignatureVerification initSignatureVerification(UsernamePasswordAuthenticationToken authentication, MetamaskAuthenticationToken token, String expectedMessage) {
+        return SignatureVerification.builder()
                 .walletAddress(token.getAddress())
                 .signature(authentication.getCredentials().toString())
                 .message(expectedMessage)

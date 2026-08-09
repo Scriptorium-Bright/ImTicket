@@ -7,7 +7,7 @@ import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.payment.constant.PaymentAttemptStatus;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.exception.PaymentErrorCode;
-import org.example.ticket.payment.gateway.PaymentAuthorization;
+import org.example.ticket.payment.dto.PaymentAuthorization;
 import org.example.ticket.payment.gateway.PaymentGatewayClient;
 import org.example.ticket.payment.model.PaymentAttempt;
 import org.example.ticket.payment.model.PaymentOrder;
@@ -58,7 +58,7 @@ public class PaymentPreparationService {
             return response(order);
         }
 
-        Reservation reservation = reservationRepository.findByIdWithDetails(request.reservationId())
+        Reservation reservation = reservationRepository.findByIdForUpdate(request.reservationId())
                 .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_ORDER_NOT_FOUND));
         ReservationValidator.validateConfirmable(reservation, walletAddress);
 

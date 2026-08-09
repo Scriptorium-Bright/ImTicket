@@ -1,4 +1,4 @@
-package org.example.ticket.payment.gateway;
+package org.example.ticket.payment.dto;
 
 public record PaymentAuthorization(
         Long paymentOrderId,

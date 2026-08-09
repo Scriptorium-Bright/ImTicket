@@ -1,4 +1,4 @@
-package org.example.ticket.security.dto;
+package org.example.ticket.security.response;
 
 import lombok.Builder;
 import lombok.Getter;

@@ -4,9 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.exception.PaymentErrorCode;
-import org.example.ticket.payment.gateway.PaymentAuthorization;
+import org.example.ticket.payment.dto.PaymentAuthorization;
 import org.example.ticket.payment.gateway.PaymentGatewayClient;
-import org.example.ticket.payment.gateway.VerifiedPaymentSnapshot;
+import org.example.ticket.payment.dto.VerifiedPaymentSnapshot;
 import org.example.ticket.payment.model.PaymentAttempt;
 import org.example.ticket.payment.model.PaymentOrder;
 import org.example.ticket.payment.repository.PaymentAttemptRepository;
@@ -32,7 +32,7 @@ public class PaymentVerificationService {
                 .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_ORDER_NOT_FOUND));
         validateOwner(order, walletAddress);
 
-        if (order.getStatus() == PaymentOrderStatus.APPLIED) {
+        if (isReplayableTerminalStatus(order.getStatus())) {
             String providerTransactionId = paymentAttemptRepository
                     .findTopByPaymentOrderIdOrderByCreatedAtDesc(paymentOrderId)
                     .map(PaymentAttempt::getProviderTransactionId)
@@ -72,5 +72,11 @@ public class PaymentVerificationService {
                 || !order.getMember().getWalletAddress().equalsIgnoreCase(walletAddress)) {
             throw new BusinessException(PaymentErrorCode.PAYMENT_ORDER_NOT_OWNER);
         }
+    }
+
+    private boolean isReplayableTerminalStatus(PaymentOrderStatus status) {
+        return status == PaymentOrderStatus.APPLIED
+                || status == PaymentOrderStatus.REFUND_PENDING
+                || status == PaymentOrderStatus.REFUNDED;
     }
 }
