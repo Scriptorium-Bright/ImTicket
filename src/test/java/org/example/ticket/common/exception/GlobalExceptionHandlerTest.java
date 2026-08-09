@@ -1,7 +1,7 @@
 package org.example.ticket.common.exception;
 
 import org.example.ticket.common.response.ApiResponse;
-import org.example.ticket.reservation.booking.domain.ReservationErrorCode;
+import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

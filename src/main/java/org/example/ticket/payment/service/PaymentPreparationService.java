@@ -16,8 +16,8 @@ import org.example.ticket.payment.repository.PaymentOrderRepository;
 import org.example.ticket.payment.request.PaymentPrepareRequest;
 import org.example.ticket.payment.response.PaymentPrepareResponse;
 import org.example.ticket.reservation.booking.domain.Reservation;
-import org.example.ticket.reservation.booking.persistence.ReservationRepository;
-import org.example.ticket.reservation.booking.support.ReservationValidator;
+import org.example.ticket.reservation.booking.repository.ReservationRepository;
+import org.example.ticket.reservation.booking.util.ReservationValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

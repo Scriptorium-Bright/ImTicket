@@ -17,59 +17,53 @@ class ReservationBookingPackageBoundaryTest {
     private static final String BOOKING_PACKAGE = "org.example.ticket.reservation.booking";
 
     private static final List<String> EXPECTED_TYPES = List.of(
-            BOOKING_PACKAGE + ".api.ReservationController",
-            BOOKING_PACKAGE + ".api.SeatController",
-            BOOKING_PACKAGE + ".api.ReservationRequest",
-            BOOKING_PACKAGE + ".api.ReservationCreateResponse",
-            BOOKING_PACKAGE + ".api.SeatResponse",
-            BOOKING_PACKAGE + ".application.ReservationCompletionService",
-            BOOKING_PACKAGE + ".application.ReservationExpirationService",
-            BOOKING_PACKAGE + ".application.ReservationIdempotencyTransactionService",
-            BOOKING_PACKAGE + ".application.ReservationIdempotentCreationService",
-            BOOKING_PACKAGE + ".application.ReservationPreReserveService",
-            BOOKING_PACKAGE + ".application.ReservationService",
-            BOOKING_PACKAGE + ".application.SeatService",
-            BOOKING_PACKAGE + ".application.ReservationClaimSnapshot",
-            BOOKING_PACKAGE + ".application.ReservationExpirationResult",
-            BOOKING_PACKAGE + ".application.ReservationRequestFingerprint",
-            BOOKING_PACKAGE + ".application.SeatCreationData",
+            BOOKING_PACKAGE + ".controller.ReservationController",
+            BOOKING_PACKAGE + ".controller.SeatController",
+            BOOKING_PACKAGE + ".dto.request.ReservationRequest",
+            BOOKING_PACKAGE + ".dto.response.ReservationCreateResponse",
+            BOOKING_PACKAGE + ".dto.response.SeatResponse",
+            BOOKING_PACKAGE + ".service.ReservationCompletionService",
+            BOOKING_PACKAGE + ".service.ReservationExpirationService",
+            BOOKING_PACKAGE + ".service.ReservationIdempotencyTransactionService",
+            BOOKING_PACKAGE + ".service.ReservationIdempotentCreationService",
+            BOOKING_PACKAGE + ".service.ReservationPreReserveService",
+            BOOKING_PACKAGE + ".service.ReservationService",
+            BOOKING_PACKAGE + ".service.SeatService",
+            BOOKING_PACKAGE + ".dto.ReservationClaimSnapshot",
+            BOOKING_PACKAGE + ".dto.ReservationExpirationResult",
+            BOOKING_PACKAGE + ".dto.ReservationRequestFingerprint",
+            BOOKING_PACKAGE + ".dto.SeatCreationData",
             BOOKING_PACKAGE + ".domain.Reservation",
             BOOKING_PACKAGE + ".domain.ReservationIdempotency",
             BOOKING_PACKAGE + ".domain.ReservationIdempotencyStatus",
-            BOOKING_PACKAGE + ".domain.ReservationErrorCode",
             BOOKING_PACKAGE + ".domain.ReservedSeat",
             BOOKING_PACKAGE + ".domain.Seat",
-            BOOKING_PACKAGE + ".persistence.ReservationIdempotencyRepository",
-            BOOKING_PACKAGE + ".persistence.ReservationRepository",
-            BOOKING_PACKAGE + ".persistence.SeatRepository",
-            BOOKING_PACKAGE + ".concurrency.SeatAdmission",
-            BOOKING_PACKAGE + ".concurrency.SeatAdmissionPermit",
-            BOOKING_PACKAGE + ".concurrency.SeatAdmissionService",
-            BOOKING_PACKAGE + ".concurrency.SeatAdmissionSlot",
-            BOOKING_PACKAGE + ".concurrency.ReservationLock",
-            BOOKING_PACKAGE + ".concurrency.ReservationLockAspect",
-            BOOKING_PACKAGE + ".concurrency.ReservationLockOperation",
-            BOOKING_PACKAGE + ".concurrency.ReservationLockStrategy",
-            BOOKING_PACKAGE + ".concurrency.ReservationLockStrategyContext",
-            BOOKING_PACKAGE + ".support.ReservationSnapshotException",
-            BOOKING_PACKAGE + ".support.ReservationRequestHasher",
-            BOOKING_PACKAGE + ".support.ReservationResponseSnapshotCodec",
-            BOOKING_PACKAGE + ".support.ReservationValidator"
+            BOOKING_PACKAGE + ".repository.ReservationIdempotencyRepository",
+            BOOKING_PACKAGE + ".repository.ReservationRepository",
+            BOOKING_PACKAGE + ".repository.SeatRepository",
+            BOOKING_PACKAGE + ".constant.ReservationErrorCode",
+            BOOKING_PACKAGE + ".exception.ReservationSnapshotException",
+            BOOKING_PACKAGE + ".util.admission.SeatAdmission",
+            BOOKING_PACKAGE + ".util.admission.SeatAdmissionPermit",
+            BOOKING_PACKAGE + ".util.admission.SeatAdmissionService",
+            BOOKING_PACKAGE + ".util.admission.SeatAdmissionSlot",
+            BOOKING_PACKAGE + ".util.annotation.ReservationLock",
+            BOOKING_PACKAGE + ".util.aop.ReservationLockAspect",
+            BOOKING_PACKAGE + ".util.lock.ReservationLockOperation",
+            BOOKING_PACKAGE + ".util.lock.ReservationLockStrategy",
+            BOOKING_PACKAGE + ".util.lock.ReservationLockStrategyContext",
+            BOOKING_PACKAGE + ".util.ReservationRequestHasher",
+            BOOKING_PACKAGE + ".util.ReservationResponseSnapshotCodec",
+            BOOKING_PACKAGE + ".util.ReservationValidator"
     );
 
     private static final List<String> LEGACY_PACKAGES = List.of(
-            "admission",
-            "controller",
-            "dto",
-            "exception",
-            "lock",
-            "model",
-            "repository",
-            "request",
-            "response",
-            "service",
-            "util",
-            "validation"
+            "booking/api",
+            "booking/application",
+            "booking/concurrency",
+            "booking/persistence",
+            "booking/support",
+            "shared"
     );
 
     @Test
@@ -99,13 +93,13 @@ class ReservationBookingPackageBoundaryTest {
     @Test
     void queueAndBookingApplicationsDoNotDependOnEachOthersInfrastructure() throws IOException {
         assertSourcesDoNotContain(
-                RESERVATION_SOURCE.resolve("booking/application"),
-                "org.example.ticket.reservation.queue.infrastructure"
+                RESERVATION_SOURCE.resolve("booking/service"),
+                "org.example.ticket.reservation.queue.repository.redis"
         );
         assertSourcesDoNotContain(
-                RESERVATION_SOURCE.resolve("queue/application"),
-                "org.example.ticket.reservation.booking.persistence",
-                "org.example.ticket.reservation.booking.concurrency"
+                RESERVATION_SOURCE.resolve("queue/service"),
+                "org.example.ticket.reservation.booking.repository",
+                "org.example.ticket.reservation.booking.util.lock"
         );
     }
 

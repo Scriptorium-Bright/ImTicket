@@ -10,7 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
-import org.example.ticket.reservation.booking.domain.ReservationErrorCode;
+import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;

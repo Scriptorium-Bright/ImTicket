@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.ticket.entry.model.EntryLog;
 import org.example.ticket.entry.repository.EntryLogRepository;
 import org.example.ticket.reservation.booking.domain.Reservation;
-import org.example.ticket.reservation.booking.persistence.ReservationRepository;
+import org.example.ticket.reservation.booking.repository.ReservationRepository;
 import org.example.ticket.util.constant.ReservationStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;

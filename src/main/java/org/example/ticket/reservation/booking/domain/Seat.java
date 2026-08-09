@@ -3,7 +3,7 @@ package org.example.ticket.reservation.booking.domain;
 import jakarta.persistence.*;
 import lombok.*;
 import org.example.ticket.performance.model.PerformanceTime;
-import org.example.ticket.reservation.booking.application.SeatCreationData;
+import org.example.ticket.reservation.booking.dto.SeatCreationData;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
 
@@ -59,7 +59,10 @@ public class Seat {
     @JoinColumn(name = "performance_time_id", nullable = false)
     private PerformanceTime performanceTime; // 이 좌석이 속한 특정 공연 회차
 
-    /** 내부 좌석 생성 데이터를 JPA entity로 변환한다. */
+    /**
+     * 내부 좌석 생성 데이터를 JPA Seat entity로 변환한다.
+     * 좌석 배치와 가격을 복사하고 초기 예약 여부를 적용한다.
+     */
     public static Seat from(SeatCreationData seat, Boolean isReservation) {
         return Seat.builder()
                 .seatFloor(seat.getSeatFloor())
@@ -72,7 +75,10 @@ public class Seat {
                 .build();
     }
 
-    /** 좌석의 예약 가능 상태를 변경한다. */
+    /**
+     * 좌석의 현재 예약 가능 상태를 지정한 값으로 변경한다.
+     * 예약 생성, 결제 완료와 만료 정리가 같은 도메인 변경 메서드를 사용한다.
+     */
     public void markAsReserved(SeatStatus seatStatus) {
         this.seatStatus = seatStatus;
     }

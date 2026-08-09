@@ -17,7 +17,7 @@ import org.example.ticket.performance.model.PerformanceTime;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.ReservedSeat;
 import org.example.ticket.reservation.booking.domain.Seat;
-import org.example.ticket.reservation.booking.persistence.ReservationRepository;
+import org.example.ticket.reservation.booking.repository.ReservationRepository;
 import org.example.ticket.util.constant.ReservationStatus;
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;

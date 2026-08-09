@@ -98,7 +98,10 @@ public class ReservationIdempotency {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    /** 현재 claim이 특정 사용자의 특정 요청 처리 시도에 의해 소유됐는지 확인한다. */
+    /**
+     * 현재 claim이 지정한 사용자, 요청 hash와 attempt token에 속하는지 확인한다.
+     * 오래된 처리 시도가 성공 상태를 기록하지 못하게 하는 fencing 조건으로 사용한다.
+     */
     public boolean isOwnedProcessingAttempt(
             Long memberId,
             String expectedRequestHash,
@@ -111,7 +114,10 @@ public class ReservationIdempotency {
                 && attemptToken.equals(expectedAttemptToken);
     }
 
-    /** 처리 중인 claim에 예약 결과와 response snapshot을 기록하고 성공 상태로 확정한다. */
+    /**
+     * 처리 중인 claim에 예약과 response snapshot을 기록해 성공으로 확정한다.
+     * 재호출이 동일한 예약 응답을 DB snapshot에서 재생할 수 있게 한다.
+     */
     public void markSucceeded(
             Reservation reservation,
             int responseSchemaVersion,

@@ -34,7 +34,7 @@ class ReservationQueueWorkerIdentityPayloadContractTest {
     @Test
     void queueDefinesVersionedWorkerPayload() throws Exception {
         Class<?> payloadType = Class.forName(
-                "org.example.ticket.reservation.queue.application.ReservationQueuePayload"
+                "org.example.ticket.reservation.queue.dto.ReservationQueuePayload"
         );
 
         assertThat(payloadType.getDeclaredMethod("schemaVersion")).isNotNull();
@@ -47,7 +47,7 @@ class ReservationQueueWorkerIdentityPayloadContractTest {
     @Test
     void queueControllerUsesVerifiedPrincipalMemberId() throws Exception {
         String source = Files.readString(Path.of(
-                "src/main/java/org/example/ticket/reservation/queue/api/ReservationQueueController.java"
+                "src/main/java/org/example/ticket/reservation/queue/controller/ReservationQueueController.java"
         ));
 
         assertThat(source).contains("MetamaskUserDetails", "getMemberId()");
