@@ -81,13 +81,13 @@ class SeatAdmissionServiceTest {
 
     @Test
     void releasesAlreadyAcquiredSeatsWhenMultiSeatAdmissionIsRejected() {
-        try (SeatAdmissionService.SeatAdmission ignored = admissionService.admit(request(6L))) {
+        try (SeatAdmission ignored = admissionService.admit(request(6L))) {
             assertThatThrownBy(() -> admissionService.admit(new ReservationRequest(1L, List.of(5L, 6L))))
                     .isInstanceOf(BusinessException.class)
                     .extracting(error -> ((BusinessException) error).getErrorCode())
                     .isEqualTo(ReservationErrorCode.SEAT_ADMISSION_REJECTED);
 
-            try (SeatAdmissionService.SeatAdmission released = admissionService.admit(request(5L))) {
+            try (SeatAdmission released = admissionService.admit(request(5L))) {
                 assertThat(released).isNotNull();
             }
         }

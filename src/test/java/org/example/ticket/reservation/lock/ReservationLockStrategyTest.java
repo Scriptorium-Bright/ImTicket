@@ -26,11 +26,11 @@ class ReservationLockStrategyTest {
     }
 
     @Test
-    void defaultsToPessimisticStrategy() {
+    void defaultsToReentrantStrategy() {
         assertThat(ReservationLockStrategy.from(null))
-                .isEqualTo(ReservationLockStrategy.PESSIMISTIC);
+                .isEqualTo(ReservationLockStrategy.REENTRANT);
         assertThat(ReservationLockStrategy.from(""))
-                .isEqualTo(ReservationLockStrategy.PESSIMISTIC);
+                .isEqualTo(ReservationLockStrategy.REENTRANT);
     }
 
     @Test

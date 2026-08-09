@@ -15,12 +15,22 @@ class SeatRepositoryLockPolicyTest {
 
     @Test
     void findSeatsForUpdateHasPessimisticWriteAndLockTimeout() throws NoSuchMethodException {
-        Method method = SeatRepository.class.getMethod(
+        assertPessimisticWriteWithTimeout(SeatRepository.class.getMethod(
                 "findByPerformanceTimeIdAndIdsForUpdate",
                 Long.class,
                 List.class
-        );
+        ));
+    }
 
+    @Test
+    void findSeatIdsForUpdateHasPessimisticWriteAndLockTimeout() throws NoSuchMethodException {
+        assertPessimisticWriteWithTimeout(SeatRepository.class.getMethod(
+                "findByIdsForUpdate",
+                List.class
+        ));
+    }
+
+    private void assertPessimisticWriteWithTimeout(Method method) {
         Lock lock = method.getAnnotation(Lock.class);
         QueryHints queryHints = method.getAnnotation(QueryHints.class);
 

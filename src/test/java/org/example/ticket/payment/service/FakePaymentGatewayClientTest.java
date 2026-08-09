@@ -3,8 +3,8 @@ package org.example.ticket.payment.service;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.payment.exception.PaymentErrorCode;
 import org.example.ticket.payment.gateway.FakePaymentGatewayClient;
-import org.example.ticket.payment.gateway.PaymentAuthorization;
-import org.example.ticket.payment.gateway.VerifiedPaymentSnapshot;
+import org.example.ticket.payment.dto.PaymentAuthorization;
+import org.example.ticket.payment.dto.VerifiedPaymentSnapshot;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

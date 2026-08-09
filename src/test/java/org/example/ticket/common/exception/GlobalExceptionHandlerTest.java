@@ -5,6 +5,7 @@ import org.example.ticket.reservation.exception.ReservationErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +42,17 @@ class GlobalExceptionHandlerTest {
     void seatLockTimeoutUsesTooManyRequests() {
         ResponseEntity<ApiResponse<Void>> response = handler.handleBusinessException(
                 new BusinessException(ReservationErrorCode.SEAT_LOCK_TIMEOUT)
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError().getCode()).isEqualTo("SEAT_LOCK_TIMEOUT");
+    }
+
+    @Test
+    void databasePessimisticLockFailureUsesRetryable429Contract() {
+        ResponseEntity<ApiResponse<Void>> response = handler.handlePessimisticLockException(
+                new CannotAcquireLockException("lock wait timeout")
         );
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);

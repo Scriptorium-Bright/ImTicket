@@ -1,7 +1,7 @@
 package org.example.ticket.security.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.example.ticket.security.dto.LoginRequest;
+import org.example.ticket.security.request.LoginRequest;
 import org.example.ticket.security.handler.LoginFailureHandler;
 import org.example.ticket.security.handler.LoginSuccessHandler;
 import org.example.ticket.security.token.MetamaskAuthenticationToken;

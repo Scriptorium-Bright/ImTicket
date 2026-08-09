@@ -1,5 +1,7 @@
 package org.example.ticket.payment.gateway;
 
+import org.example.ticket.payment.dto.PaymentAuthorization;
+import org.example.ticket.payment.dto.VerifiedPaymentSnapshot;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.payment.exception.PaymentErrorCode;
 import org.junit.jupiter.api.Test;

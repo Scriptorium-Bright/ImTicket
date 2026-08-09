@@ -6,7 +6,7 @@ import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.exception.PaymentErrorCode;
 import org.example.ticket.payment.gateway.FakePaymentGatewayClient;
-import org.example.ticket.payment.gateway.PaymentAuthorization;
+import org.example.ticket.payment.dto.PaymentAuthorization;
 import org.example.ticket.payment.gateway.PaymentGatewayClient;
 import org.example.ticket.payment.model.PaymentOrder;
 import org.example.ticket.payment.repository.PaymentAttemptRepository;
@@ -78,7 +78,7 @@ class PaymentPreparationServiceTest {
         when(memberRepository.findByWalletAddressIgnoreCase("0xOWNER")).thenReturn(Optional.of(member));
         when(paymentOrderRepository.findByMemberIdAndIdempotencyKey(7L, "key-1"))
                 .thenReturn(Optional.empty());
-        when(reservationRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(reservation));
+        when(reservationRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(reservation));
 
         var response = paymentPreparationService.prepare(
                 "0xOWNER", new PaymentPrepareRequest(10L), "key-1"

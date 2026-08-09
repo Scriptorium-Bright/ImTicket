@@ -2,7 +2,10 @@ package org.example.ticket.reservation.lock;
 
 import org.example.ticket.reservation.request.ReservationRequest;
 import org.example.ticket.reservation.service.ReservationService;
+import org.example.ticket.reservation.service.ReservationIdempotentCreationService;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
 
@@ -22,5 +25,38 @@ class ReservationLockAnnotationTest {
 
         assertThat(annotation).isNotNull();
         assertThat(annotation.strategy()).isEqualTo(ReservationLockStrategy.CONFIGURED);
+    }
+
+    @Test
+    void idempotentCreationOwnsLockUntilItsTransactionCommits() throws NoSuchMethodException {
+        Method outerMethod = ReservationIdempotentCreationService.class.getMethod(
+                "create",
+                Long.class,
+                String.class,
+                ReservationRequest.class,
+                String.class,
+                Long.class,
+                String.class
+        );
+        ReservationLock lock = outerMethod.getAnnotation(ReservationLock.class);
+        Transactional transaction = outerMethod.getAnnotation(Transactional.class);
+
+        assertThat(lock).isNotNull();
+        assertThat(lock.strategy()).isEqualTo(ReservationLockStrategy.CONFIGURED);
+        assertThat(transaction).isNotNull();
+    }
+
+    @Test
+    void innerReservationMutationRequiresExistingOuterTransaction() throws NoSuchMethodException {
+        Method innerMethod = ReservationService.class.getMethod(
+                "createReservationWithinTransaction",
+                String.class,
+                ReservationRequest.class
+        );
+        Transactional transaction = innerMethod.getAnnotation(Transactional.class);
+
+        assertThat(transaction).isNotNull();
+        assertThat(transaction.propagation()).isEqualTo(Propagation.MANDATORY);
+        assertThat(innerMethod.getAnnotation(ReservationLock.class)).isNull();
     }
 }
