@@ -12,6 +12,8 @@ public record ReservationQueueTicketSnapshot(
         UUID ticketId,
         long performanceTimeId,
         String ownerHash,
+        UUID ownerToken,
+        ReservationQueuePayload payload,
         ReservationQueueStatus status,
         long sequence,
         Long position,
@@ -29,6 +31,8 @@ public record ReservationQueueTicketSnapshot(
         if (ownerHash == null || !SHA_256.matcher(ownerHash).matches()) {
             throw new IllegalArgumentException("ownerHash must be a lowercase SHA-256 value");
         }
+        Objects.requireNonNull(ownerToken, "ownerToken must not be null");
+        Objects.requireNonNull(payload, "payload must not be null");
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(enqueuedAt, "enqueuedAt must not be null");
         Objects.requireNonNull(deadlineAt, "deadlineAt must not be null");

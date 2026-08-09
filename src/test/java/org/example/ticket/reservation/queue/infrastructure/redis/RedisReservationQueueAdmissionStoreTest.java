@@ -3,6 +3,8 @@ package org.example.ticket.reservation.queue.infrastructure.redis;
 import org.example.ticket.reservation.queue.application.ReservationQueueAdmissionCommand;
 import org.example.ticket.reservation.queue.application.ReservationQueueAdmissionResult;
 import org.example.ticket.reservation.queue.application.ReservationQueueProperties;
+import org.example.ticket.reservation.queue.application.ReservationQueuePayload;
+import org.example.ticket.reservation.shared.identity.ReservationIdempotencyKey;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.mockito.stubbing.OngoingStubbing;
+import org.mockito.ArgumentCaptor;
 
 import java.time.Instant;
 import java.util.List;
@@ -59,7 +62,16 @@ class RedisReservationQueueAdmissionStoreTest {
         assertThat(result.performanceTimeId()).isEqualTo(42L);
         assertThat(result.sequence()).isEqualTo(7L);
         assertThat(result.streamId()).isEqualTo("1731204000000-0");
-        verify(redisTemplate, times(3)).execute(anyScript(), anyList(), any(Object[].class));
+        ArgumentCaptor<Object[]> arguments = ArgumentCaptor.forClass(Object[].class);
+        verify(redisTemplate, times(3)).execute(anyScript(), anyList(), arguments.capture());
+        Object[] enqueueArguments = arguments.getAllValues().get(1);
+        assertThat(enqueueArguments[3]).isEqualTo(OWNER_TOKEN.toString());
+        assertThat(enqueueArguments[4]).isEqualTo("1");
+        assertThat(enqueueArguments[5]).isEqualTo("42");
+        assertThat(enqueueArguments[6]).isEqualTo("a0ebc4c9-8d82-47af-8127-1fc3d27e47a1");
+        assertThat(enqueueArguments[7]).isEqualTo(ReservationIdempotencyKey.from(
+                "a0ebc4c9-8d82-47af-8127-1fc3d27e47a1"
+        ).hash());
         verify(zSetOperations).add(
                 "reservation:queue:active-performance-times",
                 "42",
@@ -113,6 +125,18 @@ class RedisReservationQueueAdmissionStoreTest {
     }
 
     @Test
+    void keepsRecoverableTicketWhenQueuedMarkFails() {
+        scriptResults("CREATED", "ACCEPTED|7|1731204000000-0", "OWNER_MISMATCH");
+
+        assertThatThrownBy(() -> store.admit(command()))
+                .isInstanceOf(org.example.ticket.reservation.queue.application.port.ReservationQueueStorageException.class)
+                .hasMessageContaining("not marked");
+
+        verify(redisTemplate, times(3)).execute(anyScript(), anyList(), any(Object[].class));
+        verify(zSetOperations, never()).add(any(), any(), any(Double.class));
+    }
+
+    @Test
     void admissionSucceedsEvenIfActiveRegistryRefreshFails() {
         scriptResults("CREATED", "ACCEPTED|1|1731204000000-0", "MARKED");
         when(zSetOperations.add(any(), any(), any(Double.class)))
@@ -140,9 +164,12 @@ class RedisReservationQueueAdmissionStoreTest {
                 42L,
                 TICKET_ID,
                 "a".repeat(64),
-                "b".repeat(64),
-                "c".repeat(64),
-                List.of(1L, 3L),
+                ReservationQueuePayload.current(
+                        42L,
+                        ReservationIdempotencyKey.from("a0ebc4c9-8d82-47af-8127-1fc3d27e47a1"),
+                        "c".repeat(64),
+                        List.of(1L, 3L)
+                ),
                 Instant.parse("2026-08-10T10:00:00Z")
         );
     }

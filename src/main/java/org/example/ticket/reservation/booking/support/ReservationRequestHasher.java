@@ -6,10 +6,10 @@ import org.example.ticket.reservation.booking.api.ReservationRequest;
 import org.example.ticket.reservation.booking.domain.ReservationErrorCode;
 import org.example.ticket.reservation.shared.intent.ReservationIntentFingerprint;
 import org.example.ticket.reservation.shared.intent.ReservationIntentFingerprintFactory;
+import org.example.ticket.reservation.shared.identity.ReservationIdempotencyKey;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
-import java.util.UUID;
 
 @Component
 public class ReservationRequestHasher {
@@ -22,13 +22,8 @@ public class ReservationRequestHasher {
         if (rawKey == null || rawKey.isBlank()) {
             throw new BusinessException(ReservationErrorCode.IDEMPOTENCY_KEY_REQUIRED);
         }
-        String candidate = rawKey.trim();
         try {
-            String normalized = UUID.fromString(candidate).toString();
-            if (!normalized.equalsIgnoreCase(candidate)) {
-                throw new IllegalArgumentException("UUID canonical form이 아닙니다.");
-            }
-            return normalized;
+            return ReservationIdempotencyKey.from(rawKey).value();
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(ReservationErrorCode.IDEMPOTENCY_KEY_INVALID, exception);
         }

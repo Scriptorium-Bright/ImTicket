@@ -5,6 +5,7 @@ import org.example.ticket.reservation.queue.application.port.ReservationQueueSto
 import org.example.ticket.reservation.queue.application.port.ReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.domain.ReservationQueueRequestFingerprint;
 import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.reservation.shared.identity.ReservationIdempotencyKey;
 
 import org.example.ticket.common.exception.BusinessException;
 import org.springframework.dao.DataAccessException;
@@ -54,6 +55,7 @@ public final class ReservationQueueService {
     }
 
     public ReservationQueueEnqueueResponse enqueue(
+            long memberId,
             String walletAddress,
             String idempotencyKey,
             ReservationQueueApiRequest request
@@ -62,9 +64,9 @@ public final class ReservationQueueService {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw error(ReservationQueueErrorCode.IDEMPOTENCY_KEY_REQUIRED);
         }
-        String idempotencyKeyHash;
+        ReservationIdempotencyKey canonicalIdempotencyKey;
         try {
-            idempotencyKeyHash = identityHasher.idempotencyKeyHash(idempotencyKey);
+            canonicalIdempotencyKey = identityHasher.idempotencyKey(idempotencyKey);
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(ReservationQueueErrorCode.IDEMPOTENCY_KEY_INVALID, exception);
         }
@@ -74,13 +76,22 @@ public final class ReservationQueueService {
                 ticketIdSupplier.get(),
                 "ticketId must not be null"
         );
+        ReservationQueuePayload payload;
+        try {
+            payload = ReservationQueuePayload.current(
+                    memberId,
+                    canonicalIdempotencyKey,
+                    fingerprint.requestHash(),
+                    fingerprint.normalizedSeatIds()
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(ReservationQueueErrorCode.AUTHENTICATION_REQUIRED, exception);
+        }
         ReservationQueueAdmissionCommand command = new ReservationQueueAdmissionCommand(
                 fingerprint.performanceTimeId(),
                 candidateTicketId,
                 ownerHash,
-                idempotencyKeyHash,
-                fingerprint.requestHash(),
-                fingerprint.normalizedSeatIds(),
+                payload,
                 clock.instant()
         );
 

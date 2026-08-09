@@ -4,6 +4,8 @@ import org.example.ticket.reservation.queue.application.ReservationQueueEnqueueR
 import org.example.ticket.reservation.queue.application.ReservationQueueService;
 import org.example.ticket.reservation.queue.application.ReservationQueueStatusResponse;
 import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.member.model.Member;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -52,7 +54,7 @@ class ReservationQueueControllerTest {
 
     @Test
     void postReturns202AndPollingContract() throws Exception {
-        when(service.enqueue(eq("0xowner"), eq(KEY), any())).thenReturn(
+        when(service.enqueue(eq(42L), eq("0xowner"), eq(KEY), any())).thenReturn(
                 new ReservationQueueEnqueueResponse(
                         42L,
                         TICKET_ID,
@@ -111,6 +113,24 @@ class ReservationQueueControllerTest {
     }
 
     @Test
+    void principalWithoutMemberIdUses401QueueError() throws Exception {
+        MetamaskUserDetails principal = new MetamaskUserDetails(Member.builder()
+                .walletAddress("0xowner")
+                .role("ROLE_USER")
+                .build());
+
+        mockMvc.perform(post("/api/reservation/pre-reserve/queue")
+                        .principal(new UsernamePasswordAuthenticationToken(principal, null, List.of()))
+                        .header("Idempotency-Key", KEY)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"performanceTimeId":42,"seatIds":[1]}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("QUEUE_AUTHENTICATION_REQUIRED"));
+    }
+
+    @Test
     void invalidBodyUses400ValidationContract() throws Exception {
         mockMvc.perform(post("/api/reservation/pre-reserve/queue")
                         .principal(user())
@@ -136,6 +156,11 @@ class ReservationQueueControllerTest {
     }
 
     private UsernamePasswordAuthenticationToken user() {
-        return new UsernamePasswordAuthenticationToken("0xowner", null, List.of());
+        MetamaskUserDetails principal = new MetamaskUserDetails(Member.builder()
+                .id(42L)
+                .walletAddress("0xowner")
+                .role("ROLE_USER")
+                .build());
+        return new UsernamePasswordAuthenticationToken(principal, null, List.of());
     }
 }

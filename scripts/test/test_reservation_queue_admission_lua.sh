@@ -61,11 +61,14 @@ release_script="$lua_dir/reservation_queue_release_idempotency.lua"
 enqueue_script="$lua_dir/reservation_queue_enqueue.lua"
 
 owner_hash="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-key_hash="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+key_hash="f54367c55daa813d9a0723535674b25cd20057e644b7297dbe1fdf4de3368aa1"
 request_hash="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 other_request_hash="dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 ticket_id="f76f5ac8-a475-4e04-906a-1f54765f9770"
 owner_token="da64524f-ac82-45a8-9d38-4cd641b72343"
+payload_schema_version="1"
+member_id="42"
+idempotency_key="a0ebc4c9-8d82-47af-8127-1fc3d27e47a1"
 performance_time_id="1371001"
 now_ms="1786356000000"
 retention_ms="60000"
@@ -146,7 +149,9 @@ for index in $(seq 1 "$attempts"); do
     ticket_key="reservation:queue:{$performance_time_id}:ticket:$candidate"
     "$redis_cli_bin" -s "$redis_socket" --raw --eval "$enqueue_script" \
         "$admitted_key" "$waiting_key" "$deadline_key" "$sequence_key" "$ticket_key" "$stream_key" , \
-        "$candidate" "$performance_time_id" "$owner_hash" "$request_hash" "1,3" \
+        "$candidate" "$performance_time_id" "$owner_hash" "$owner_token" \
+        "$payload_schema_version" "$member_id" "$idempotency_key" "$key_hash" \
+        "$request_hash" "1,3" \
         "$now_ms" "$((now_ms + 10000))" "$max_depth" "$retention_ms" \
         >"$output_dir/$index" &
     pids+=("$!")
@@ -157,10 +162,14 @@ done
 
 accepted=0
 full=0
+accepted_ticket=""
 for index in $(seq 1 "$attempts"); do
     result="$(<"$output_dir/$index")"
     if [[ "$result" == ACCEPTED\|* ]]; then
         accepted=$((accepted + 1))
+        if [[ -z "$accepted_ticket" ]]; then
+            accepted_ticket="ticket-$index"
+        fi
         status="$("$redis_cli_bin" -s "$redis_socket" --raw HGET \
             "reservation:queue:{$performance_time_id}:ticket:ticket-$index" status)"
         assert_equal "WAITING" "$status" "accepted ticket status"
@@ -180,4 +189,31 @@ assert_equal "$max_depth" "$("$redis_cli_bin" -s "$redis_socket" --raw ZCARD "$d
 assert_equal "$max_depth" "$("$redis_cli_bin" -s "$redis_socket" --raw XLEN "$stream_key")" "stream size"
 assert_equal "$max_depth" "$("$redis_cli_bin" -s "$redis_socket" --raw GET "$sequence_key")" "sequence value"
 
-echo "PASS idempotency=single-ticket followers=$existing conflict=detected owner-release=guarded admitted=$accepted full=$full"
+accepted_ticket_key="reservation:queue:{$performance_time_id}:ticket:$accepted_ticket"
+assert_equal "$payload_schema_version" "$("$redis_cli_bin" -s "$redis_socket" --raw HGET "$accepted_ticket_key" payloadSchemaVersion)" "ticket payload schema"
+assert_equal "$member_id" "$("$redis_cli_bin" -s "$redis_socket" --raw HGET "$accepted_ticket_key" memberId)" "ticket member"
+assert_equal "$idempotency_key" "$("$redis_cli_bin" -s "$redis_socket" --raw HGET "$accepted_ticket_key" idempotencyKey)" "ticket idempotency key"
+assert_equal "$key_hash" "$("$redis_cli_bin" -s "$redis_socket" --raw HGET "$accepted_ticket_key" idempotencyKeyHash)" "ticket idempotency hash"
+assert_equal "$owner_token" "$("$redis_cli_bin" -s "$redis_socket" --raw HGET "$accepted_ticket_key" ownerToken)" "ticket owner token"
+
+stream_entry="$("$redis_cli_bin" -s "$redis_socket" --raw XRANGE "$stream_key" - + COUNT 1)"
+stream_field() {
+    local field="$1"
+    local return_next="false"
+    while IFS= read -r line; do
+        if [[ "$return_next" == "true" ]]; then
+            printf '%s' "$line"
+            return
+        fi
+        if [[ "$line" == "$field" ]]; then
+            return_next="true"
+        fi
+    done <<<"$stream_entry"
+}
+assert_equal "$payload_schema_version" "$(stream_field payloadSchemaVersion)" "stream payload schema"
+assert_equal "$member_id" "$(stream_field memberId)" "stream member"
+assert_equal "$idempotency_key" "$(stream_field idempotencyKey)" "stream idempotency key"
+assert_equal "$key_hash" "$(stream_field idempotencyKeyHash)" "stream idempotency hash"
+assert_equal "$owner_token" "$(stream_field ownerToken)" "stream owner token"
+
+echo "PASS idempotency=single-ticket followers=$existing conflict=detected owner-release=guarded payload=recoverable admitted=$accepted full=$full"

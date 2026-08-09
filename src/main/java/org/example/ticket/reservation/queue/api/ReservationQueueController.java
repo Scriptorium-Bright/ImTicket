@@ -5,6 +5,7 @@ import org.example.ticket.reservation.queue.application.ReservationQueueEnqueueR
 import org.example.ticket.reservation.queue.application.ReservationQueueErrorCode;
 import org.example.ticket.reservation.queue.application.ReservationQueueService;
 import org.example.ticket.reservation.queue.application.ReservationQueueStatusResponse;
+import org.example.ticket.security.principal.MetamaskUserDetails;
 
 import jakarta.validation.Valid;
 import org.example.ticket.common.exception.BusinessException;
@@ -40,8 +41,10 @@ public final class ReservationQueueController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody ReservationQueueApiRequest request
     ) {
+        MetamaskUserDetails userDetails = authenticatedUser(authentication);
         ReservationQueueEnqueueResponse response = queueService.enqueue(
-                authenticatedName(authentication),
+                userDetails.getMemberId(),
+                userDetails.getAddress(),
                 idempotencyKey,
                 request
         );
@@ -54,21 +57,29 @@ public final class ReservationQueueController {
             @PathVariable long performanceTimeId,
             @PathVariable UUID ticketId
     ) {
+        MetamaskUserDetails userDetails = authenticatedUser(authentication);
         ReservationQueueStatusResponse response = queueService.status(
-                authenticatedName(authentication),
+                userDetails.getAddress(),
                 performanceTimeId,
                 ticketId
         );
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    private String authenticatedName(Authentication authentication) {
+    private MetamaskUserDetails authenticatedUser(Authentication authentication) {
         if (authentication == null
                 || !authentication.isAuthenticated()
-                || authentication.getName() == null
-                || authentication.getName().isBlank()) {
+                || !(authentication.getPrincipal() instanceof MetamaskUserDetails userDetails)) {
             throw new BusinessException(ReservationQueueErrorCode.AUTHENTICATION_REQUIRED);
         }
-        return authentication.getName();
+        try {
+            if (userDetails.getAddress() == null || userDetails.getAddress().isBlank()) {
+                throw new IllegalStateException("walletAddress must not be blank");
+            }
+            userDetails.getMemberId();
+            return userDetails;
+        } catch (RuntimeException exception) {
+            throw new BusinessException(ReservationQueueErrorCode.AUTHENTICATION_REQUIRED, exception);
+        }
     }
 }

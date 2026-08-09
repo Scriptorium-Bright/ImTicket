@@ -64,6 +64,11 @@ deadline_key="reservation:queue:{$performance_time_id}:deadline"
 sequence_key="reservation:queue:{$performance_time_id}:sequence"
 stream_key="reservation:queue:{$performance_time_id}:stream"
 owner_hash="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+owner_token="da64524f-ac82-45a8-9d38-4cd641b72343"
+payload_schema_version="1"
+member_id="42"
+idempotency_key="a0ebc4c9-8d82-47af-8127-1fc3d27e47a1"
+idempotency_key_hash="f54367c55daa813d9a0723535674b25cd20057e644b7297dbe1fdf4de3368aa1"
 request_hash="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 retention_ms="60000"
 
@@ -73,7 +78,9 @@ enqueue_ticket() {
     local ticket_key="reservation:queue:{$performance_time_id}:ticket:$ticket_id"
     "$redis_cli_bin" -s "$redis_socket" --raw --eval "$enqueue_script" \
         "$admitted_key" "$waiting_key" "$deadline_key" "$sequence_key" "$ticket_key" "$stream_key" , \
-        "$ticket_id" "$performance_time_id" "$owner_hash" "$request_hash" "1,3" \
+        "$ticket_id" "$performance_time_id" "$owner_hash" "$owner_token" \
+        "$payload_schema_version" "$member_id" "$idempotency_key" "$idempotency_key_hash" \
+        "$request_hash" "1,3" \
         "1000" "$deadline_ms" "10" "$retention_ms"
 }
 

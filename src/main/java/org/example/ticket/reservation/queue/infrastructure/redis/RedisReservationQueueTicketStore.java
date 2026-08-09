@@ -5,6 +5,8 @@ import org.example.ticket.reservation.queue.application.ReservationQueueTicketSn
 import org.example.ticket.reservation.queue.application.port.ReservationQueueStorageException;
 import org.example.ticket.reservation.queue.application.port.ReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.reservation.queue.application.ReservationQueuePayload;
+import org.example.ticket.reservation.shared.identity.ReservationIdempotencyKey;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.HashOperations;
@@ -12,6 +14,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,11 +58,24 @@ public final class RedisReservationQueueTicketStore implements ReservationQueueT
             }
 
             ReservationQueueStatus status = ReservationQueueStatus.valueOf(required(fields, "status"));
+            ReservationIdempotencyKey idempotencyKey = ReservationIdempotencyKey.restore(
+                    required(fields, "idempotencyKey"),
+                    required(fields, "idempotencyKeyHash")
+            );
+            ReservationQueuePayload payload = new ReservationQueuePayload(
+                    Integer.parseInt(required(fields, "payloadSchemaVersion")),
+                    Long.parseLong(required(fields, "memberId")),
+                    idempotencyKey,
+                    required(fields, "requestHash"),
+                    seatIds(fields)
+            );
             Long position = waitingPosition(performanceTimeId, ticketId, status);
             return Optional.of(new ReservationQueueTicketSnapshot(
                     storedTicketId,
                     storedPerformanceTimeId,
                     required(fields, "ownerHash"),
+                    UUID.fromString(required(fields, "ownerToken")),
+                    payload,
                     status,
                     Long.parseLong(required(fields, "sequence")),
                     position,
@@ -113,6 +130,12 @@ public final class RedisReservationQueueTicketStore implements ReservationQueueT
             throw new ReservationQueueStorageException("Queue ticket field is missing: " + name);
         }
         return value.toString();
+    }
+
+    private List<Long> seatIds(Map<Object, Object> fields) {
+        return Arrays.stream(required(fields, "seatIds").split(",", -1))
+                .map(Long::parseLong)
+                .toList();
     }
 
     private static DefaultRedisScript<String> script(String location) {

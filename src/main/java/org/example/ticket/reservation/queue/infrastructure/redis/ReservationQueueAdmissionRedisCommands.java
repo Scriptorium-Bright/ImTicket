@@ -45,8 +45,8 @@ final class ReservationQueueAdmissionRedisCommands {
     ) {
         String result = execute(
                 RESERVE_IDEMPOTENCY,
-                List.of(keyFactory.idempotency(command.ownerHash(), command.idempotencyKeyHash())),
-                command.requestHash(),
+                List.of(keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash())),
+                command.payload().requestHash(),
                 command.ticketId().toString(),
                 String.valueOf(command.performanceTimeId()),
                 ownerToken,
@@ -77,7 +77,7 @@ final class ReservationQueueAdmissionRedisCommands {
         throw new ReservationQueueStorageException("Unexpected idempotency reservation result: " + result);
     }
 
-    EnqueueResult enqueue(ReservationQueueAdmissionCommand command) {
+    EnqueueResult enqueue(ReservationQueueAdmissionCommand command, String ownerToken) {
         long performanceTimeId = command.performanceTimeId();
         String result = execute(
                 ENQUEUE,
@@ -92,8 +92,13 @@ final class ReservationQueueAdmissionRedisCommands {
                 command.ticketId().toString(),
                 String.valueOf(performanceTimeId),
                 command.ownerHash(),
-                command.requestHash(),
-                command.serializedSeatIds(),
+                ownerToken,
+                String.valueOf(command.payload().schemaVersion()),
+                String.valueOf(command.payload().memberId()),
+                command.payload().idempotencyKey().value(),
+                command.payload().idempotencyKey().hash(),
+                command.payload().requestHash(),
+                command.payload().serializedSeatIds(),
                 String.valueOf(command.enqueuedAt().toEpochMilli()),
                 String.valueOf(command.deadline(properties).toEpochMilli()),
                 String.valueOf(properties.maxDepth()),
@@ -116,7 +121,7 @@ final class ReservationQueueAdmissionRedisCommands {
     void markIdempotencyQueued(ReservationQueueAdmissionCommand command, String ownerToken) {
         String result = execute(
                 MARK_IDEMPOTENCY_QUEUED,
-                List.of(keyFactory.idempotency(command.ownerHash(), command.idempotencyKeyHash())),
+                List.of(keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash())),
                 ownerToken,
                 command.ticketId().toString(),
                 String.valueOf(command.enqueuedAt().toEpochMilli()),
@@ -132,7 +137,7 @@ final class ReservationQueueAdmissionRedisCommands {
     void releaseIdempotency(ReservationQueueAdmissionCommand command, String ownerToken) {
         String result = execute(
                 RELEASE_IDEMPOTENCY,
-                List.of(keyFactory.idempotency(command.ownerHash(), command.idempotencyKeyHash())),
+                List.of(keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash())),
                 ownerToken,
                 command.ticketId().toString()
         );

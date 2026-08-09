@@ -20,7 +20,7 @@ class JwtUtilTest {
     @Test
     void parsesTheSameSignedTokenConcurrently() throws Exception {
         JwtUtil jwtUtil = new JwtUtil(SECRET, 60_000L);
-        String token = jwtUtil.createJwt("0xLoadTestUser", "ROLE_USER");
+        String token = jwtUtil.createJwt(42L, "0xLoadTestUser", "ROLE_USER");
         List<Callable<Claims>> tasks = java.util.stream.IntStream.range(0, 32)
                 .<Callable<Claims>>mapToObj(ignored -> () -> jwtUtil.parseClaims(token))
                 .toList();
@@ -31,6 +31,7 @@ class JwtUtilTest {
 
             for (Future<Claims> result : results) {
                 Claims claims = result.get();
+                assertThat(jwtUtil.getMemberId(claims)).isEqualTo(42L);
                 assertThat(jwtUtil.getUsername(claims)).isEqualTo("0xLoadTestUser");
                 assertThat(jwtUtil.getRole(claims)).isEqualTo("ROLE_USER");
             }
@@ -42,8 +43,19 @@ class JwtUtilTest {
     @Test
     void rejectsAnInvalidSignedToken() {
         JwtUtil jwtUtil = new JwtUtil(SECRET, 60_000L);
+        JwtUtil forgedIssuer = new JwtUtil("abcdef0123456789abcdef0123456789", 60_000L);
+        String forgedToken = forgedIssuer.createJwt(999L, "0xLoadTestUser", "ROLE_USER");
 
-        assertThatThrownBy(() -> jwtUtil.parseClaims("invalid.token.value"))
+        assertThatThrownBy(() -> jwtUtil.parseClaims(forgedToken))
                 .isInstanceOf(JwtException.class);
+    }
+
+    @Test
+    void rejectsNonPositiveMemberIdBeforeSigning() {
+        JwtUtil jwtUtil = new JwtUtil(SECRET, 60_000L);
+
+        assertThatThrownBy(() -> jwtUtil.createJwt(0L, "0xLoadTestUser", "ROLE_USER"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("memberId");
     }
 }

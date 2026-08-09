@@ -6,9 +6,22 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Objects;
 
 
 public record MetamaskUserDetails(Member member) implements UserDetails {
+
+    public MetamaskUserDetails {
+        Objects.requireNonNull(member, "member must not be null");
+    }
+
+    public long getMemberId() {
+        Long memberId = member.getId();
+        if (memberId == null || memberId <= 0) {
+            throw new IllegalStateException("Authenticated memberId must be positive");
+        }
+        return memberId;
+    }
 
     public String getAddress() {
         return getUsername();

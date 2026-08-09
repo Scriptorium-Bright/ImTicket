@@ -18,6 +18,8 @@ class ReservationQueueIdentityHasherTest {
 
     @Test
     void idempotencyHashUsesCanonicalUuid() {
+        assertThat(hasher.idempotencyKey("A0EBC4C9-8D82-47AF-8127-1FC3D27E47A1").value())
+                .isEqualTo("a0ebc4c9-8d82-47af-8127-1fc3d27e47a1");
         assertThat(hasher.idempotencyKeyHash("A0EBC4C9-8D82-47AF-8127-1FC3D27E47A1"))
                 .isEqualTo(hasher.idempotencyKeyHash("a0ebc4c9-8d82-47af-8127-1fc3d27e47a1"))
                 .matches("[0-9a-f]{64}");

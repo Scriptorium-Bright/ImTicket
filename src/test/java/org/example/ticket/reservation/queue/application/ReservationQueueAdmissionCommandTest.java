@@ -1,6 +1,7 @@
 package org.example.ticket.reservation.queue.application;
 
 import org.junit.jupiter.api.Test;
+import org.example.ticket.reservation.shared.identity.ReservationIdempotencyKey;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,7 +16,7 @@ class ReservationQueueAdmissionCommandTest {
     void acceptsNormalizedQueueRequest() {
         ReservationQueueAdmissionCommand command = command(List.of(1L, 3L));
 
-        assertThat(command.serializedSeatIds()).isEqualTo("1,3");
+        assertThat(command.payload().serializedSeatIds()).isEqualTo("1,3");
         assertThat(command.deadline(ReservationQueueProperties.defaults()))
                 .isEqualTo(Instant.parse("2026-08-10T10:10:00Z"));
     }
@@ -30,9 +31,7 @@ class ReservationQueueAdmissionCommandTest {
                 42L,
                 UUID.fromString("f76f5ac8-a475-4e04-906a-1f54765f9770"),
                 "0xRawWallet",
-                "b".repeat(64),
-                "c".repeat(64),
-                List.of(1L),
+                payload(List.of(1L)),
                 Instant.parse("2026-08-10T10:00:00Z")
         )).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("ownerHash");
@@ -43,10 +42,17 @@ class ReservationQueueAdmissionCommandTest {
                 42L,
                 UUID.fromString("f76f5ac8-a475-4e04-906a-1f54765f9770"),
                 "a".repeat(64),
-                "b".repeat(64),
-                "c".repeat(64),
-                seatIds,
+                payload(seatIds),
                 Instant.parse("2026-08-10T10:00:00Z")
+        );
+    }
+
+    private ReservationQueuePayload payload(List<Long> seatIds) {
+        return ReservationQueuePayload.current(
+                42L,
+                ReservationIdempotencyKey.from("a0ebc4c9-8d82-47af-8127-1fc3d27e47a1"),
+                "c".repeat(64),
+                seatIds
         );
     }
 }

@@ -63,7 +63,7 @@ public final class RedisReservationQueueAdmissionStore implements ReservationQue
             return existingResult(reservation);
         }
 
-        ReservationQueueAdmissionRedisCommands.EnqueueResult enqueueResult = redisCommands.enqueue(command);
+        ReservationQueueAdmissionRedisCommands.EnqueueResult enqueueResult = redisCommands.enqueue(command, ownerToken);
         if (enqueueResult.full()) {
             redisCommands.releaseIdempotency(command, ownerToken);
             return ReservationQueueAdmissionResult.rejected(

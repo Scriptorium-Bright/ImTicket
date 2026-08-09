@@ -27,6 +27,7 @@ import static org.mockito.Mockito.when;
 class ReservationQueueServiceTest {
 
     private static final UUID TICKET_ID = UUID.fromString("f76f5ac8-a475-4e04-906a-1f54765f9770");
+    private static final UUID OWNER_TOKEN = UUID.fromString("da64524f-ac82-45a8-9d38-4cd641b72343");
     private static final Instant NOW = Instant.parse("2026-08-10T10:00:00Z");
 
     private final ReservationQueueAdmissionStore admissionStore = mock(ReservationQueueAdmissionStore.class);
@@ -54,6 +55,7 @@ class ReservationQueueServiceTest {
         );
 
         ReservationQueueEnqueueResponse response = service.enqueue(
+                42L,
                 "  0xOwNeR  ",
                 "A0EBC4C9-8D82-47AF-8127-1FC3D27E47A1",
                 new ReservationQueueApiRequest(42L, List.of(3L, 1L))
@@ -69,8 +71,12 @@ class ReservationQueueServiceTest {
 
         var command = org.mockito.ArgumentCaptor.forClass(ReservationQueueAdmissionCommand.class);
         verify(admissionStore).admit(command.capture());
-        assertThat(command.getValue().normalizedSeatIds()).containsExactly(1L, 3L);
         assertThat(command.getValue().ownerHash()).matches("[0-9a-f]{64}").doesNotContain("0xowner");
+        assertThat(command.getValue().payload().schemaVersion()).isEqualTo(1);
+        assertThat(command.getValue().payload().memberId()).isEqualTo(42L);
+        assertThat(command.getValue().payload().idempotencyKey().value()).isEqualTo(validKey());
+        assertThat(command.getValue().payload().idempotencyKey().hash()).matches("[0-9a-f]{64}");
+        assertThat(command.getValue().payload().normalizedSeatIds()).containsExactly(1L, 3L);
         assertThat(command.getValue().enqueuedAt()).isEqualTo(NOW);
     }
 
@@ -83,7 +89,7 @@ class ReservationQueueServiceTest {
                 42L
         ));
 
-        ReservationQueueEnqueueResponse response = service.enqueue("0xowner", validKey(), request());
+        ReservationQueueEnqueueResponse response = service.enqueue(42L, "0xowner", validKey(), request());
 
         assertThat(response.ticketId()).isEqualTo(existingTicket);
         assertThat(response.replayed()).isTrue();
@@ -113,7 +119,7 @@ class ReservationQueueServiceTest {
         when(admissionStore.admit(any())).thenThrow(new QueryTimeoutException("Redis timeout"));
 
         assertBusinessError(
-                () -> service.enqueue("0xowner", validKey(), request()),
+                () -> service.enqueue(42L, "0xowner", validKey(), request()),
                 ReservationQueueErrorCode.QUEUE_UNAVAILABLE
         );
     }
@@ -154,6 +160,8 @@ class ReservationQueueServiceTest {
                 TICKET_ID,
                 42L,
                 ownerHash(),
+                OWNER_TOKEN,
+                payload(),
                 ReservationQueueStatus.EXPIRED,
                 7L,
                 null,
@@ -183,7 +191,7 @@ class ReservationQueueServiceTest {
             ReservationQueueErrorCode errorCode
     ) {
         when(admissionStore.admit(any())).thenReturn(result);
-        assertBusinessError(() -> service.enqueue("0xowner", validKey(), request()), errorCode);
+        assertBusinessError(() -> service.enqueue(42L, "0xowner", validKey(), request()), errorCode);
     }
 
     private void assertBusinessError(Runnable invocation, ReservationQueueErrorCode errorCode) {
@@ -197,6 +205,8 @@ class ReservationQueueServiceTest {
                 TICKET_ID,
                 42L,
                 ownerHash,
+                OWNER_TOKEN,
+                payload(),
                 ReservationQueueStatus.WAITING,
                 7L,
                 position,
@@ -207,6 +217,15 @@ class ReservationQueueServiceTest {
 
     private String ownerHash() {
         return new ReservationQueueIdentityHasher().ownerHash("0xowner");
+    }
+
+    private ReservationQueuePayload payload() {
+        return ReservationQueuePayload.current(
+                42L,
+                new ReservationQueueIdentityHasher().idempotencyKey(validKey()),
+                "c".repeat(64),
+                List.of(1L, 3L)
+        );
     }
 
     private ReservationQueueApiRequest request() {

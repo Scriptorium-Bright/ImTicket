@@ -31,12 +31,13 @@ public class LoginSuccessHandler implements AuthenticationSuccessHandler {
             Authentication authentication) throws IOException, ServletException {
 
         MetamaskUserDetails metamaskUserDetails = (MetamaskUserDetails) authentication.getPrincipal();
+        long memberId = metamaskUserDetails.getMemberId();
         String walletAddress = metamaskUserDetails.getAddress();
 
         String role = authentication.getAuthorities().stream().findFirst().map(GrantedAuthority::getAuthority)
                 .orElse("");
 
-        String token = jwtUtil.createJwt(walletAddress, role);
+        String token = jwtUtil.createJwt(memberId, walletAddress, role);
 
         TokenResponse tokenResponse = TokenResponse.builder()
                 .token(token)

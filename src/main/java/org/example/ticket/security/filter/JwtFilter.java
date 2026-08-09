@@ -1,6 +1,7 @@
 package org.example.ticket.security.filter;
 
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.MalformedJwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,11 +44,17 @@ public class JwtFilter extends OncePerRequestFilter {
             String token = authorization.substring(7);
             Claims claims = jwtUtil.parseClaims(token);
 
+            long memberId = jwtUtil.getMemberId(claims);
             String walletAddress = jwtUtil.getUsername(claims);
             String role = jwtUtil.getRole(claims);
 
-            if (walletAddress != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            if (walletAddress == null || walletAddress.isBlank() || role == null || role.isBlank()) {
+                throw new MalformedJwtException("JWT identity claims are incomplete");
+            }
+
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 Member member = Member.builder()
+                        .id(memberId)
                         .walletAddress(walletAddress)
                         .role(role)
                         .build();
@@ -63,7 +70,7 @@ public class JwtFilter extends OncePerRequestFilter {
             }
 
         } catch (Exception e) {
-            log.error("Invalid JWT Token: {}", e.getMessage());
+            log.warn("Invalid JWT token: {}", e.getMessage());
             SecurityContextHolder.clearContext();
         }
 
