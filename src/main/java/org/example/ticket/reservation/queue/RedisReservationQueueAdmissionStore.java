@@ -82,7 +82,9 @@ public final class RedisReservationQueueAdmissionStore implements ReservationQue
         ReservationQueueAdmissionResult.Outcome outcome = switch (reservation.state()) {
             case "QUEUED" -> ReservationQueueAdmissionResult.Outcome.EXISTING;
             case "ENQUEUING" -> ReservationQueueAdmissionResult.Outcome.ENQUEUE_IN_PROGRESS;
-            default -> throw new IllegalStateException("Unexpected idempotency state: " + reservation.state());
+            default -> throw new ReservationQueueStorageException(
+                    "Unexpected idempotency state: " + reservation.state()
+            );
         };
         return ReservationQueueAdmissionResult.existing(
                 outcome,

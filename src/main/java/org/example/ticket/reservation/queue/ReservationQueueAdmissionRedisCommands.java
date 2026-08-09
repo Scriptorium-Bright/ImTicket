@@ -64,10 +64,13 @@ final class ReservationQueueAdmissionRedisCommands {
                         Long.parseLong(parts[3])
                 );
             } catch (IllegalArgumentException exception) {
-                throw new IllegalStateException("Invalid idempotency reservation result: " + result, exception);
+                throw new ReservationQueueStorageException(
+                        "Invalid idempotency reservation result: " + result,
+                        exception
+                );
             }
         }
-        throw new IllegalStateException("Unexpected idempotency reservation result: " + result);
+        throw new ReservationQueueStorageException("Unexpected idempotency reservation result: " + result);
     }
 
     EnqueueResult enqueue(ReservationQueueAdmissionCommand command) {
@@ -100,10 +103,10 @@ final class ReservationQueueAdmissionRedisCommands {
             try {
                 return EnqueueResult.accepted(Long.parseLong(parts[1]), parts[2]);
             } catch (NumberFormatException exception) {
-                throw new IllegalStateException("Invalid enqueue result: " + result, exception);
+                throw new ReservationQueueStorageException("Invalid enqueue result: " + result, exception);
             }
         }
-        throw new IllegalStateException("Unexpected enqueue result: " + result);
+        throw new ReservationQueueStorageException("Unexpected enqueue result: " + result);
     }
 
     void markIdempotencyQueued(ReservationQueueAdmissionCommand command, String ownerToken) {
@@ -116,7 +119,9 @@ final class ReservationQueueAdmissionRedisCommands {
                 String.valueOf(properties.idempotencyRetention().toMillis())
         );
         if (!"MARKED".equals(result) && !"ALREADY_QUEUED".equals(result)) {
-            throw new IllegalStateException("Idempotency mapping was not marked as queued: " + result);
+            throw new ReservationQueueStorageException(
+                    "Idempotency mapping was not marked as queued: " + result
+            );
         }
     }
 
@@ -128,7 +133,7 @@ final class ReservationQueueAdmissionRedisCommands {
                 command.ticketId().toString()
         );
         if (!"RELEASED".equals(result) && !"MISSING".equals(result)) {
-            throw new IllegalStateException("Idempotency mapping was not released: " + result);
+            throw new ReservationQueueStorageException("Idempotency mapping was not released: " + result);
         }
     }
 
@@ -137,7 +142,7 @@ final class ReservationQueueAdmissionRedisCommands {
             redisTemplate.opsForZSet().add(
                     keyFactory.activePerformanceTimes(),
                     String.valueOf(command.performanceTimeId()),
-                    command.deadline(properties).toEpochMilli()
+                    command.enqueuedAt().plus(properties.ticketRetention()).toEpochMilli()
             );
         } catch (DataAccessException ignored) {
             // Ticket과 Stream은 저장된 상태다. 만료 조회에서 registry를 다시 보완한다.
@@ -147,7 +152,7 @@ final class ReservationQueueAdmissionRedisCommands {
     private String execute(DefaultRedisScript<String> script, List<String> keys, String... arguments) {
         String result = redisTemplate.execute(script, keys, (Object[]) arguments);
         if (result == null) {
-            throw new IllegalStateException("Redis script returned no result");
+            throw new ReservationQueueStorageException("Redis script returned no result");
         }
         return result;
     }

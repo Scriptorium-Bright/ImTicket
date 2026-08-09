@@ -59,7 +59,7 @@ class RedisReservationQueueAdmissionStoreTest {
         verify(zSetOperations).add(
                 "reservation:queue:active-performance-times",
                 "42",
-                Instant.parse("2026-08-10T10:10:00Z").toEpochMilli()
+                Instant.parse("2026-08-10T10:30:00Z").toEpochMilli()
         );
     }
 
