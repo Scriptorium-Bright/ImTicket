@@ -1,4 +1,4 @@
-package org.example.ticket.reservation.common.domain;
+package org.example.ticket.reservation.common.value;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

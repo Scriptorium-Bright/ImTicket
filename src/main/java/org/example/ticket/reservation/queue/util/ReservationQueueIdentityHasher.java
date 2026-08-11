@@ -1,6 +1,6 @@
 package org.example.ticket.reservation.queue.util;
 
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

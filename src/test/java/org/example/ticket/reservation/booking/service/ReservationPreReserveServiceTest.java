@@ -2,10 +2,10 @@ package org.example.ticket.reservation.booking.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import org.example.ticket.member.repository.MemberRepository;
-import org.example.ticket.reservation.booking.dto.ReservationRequestFingerprint;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
 import org.example.ticket.reservation.booking.util.ReservationRequestHasher;
+import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -50,7 +50,7 @@ class ReservationPreReserveServiceTest {
     @Test
     void normalizesHttpInputAndDelegatesToMemberIdExecution() {
         ReservationRequest request = new ReservationRequest(1L, List.of(2L, 1L));
-        ReservationRequestFingerprint fingerprint = requestHasher.fingerprint(request);
+        ReservationIntentFingerprint fingerprint = requestHasher.fingerprint(request);
         ReservationCreateResponse response = response();
         when(memberRepository.findIdByWalletAddressIgnoreCase(WALLET)).thenReturn(Optional.of(MEMBER_ID));
         when(claimExecutionService.execute(MEMBER_ID, KEY, request, fingerprint)).thenReturn(response);

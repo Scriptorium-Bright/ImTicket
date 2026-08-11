@@ -1,12 +1,11 @@
 package org.example.ticket.reservation.booking.util;
 
 import org.example.ticket.common.exception.BusinessException;
-import org.example.ticket.reservation.booking.dto.ReservationRequestFingerprint;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
-import org.example.ticket.reservation.common.domain.ReservationIntentFingerprint;
-import org.example.ticket.reservation.common.util.ReservationIntentFingerprintFactory;
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.factory.ReservationIntentFingerprintFactory;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;
@@ -33,7 +32,7 @@ public class ReservationRequestHasher {
      * 예매 요청을 검증하고 좌석 ID 순서에 영향받지 않는 canonical 본문과 SHA-256 해시를 만든다.
      * 정렬 전후 목록을 비교해 중복 좌석 요청도 이 단계에서 차단한다.
      */
-    public ReservationRequestFingerprint fingerprint(ReservationRequest request) {
+    public ReservationIntentFingerprint fingerprint(ReservationRequest request) {
         ReservationValidator.validateCreateRequest(request);
         if (request.getSeatIds().stream().anyMatch(seatId -> seatId == null || seatId <= 0)) {
             throw new BusinessException(ReservationErrorCode.INVALID_SEAT_ID);
@@ -46,9 +45,6 @@ public class ReservationRequestHasher {
                 request.getPerformanceTimeId(),
                 request.getSeatIds()
         );
-        return new ReservationRequestFingerprint(
-                fingerprint.requestHash(),
-                fingerprint.normalizedSeatIds()
-        );
+        return fingerprint;
     }
 }

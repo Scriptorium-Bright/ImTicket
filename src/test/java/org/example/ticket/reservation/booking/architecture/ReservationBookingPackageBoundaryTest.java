@@ -32,7 +32,6 @@ class ReservationBookingPackageBoundaryTest {
             BOOKING_PACKAGE + ".service.SeatService",
             BOOKING_PACKAGE + ".dto.ReservationClaimSnapshot",
             BOOKING_PACKAGE + ".dto.ReservationExpirationResult",
-            BOOKING_PACKAGE + ".dto.ReservationRequestFingerprint",
             BOOKING_PACKAGE + ".dto.SeatCreationData",
             BOOKING_PACKAGE + ".domain.Reservation",
             BOOKING_PACKAGE + ".domain.ReservationIdempotency",
@@ -59,7 +58,10 @@ class ReservationBookingPackageBoundaryTest {
             BOOKING_PACKAGE + ".util.ReservationFailureSnapshotCodec",
             BOOKING_PACKAGE + ".util.ReservationResponseSnapshotCodec",
             BOOKING_PACKAGE + ".util.ReservationValidator",
-            "org.example.ticket.reservation.common.domain.ReservationProcessingLeasePolicy"
+            "org.example.ticket.reservation.common.policy.ReservationProcessingLeasePolicy",
+            "org.example.ticket.reservation.common.value.ReservationIdempotencyKey",
+            "org.example.ticket.reservation.common.value.ReservationIntentFingerprint",
+            "org.example.ticket.reservation.common.factory.ReservationIntentFingerprintFactory"
     );
 
     private static final List<String> LEGACY_PACKAGES = List.of(

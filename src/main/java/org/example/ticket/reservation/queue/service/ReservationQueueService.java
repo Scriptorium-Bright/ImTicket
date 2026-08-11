@@ -5,8 +5,7 @@ import org.example.ticket.reservation.queue.exception.ReservationQueueStorageExc
 import org.example.ticket.reservation.queue.repository.ReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.example.ticket.reservation.queue.constant.ReservationQueueErrorCode;
-import org.example.ticket.reservation.queue.domain.ReservationQueueRequestFingerprint;
-import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
 import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionCommand;
 import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueuePayload;
@@ -15,7 +14,9 @@ import org.example.ticket.reservation.queue.dto.request.ReservationQueueApiReque
 import org.example.ticket.reservation.queue.dto.response.ReservationQueueEnqueueResponse;
 import org.example.ticket.reservation.queue.dto.response.ReservationQueueStatusResponse;
 import org.example.ticket.reservation.queue.util.ReservationQueueIdentityHasher;
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.factory.ReservationIntentFingerprintFactory;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
 
 import org.example.ticket.common.exception.BusinessException;
 import org.springframework.dao.DataAccessException;
@@ -93,7 +94,7 @@ public final class ReservationQueueService {
             throw new BusinessException(ReservationQueueErrorCode.IDEMPOTENCY_KEY_INVALID, exception);
         }
 
-        ReservationQueueRequestFingerprint fingerprint = fingerprint(request);
+        ReservationIntentFingerprint fingerprint = fingerprint(request);
         UUID candidateTicketId = Objects.requireNonNull(
                 ticketIdSupplier.get(),
                 "ticketId must not be null"
@@ -214,12 +215,12 @@ public final class ReservationQueueService {
      * API 요청을 정렬 좌석과 request hash를 가진 Queue fingerprint로 변환한다.
      * 입력 불변식 위반은 공개 요청 오류로 바꾼다.
      */
-    private ReservationQueueRequestFingerprint fingerprint(ReservationQueueApiRequest request) {
+    private ReservationIntentFingerprint fingerprint(ReservationQueueApiRequest request) {
         if (request == null || request.performanceTimeId() == null) {
             throw error(ReservationQueueErrorCode.INVALID_REQUEST);
         }
         try {
-            return ReservationQueueRequestFingerprint.of(request.performanceTimeId(), request.seatIds());
+            return ReservationIntentFingerprintFactory.create(request.performanceTimeId(), request.seatIds());
         } catch (IllegalArgumentException exception) {
             throw new BusinessException(ReservationQueueErrorCode.INVALID_REQUEST, exception);
         }

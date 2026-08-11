@@ -1,6 +1,6 @@
 package org.example.ticket.reservation.queue.dto.response;
 
-import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
 
 import java.util.Objects;
 import java.util.UUID;

@@ -6,7 +6,6 @@ import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.example.ticket.reservation.booking.constant.ReservationFailureType;
 import org.example.ticket.reservation.booking.domain.ReservationIdempotencyStatus;
 import org.example.ticket.reservation.booking.dto.ReservationClaimSnapshot;
-import org.example.ticket.reservation.booking.dto.ReservationRequestFingerprint;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
 import org.example.ticket.reservation.booking.exception.ReservationSnapshotException;
@@ -14,6 +13,7 @@ import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
 import org.example.ticket.reservation.booking.util.ReservationFailureSnapshotCodec;
 import org.example.ticket.reservation.booking.util.ReservationResponseSnapshotCodec;
 import org.example.ticket.reservation.booking.util.admission.SeatAdmissionService;
+import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -72,7 +72,7 @@ public class ReservationClaimExecutionService {
             Long memberId,
             String idempotencyKey,
             ReservationRequest request,
-            ReservationRequestFingerprint requestFingerprint
+            ReservationIntentFingerprint requestFingerprint
     ) {
         if (memberId == null || memberId <= 0) {
             throw new BusinessException(ReservationErrorCode.RESERVATION_MEMBER_NOT_FOUND);
@@ -107,7 +107,7 @@ public class ReservationClaimExecutionService {
             Long memberId,
             String idempotencyKey,
             ReservationRequest request,
-            ReservationRequestFingerprint requestFingerprint
+            ReservationIntentFingerprint requestFingerprint
     ) {
         for (int attempt = 0; attempt < RESOLUTION_ATTEMPTS; attempt++) {
             ReservationClaimSnapshot existing = transactionService
@@ -165,7 +165,7 @@ public class ReservationClaimExecutionService {
     private ReservationCreateResponse executeOwnedClaim(
             Long memberId,
             ReservationRequest request,
-            ReservationRequestFingerprint requestFingerprint,
+            ReservationIntentFingerprint requestFingerprint,
             Long claimId,
             String attemptToken
     ) {
@@ -272,4 +272,3 @@ public class ReservationClaimExecutionService {
         return UUID.randomUUID().toString();
     }
 }
-

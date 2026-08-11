@@ -1,6 +1,6 @@
-package org.example.ticket.reservation.common.util;
+package org.example.ticket.reservation.common.factory;
 
-import org.example.ticket.reservation.common.domain.ReservationIntentFingerprint;
+import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

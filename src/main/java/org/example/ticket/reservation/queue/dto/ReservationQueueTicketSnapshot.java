@@ -1,6 +1,6 @@
 package org.example.ticket.reservation.queue.dto;
 
-import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
 
 import java.time.Instant;
 import java.util.Objects;

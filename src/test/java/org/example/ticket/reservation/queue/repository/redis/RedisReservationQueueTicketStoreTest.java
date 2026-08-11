@@ -3,8 +3,8 @@ package org.example.ticket.reservation.queue.repository.redis;
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.example.ticket.reservation.queue.dto.ReservationQueueTicketSnapshot;
 import org.example.ticket.reservation.queue.exception.ReservationQueueStorageException;
-import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

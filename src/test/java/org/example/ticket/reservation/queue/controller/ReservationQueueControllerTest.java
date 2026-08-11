@@ -3,7 +3,7 @@ package org.example.ticket.reservation.queue.controller;
 import org.example.ticket.reservation.queue.dto.response.ReservationQueueEnqueueResponse;
 import org.example.ticket.reservation.queue.service.ReservationQueueService;
 import org.example.ticket.reservation.queue.dto.response.ReservationQueueStatusResponse;
-import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.security.principal.MetamaskUserDetails;
 

@@ -1,8 +1,7 @@
-package org.example.ticket.reservation.common.util;
+package org.example.ticket.reservation.common.factory;
 
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.util.ReservationRequestHasher;
-import org.example.ticket.reservation.queue.domain.ReservationQueueRequestFingerprint;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -22,7 +21,7 @@ class ReservationIntentFingerprintContractTest {
         var booking = new ReservationRequestHasher().fingerprint(
                 new ReservationRequest(10L, List.of(3L, 1L))
         );
-        var queue = ReservationQueueRequestFingerprint.of(10L, List.of(1L, 3L));
+        var queue = ReservationIntentFingerprintFactory.create(10L, List.of(1L, 3L));
 
         assertThat(booking.requestHash()).isEqualTo(queue.requestHash());
         assertThat(booking.normalizedSeatIds()).containsExactly(1L, 3L);
@@ -32,7 +31,7 @@ class ReservationIntentFingerprintContractTest {
     @Test
     void commonFingerprintCarriesTheCanonicalIntentAsAnImmutableValue() throws Exception {
         Class<?> factoryType = Class.forName(
-                "org.example.ticket.reservation.common.util.ReservationIntentFingerprintFactory"
+                "org.example.ticket.reservation.common.factory.ReservationIntentFingerprintFactory"
         );
         Method create = factoryType.getMethod("create", long.class, List.class);
         Object fingerprint = create.invoke(null, 10L, List.of(3L, 1L));
@@ -53,14 +52,14 @@ class ReservationIntentFingerprintContractTest {
         String bookingSource = Files.readString(Path.of(
                 "src/main/java/org/example/ticket/reservation/booking/util/ReservationRequestHasher.java"
         ));
-        String queueSource = Files.readString(Path.of(
-                "src/main/java/org/example/ticket/reservation/queue/domain/ReservationQueueRequestFingerprint.java"
+        String factorySource = Files.readString(Path.of(
+                "src/main/java/org/example/ticket/reservation/common/factory/ReservationIntentFingerprintFactory.java"
         ));
 
         assertThat(bookingSource).contains("ReservationIntentFingerprintFactory.create");
-        assertThat(queueSource).contains("ReservationIntentFingerprintFactory.create");
+        assertThat(factorySource).contains("public static ReservationIntentFingerprint create");
         assertThat(bookingSource).doesNotContain("MessageDigest", SCHEMA_VERSION);
-        assertThat(queueSource).doesNotContain("MessageDigest", SCHEMA_VERSION);
+        assertThat(factorySource).contains("MessageDigest", SCHEMA_VERSION);
     }
 
     private Object read(Object target, String accessor) throws Exception {

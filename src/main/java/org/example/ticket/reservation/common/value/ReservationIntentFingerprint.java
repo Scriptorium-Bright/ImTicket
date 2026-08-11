@@ -1,4 +1,4 @@
-package org.example.ticket.reservation.common.domain;
+package org.example.ticket.reservation.common.value;
 
 import java.util.List;
 import java.util.Objects;

@@ -1,6 +1,6 @@
 package org.example.ticket.reservation.queue.dto;
 
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

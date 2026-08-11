@@ -4,7 +4,7 @@ import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionCommand
 import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionResult;
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.example.ticket.reservation.queue.dto.ReservationQueuePayload;
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

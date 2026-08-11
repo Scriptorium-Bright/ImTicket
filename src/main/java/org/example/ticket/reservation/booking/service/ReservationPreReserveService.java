@@ -2,10 +2,10 @@ package org.example.ticket.reservation.booking.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import org.example.ticket.member.repository.MemberRepository;
-import org.example.ticket.reservation.booking.dto.ReservationRequestFingerprint;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
 import org.example.ticket.reservation.booking.util.ReservationRequestHasher;
+import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
 import org.springframework.stereotype.Service;
 
 /** HTTP 예약 입력을 정규화하고 공통 DB claim 실행 경계로 전달한다. */
@@ -40,7 +40,7 @@ public class ReservationPreReserveService {
             ReservationRequest request
     ) {
         String idempotencyKey = requestHasher.normalizeKey(rawIdempotencyKey);
-        ReservationRequestFingerprint requestFingerprint = requestHasher.fingerprint(request);
+        ReservationIntentFingerprint requestFingerprint = requestHasher.fingerprint(request);
         Long memberId = memberRepository.findIdByWalletAddressIgnoreCase(walletAddress)
                 .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
 

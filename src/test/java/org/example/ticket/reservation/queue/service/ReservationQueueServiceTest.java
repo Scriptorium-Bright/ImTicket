@@ -4,7 +4,7 @@ import org.example.ticket.reservation.queue.repository.ReservationQueueAdmission
 import org.example.ticket.reservation.queue.repository.ReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.example.ticket.reservation.queue.constant.ReservationQueueErrorCode;
-import org.example.ticket.reservation.queue.domain.ReservationQueueStatus;
+import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
 import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionCommand;
 import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueuePayload;

@@ -1,6 +1,6 @@
 package org.example.ticket.reservation.queue.dto;
 
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 
 import java.util.List;
 import java.util.Objects;

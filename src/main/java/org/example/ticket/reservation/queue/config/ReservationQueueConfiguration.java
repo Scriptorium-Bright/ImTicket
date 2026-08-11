@@ -12,7 +12,7 @@ import org.example.ticket.reservation.queue.repository.redis.RedisReservationQue
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.repository.redis.ReservationQueueKeyFactory;
 import org.example.ticket.reservation.queue.util.scheduler.ReservationQueueExpiryScheduler;
-import org.example.ticket.reservation.common.domain.ReservationProcessingLeasePolicy;
+import org.example.ticket.reservation.common.policy.ReservationProcessingLeasePolicy;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;

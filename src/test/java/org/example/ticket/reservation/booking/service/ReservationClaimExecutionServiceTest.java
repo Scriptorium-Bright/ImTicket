@@ -4,13 +4,13 @@ import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.example.ticket.reservation.booking.domain.ReservationIdempotencyStatus;
 import org.example.ticket.reservation.booking.dto.ReservationClaimSnapshot;
-import org.example.ticket.reservation.booking.dto.ReservationRequestFingerprint;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
 import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
 import org.example.ticket.reservation.booking.util.ReservationFailureSnapshotCodec;
 import org.example.ticket.reservation.booking.util.ReservationResponseSnapshotCodec;
 import org.example.ticket.reservation.booking.util.admission.SeatAdmissionService;
+import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -278,8 +278,13 @@ class ReservationClaimExecutionServiceTest {
         );
     }
 
-    private ReservationRequestFingerprint fingerprint() {
-        return new ReservationRequestFingerprint(HASH, List.of(1L));
+    private ReservationIntentFingerprint fingerprint() {
+        return new ReservationIntentFingerprint(
+                "reservation-pre-reserve:v1",
+                10L,
+                List.of(1L),
+                HASH
+        );
     }
 
     private ReservationRequest request() {

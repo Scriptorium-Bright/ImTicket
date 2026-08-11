@@ -1,4 +1,4 @@
-package org.example.ticket.reservation.queue.domain;
+package org.example.ticket.reservation.queue.constant;
 
 import org.junit.jupiter.api.Test;
 

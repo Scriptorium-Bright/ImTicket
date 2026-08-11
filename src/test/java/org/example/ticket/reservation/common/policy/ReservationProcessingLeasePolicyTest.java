@@ -1,4 +1,4 @@
-package org.example.ticket.reservation.common.domain;
+package org.example.ticket.reservation.common.policy;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,4 +33,3 @@ class ReservationProcessingLeasePolicyTest {
                 .hasMessageContaining("claimLease");
     }
 }
-

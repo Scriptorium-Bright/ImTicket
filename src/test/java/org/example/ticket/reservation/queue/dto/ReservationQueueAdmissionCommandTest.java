@@ -2,7 +2,7 @@ package org.example.ticket.reservation.queue.dto;
 
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.junit.jupiter.api.Test;
-import org.example.ticket.reservation.common.domain.ReservationIdempotencyKey;
+import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 
 import java.time.Instant;
 import java.util.List;

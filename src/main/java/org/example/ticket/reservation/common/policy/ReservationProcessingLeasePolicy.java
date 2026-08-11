@@ -1,4 +1,4 @@
-package org.example.ticket.reservation.common.domain;
+package org.example.ticket.reservation.common.policy;
 
 import java.time.Duration;
 
@@ -30,4 +30,3 @@ public record ReservationProcessingLeasePolicy(
         }
     }
 }
-

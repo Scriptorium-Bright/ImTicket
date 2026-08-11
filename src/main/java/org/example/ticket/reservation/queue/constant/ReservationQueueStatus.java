@@ -1,4 +1,4 @@
-package org.example.ticket.reservation.queue.domain;
+package org.example.ticket.reservation.queue.constant;
 
 /** Redis 예약 대기열 ticket의 처리 상태다. */
 public enum ReservationQueueStatus {
