@@ -19,6 +19,9 @@ final class ReservationQueueWorkerRedisCommands {
     private static final DefaultRedisScript<String> CLAIM_PROCESSING = script(
             "redis/reservation-queue/reservation_queue_claim_processing.lua"
     );
+    private static final DefaultRedisScript<String> RECOVER_PROCESSING = script(
+            "redis/reservation-queue/reservation_queue_recover_processing.lua"
+    );
 
     private final StringRedisTemplate redisTemplate;
     private final ReservationQueueProperties queueProperties;
@@ -77,6 +80,46 @@ final class ReservationQueueWorkerRedisCommands {
             case "PAYLOAD_MISMATCH" -> ReservationQueueClaimResult.PAYLOAD_MISMATCH;
             default -> throw new ReservationQueueStorageException(
                     "Unexpected Redis Worker claim result: " + result
+            );
+        };
+    }
+
+    /**
+     * 만료된 PROCESSING ticket의 Worker owner와 lease를 원자적으로 교체한다.
+     * 이미 terminal인 ticket은 DB 재실행 없이 ACK 가능한 결과로 구분한다.
+     */
+    ReservationQueueClaimResult recover(
+            ReservationQueueWorkItem item,
+            String workerId,
+            Instant recoveredAt,
+            Duration processingLease
+    ) {
+        String result = redisTemplate.execute(
+                RECOVER_PROCESSING,
+                List.of(
+                        keyFactory.processing(item.performanceTimeId()),
+                        keyFactory.ticket(item.performanceTimeId(), item.ticketId())
+                ),
+                item.ticketId().toString(),
+                item.streamId(),
+                item.ownerToken().toString(),
+                workerId,
+                String.valueOf(recoveredAt.toEpochMilli()),
+                String.valueOf(recoveredAt.plus(processingLease).toEpochMilli()),
+                String.valueOf(queueProperties.ticketRetention().toMillis())
+        );
+        if (result == null) {
+            throw new ReservationQueueStorageException("Redis Worker recovery returned no result");
+        }
+        return switch (result) {
+            case "RECOVERED" -> ReservationQueueClaimResult.RECOVERED;
+            case "ALREADY_TERMINAL" -> ReservationQueueClaimResult.ALREADY_TERMINAL;
+            case "LEASE_ACTIVE" -> ReservationQueueClaimResult.LEASE_ACTIVE;
+            case "MISSING" -> ReservationQueueClaimResult.MISSING;
+            case "NOT_WAITING" -> ReservationQueueClaimResult.NOT_WAITING;
+            case "PAYLOAD_MISMATCH" -> ReservationQueueClaimResult.PAYLOAD_MISMATCH;
+            default -> throw new ReservationQueueStorageException(
+                    "Unexpected Redis Worker recovery result: " + result
             );
         };
     }

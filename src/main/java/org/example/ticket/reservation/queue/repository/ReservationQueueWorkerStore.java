@@ -29,6 +29,16 @@ public interface ReservationQueueWorkerStore {
     );
 
     /**
+     * 최소 idle 시간이 지난 pending entry 한 건을 회수 후보로 조회한다.
+     * 이 단계는 Consumer 소유권을 바꾸지 않으며 Redis ticket fencing을 먼저 수행하게 한다.
+     */
+    Optional<ReservationQueueStreamMessage> readStaleCandidate(
+            long performanceTimeId,
+            String consumerGroup,
+            Duration minimumIdleTime
+    );
+
+    /**
      * WAITING ticket을 worker owner와 lease가 있는 PROCESSING 상태로 원자 전환한다.
      * Stream과 ticket payload가 일치하지 않으면 처리 소유권을 부여하지 않는다.
      */
@@ -36,6 +46,18 @@ public interface ReservationQueueWorkerStore {
             ReservationQueueWorkItem item,
             String workerId,
             Instant claimedAt,
+            Duration processingLease
+    );
+
+    /**
+     * Lease가 끝난 PROCESSING ticket과 pending entry를 새 Worker에게 이전한다.
+     * Terminal ticket이면 DB 실행 없이 ACK할 수 있는 결과를 반환한다.
+     */
+    ReservationQueueClaimResult recover(
+            ReservationQueueWorkItem item,
+            String consumerGroup,
+            String workerId,
+            Instant recoveredAt,
             Duration processingLease
     );
 

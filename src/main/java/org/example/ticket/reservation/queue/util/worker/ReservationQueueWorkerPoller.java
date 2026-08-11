@@ -8,6 +8,8 @@ import org.example.ticket.reservation.queue.dto.ReservationQueueWorkItem;
 import org.example.ticket.reservation.queue.exception.ReservationQueuePayloadException;
 import org.example.ticket.reservation.queue.repository.ReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueRetryStore;
+import org.example.ticket.reservation.queue.config.ReservationQueueRetryProperties;
 import org.example.ticket.reservation.queue.service.ReservationQueueWorkHandler;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -29,8 +31,10 @@ public final class ReservationQueueWorkerPoller {
     private final ReservationQueueStreamPayloadDecoder payloadDecoder;
     private final ReservationQueueWorkerPermits permits;
     private final ReservationQueueWorkHandler workHandler;
+    private final ReservationQueueRetryStore retryStore;
     private final Executor executor;
     private final ReservationQueueWorkerProperties properties;
+    private final ReservationQueueRetryProperties retryProperties;
     private final Duration processingLease;
     private final Clock clock;
     private final AtomicLong nextStart = new AtomicLong();
@@ -45,8 +49,10 @@ public final class ReservationQueueWorkerPoller {
             ReservationQueueStreamPayloadDecoder payloadDecoder,
             ReservationQueueWorkerPermits permits,
             ReservationQueueWorkHandler workHandler,
+            ReservationQueueRetryStore retryStore,
             Executor executor,
             ReservationQueueWorkerProperties properties,
+            ReservationQueueRetryProperties retryProperties,
             Duration processingLease,
             Clock clock
     ) {
@@ -55,8 +61,10 @@ public final class ReservationQueueWorkerPoller {
         this.payloadDecoder = Objects.requireNonNull(payloadDecoder, "payloadDecoder must not be null");
         this.permits = Objects.requireNonNull(permits, "permits must not be null");
         this.workHandler = Objects.requireNonNull(workHandler, "workHandler must not be null");
+        this.retryStore = Objects.requireNonNull(retryStore, "retryStore must not be null");
         this.executor = Objects.requireNonNull(executor, "executor must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
+        this.retryProperties = Objects.requireNonNull(retryProperties, "retryProperties must not be null");
         this.processingLease = requirePositive(processingLease);
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
@@ -82,7 +90,23 @@ public final class ReservationQueueWorkerPoller {
             }
             ReservationQueueWorkerPermits.Permit permit = acquired.get();
             try {
+                retryStore.promoteDue(
+                        performanceTimeId,
+                        clock.instant(),
+                        retryProperties.promotionBatchSize()
+                );
                 workerStore.ensureConsumerGroup(performanceTimeId, properties.consumerGroup());
+                Optional<ReservationQueueStreamMessage> stale = workerStore.readStaleCandidate(
+                        performanceTimeId,
+                        properties.consumerGroup(),
+                        processingLease
+                );
+                if (stale.isPresent()) {
+                    if (recoverAndDispatch(stale.get(), permit)) {
+                        dispatched++;
+                    }
+                    continue;
+                }
                 Optional<ReservationQueueStreamMessage> message = workerStore.readNew(
                         performanceTimeId,
                         properties.consumerGroup(),
@@ -106,6 +130,38 @@ public final class ReservationQueueWorkerPoller {
             }
         }
         return dispatched;
+    }
+
+    /**
+     * Stale pending payload를 검증하고 ticket lease와 Consumer ownership을 함께 회수한다.
+     * 이미 terminal인 ticket은 DB handler를 호출하지 않고 남은 entry만 ACK한다.
+     */
+    private boolean recoverAndDispatch(
+            ReservationQueueStreamMessage message,
+            ReservationQueueWorkerPermits.Permit permit
+    ) {
+        try {
+            ReservationQueueWorkItem item = payloadDecoder.decode(message);
+            ReservationQueueClaimResult result = workerStore.recover(
+                    item,
+                    properties.consumerGroup(),
+                    properties.instanceId(),
+                    clock.instant(),
+                    processingLease
+            );
+            if (result == ReservationQueueClaimResult.ALREADY_TERMINAL) {
+                workerStore.acknowledge(item, properties.consumerGroup());
+                permit.close();
+                return true;
+            }
+            if (result != ReservationQueueClaimResult.RECOVERED) {
+                permit.close();
+                return false;
+            }
+            return submit(() -> workHandler.handle(item, properties.instanceId()), permit);
+        } catch (ReservationQueuePayloadException exception) {
+            return submit(() -> workHandler.reject(message, properties.instanceId(), exception), permit);
+        }
     }
 
     /**

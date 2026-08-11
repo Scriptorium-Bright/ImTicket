@@ -18,6 +18,7 @@ import org.example.ticket.reservation.queue.dto.ReservationQueueTerminalResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueueWorkItem;
 import org.example.ticket.reservation.queue.exception.ReservationQueuePayloadException;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTerminalStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
 import org.springframework.dao.DataIntegrityViolationException;
 
@@ -31,6 +32,7 @@ public final class ReservationQueueProcessor implements ReservationQueueWorkHand
     private final MemberRepository memberRepository;
     private final ReservationFailureClassifier failureClassifier;
     private final ReservationQueueTerminalStore terminalStore;
+    private final ReservationQueueRetryStore retryStore;
     private final ReservationQueueWorkerStore workerStore;
     private final ReservationQueueWorkerProperties workerProperties;
     private final Clock clock;
@@ -44,6 +46,7 @@ public final class ReservationQueueProcessor implements ReservationQueueWorkHand
             MemberRepository memberRepository,
             ReservationFailureClassifier failureClassifier,
             ReservationQueueTerminalStore terminalStore,
+            ReservationQueueRetryStore retryStore,
             ReservationQueueWorkerStore workerStore,
             ReservationQueueWorkerProperties workerProperties,
             Clock clock
@@ -52,6 +55,7 @@ public final class ReservationQueueProcessor implements ReservationQueueWorkHand
         this.memberRepository = Objects.requireNonNull(memberRepository, "memberRepository must not be null");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier must not be null");
         this.terminalStore = Objects.requireNonNull(terminalStore, "terminalStore must not be null");
+        this.retryStore = Objects.requireNonNull(retryStore, "retryStore must not be null");
         this.workerStore = Objects.requireNonNull(workerStore, "workerStore must not be null");
         this.workerProperties = Objects.requireNonNull(workerProperties, "workerProperties must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
@@ -74,19 +78,25 @@ public final class ReservationQueueProcessor implements ReservationQueueWorkHand
                 item.payload().normalizedSeatIds()
         );
 
+        ReservationCreateResponse response;
         try {
-            ReservationCreateResponse response = executionService.execute(
+            response = executionService.execute(
                     item.payload().memberId(),
                     item.payload().idempotencyKey().value(),
                     request,
                     fingerprint
             );
-            completeSuccess(item, workerId, response);
         } catch (BusinessException exception) {
             handleBusinessFailure(item, workerId, exception);
+            return;
         } catch (DataIntegrityViolationException exception) {
             handleIntegrityFailure(item, workerId, exception);
+            return;
+        } catch (RuntimeException exception) {
+            handleRuntimeFailure(item, workerId, exception);
+            return;
         }
+        completeSuccess(item, workerId, response);
     }
 
     /**
@@ -150,11 +160,61 @@ public final class ReservationQueueProcessor implements ReservationQueueWorkHand
             String workerId,
             BusinessException exception
     ) {
-        if (failureClassifier.classify(exception) != ReservationFailureType.FINAL) {
+        ReservationFailureType failureType = failureClassifier.classify(exception);
+        if (failureType == ReservationFailureType.RETRYABLE) {
+            acknowledgeIfRetryScheduled(
+                    item,
+                    retryStore.schedule(item, workerId, stableErrorCode(exception), clock.instant())
+            );
+            return;
+        }
+        if (failureType != ReservationFailureType.FINAL) {
             return;
         }
         ReservationErrorCode errorCode = failureClassifier.requireFinalErrorCode(exception);
         completeFinal(item, workerId, errorCode.code());
+    }
+
+    /**
+     * Spring transient DB 오류를 retry ZSET으로 보내고 나머지 런타임 오류는 전달한다.
+     * 원인을 판정할 수 없는 오류는 processing lease와 pending entry를 유지한다.
+     */
+    private void handleRuntimeFailure(
+            ReservationQueueWorkItem item,
+            String workerId,
+            RuntimeException exception
+    ) {
+        if (failureClassifier.classify(exception) != ReservationFailureType.RETRYABLE) {
+            throw exception;
+        }
+        acknowledgeIfRetryScheduled(
+                item,
+                retryStore.schedule(item, workerId, stableErrorCode(exception), clock.instant())
+        );
+    }
+
+    /**
+     * Retry ZSET 또는 budget 초과 terminal이 저장된 작업만 ACK한다.
+     * Owner와 상태 불일치는 pending으로 남겨 현재 소유자가 후속 판단을 수행하게 한다.
+     */
+    private void acknowledgeIfRetryScheduled(
+            ReservationQueueWorkItem item,
+            org.example.ticket.reservation.queue.dto.ReservationQueueRetryResult result
+    ) {
+        if (result.allowsAck()) {
+            workerStore.acknowledge(item, workerProperties.consumerGroup());
+        }
+    }
+
+    /**
+     * Retry 기록에 사용할 공개 예약 오류 code를 반환한다.
+     * BusinessException이 아닌 일시 오류는 고정된 내부 분류 code로 제한한다.
+     */
+    private String stableErrorCode(RuntimeException exception) {
+        if (exception instanceof BusinessException businessException) {
+            return businessException.getErrorCode().code();
+        }
+        return "QUEUE_TRANSIENT_PROCESSING_FAILURE";
     }
 
     /**

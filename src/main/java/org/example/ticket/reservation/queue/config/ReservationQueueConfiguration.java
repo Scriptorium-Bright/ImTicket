@@ -12,11 +12,13 @@ import org.example.ticket.reservation.queue.repository.ReservationQueueAdmission
 import org.example.ticket.reservation.queue.repository.ReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTerminalStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueAdmissionStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTerminalStore;
+import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.ReservationQueueKeyFactory;
 import org.example.ticket.reservation.queue.util.scheduler.ReservationQueueExpiryScheduler;
@@ -48,7 +50,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Queue feature flag가 켜진 경우에만 Redis queue bean을 구성한다. */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "reservation.queue", name = "enabled", havingValue = "true")
-@EnableConfigurationProperties({ReservationQueueProperties.class, ReservationQueueWorkerProperties.class})
+@EnableConfigurationProperties({
+        ReservationQueueProperties.class,
+        ReservationQueueWorkerProperties.class,
+        ReservationQueueRetryProperties.class
+})
 public class ReservationQueueConfiguration {
 
     /**
@@ -286,6 +292,26 @@ public class ReservationQueueConfiguration {
     }
 
     /**
+     * Retry scheduling, budget과 due Stream 승격을 수행하는 Redis 저장소를 등록한다.
+     * Worker가 켜진 인스턴스에서만 retry 정책을 활성화한다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueueRetryStore reservationQueueRetryStore(
+            StringRedisTemplate redisTemplate,
+            ReservationQueueProperties queueProperties,
+            ReservationQueueRetryProperties retryProperties,
+            ReservationQueueKeyFactory keyFactory
+    ) {
+        return new RedisReservationQueueRetryStore(
+                redisTemplate,
+                queueProperties,
+                retryProperties,
+                keyFactory
+        );
+    }
+
+    /**
      * 검증된 Queue 작업을 공통 DB claim과 terminal, ACK 순서로 연결하는 processor를 등록한다.
      * 예약 transaction과 Redis 명령이 서로의 transaction 경계 안에 들어가지 않게 한다.
      */
@@ -296,6 +322,7 @@ public class ReservationQueueConfiguration {
             MemberRepository memberRepository,
             ReservationFailureClassifier failureClassifier,
             ReservationQueueTerminalStore terminalStore,
+            ReservationQueueRetryStore retryStore,
             ReservationQueueWorkerStore workerStore,
             ReservationQueueWorkerProperties workerProperties,
             Clock clock
@@ -305,6 +332,7 @@ public class ReservationQueueConfiguration {
                 memberRepository,
                 failureClassifier,
                 terminalStore,
+                retryStore,
                 workerStore,
                 workerProperties,
                 clock
@@ -323,8 +351,10 @@ public class ReservationQueueConfiguration {
             ReservationQueueStreamPayloadDecoder payloadDecoder,
             ReservationQueueWorkerPermits permits,
             ReservationQueueProcessor processor,
+            ReservationQueueRetryStore retryStore,
             ThreadPoolExecutor reservationQueueWorkerExecutor,
             ReservationQueueWorkerProperties workerProperties,
+            ReservationQueueRetryProperties retryProperties,
             ReservationQueueProperties queueProperties,
             Clock clock
     ) {
@@ -334,8 +364,10 @@ public class ReservationQueueConfiguration {
                 payloadDecoder,
                 permits,
                 processor,
+                retryStore,
                 reservationQueueWorkerExecutor,
                 workerProperties,
+                retryProperties,
                 queueProperties.processingLease(),
                 clock
         );

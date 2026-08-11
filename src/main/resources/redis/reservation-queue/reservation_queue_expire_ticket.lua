@@ -1,15 +1,15 @@
--- KEYS: admitted ZSET, waiting ZSET, deadline ZSET, ticket HASH
+-- KEYS: admitted ZSET, waiting ZSET, retry ZSET, deadline ZSET, ticket HASH
 -- ARGV: ticketId, nowMs, resultRetentionMs
-if redis.call('EXISTS', KEYS[4]) == 0 then
+if redis.call('EXISTS', KEYS[5]) == 0 then
     return 'MISSING'
 end
 
-local status = redis.call('HGET', KEYS[4], 'status')
+local status = redis.call('HGET', KEYS[5], 'status')
 if status ~= 'WAITING' and status ~= 'RETRY_WAIT' then
     return 'NOT_EXPIRABLE'
 end
 
-local deadline_at = tonumber(redis.call('HGET', KEYS[4], 'deadlineAt'))
+local deadline_at = tonumber(redis.call('HGET', KEYS[5], 'deadlineAt'))
 if not deadline_at then
     return 'CORRUPT'
 end
@@ -20,6 +20,7 @@ end
 redis.call('ZREM', KEYS[1], ARGV[1])
 redis.call('ZREM', KEYS[2], ARGV[1])
 redis.call('ZREM', KEYS[3], ARGV[1])
-redis.call('HSET', KEYS[4], 'status', 'EXPIRED', 'expiredAt', ARGV[2])
-redis.call('PEXPIRE', KEYS[4], ARGV[3])
+redis.call('ZREM', KEYS[4], ARGV[1])
+redis.call('HSET', KEYS[5], 'status', 'EXPIRED', 'expiredAt', ARGV[2])
+redis.call('PEXPIRE', KEYS[5], ARGV[3])
 return 'EXPIRED'

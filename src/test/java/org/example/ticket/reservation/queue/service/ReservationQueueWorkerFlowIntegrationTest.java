@@ -6,6 +6,7 @@ import org.example.ticket.reservation.booking.service.ReservationClaimExecutionS
 import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.example.ticket.reservation.queue.config.ReservationQueueWorkerProperties;
+import org.example.ticket.reservation.queue.config.ReservationQueueRetryProperties;
 import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
 import org.example.ticket.reservation.queue.dto.request.ReservationQueueApiRequest;
 import org.example.ticket.reservation.queue.dto.response.ReservationQueueEnqueueResponse;
@@ -13,6 +14,7 @@ import org.example.ticket.reservation.queue.dto.response.ReservationQueueStatusR
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueAdmissionStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTerminalStore;
+import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.ReservationQueueKeyFactory;
@@ -79,6 +81,9 @@ class ReservationQueueWorkerFlowIntegrationTest {
         ReservationQueueWorkerProperties workerProperties = new ReservationQueueWorkerProperties(
                 true, GROUP, WORKER, 1, 1, Duration.ofMillis(10), Duration.ofMillis(10)
         );
+        ReservationQueueRetryProperties retryProperties = new ReservationQueueRetryProperties(
+                3, Duration.ofMillis(10), Duration.ofSeconds(1), 10
+        );
         ReservationQueueKeyFactory keyFactory = new ReservationQueueKeyFactory();
         RedisReservationQueueTicketStore ticketStore = new RedisReservationQueueTicketStore(
                 redisTemplate, queueProperties, keyFactory
@@ -116,6 +121,9 @@ class ReservationQueueWorkerFlowIntegrationTest {
                 mock(MemberRepository.class),
                 new ReservationFailureClassifier(),
                 new RedisReservationQueueTerminalStore(redisTemplate, queueProperties, keyFactory),
+                new RedisReservationQueueRetryStore(
+                        redisTemplate, queueProperties, retryProperties, keyFactory
+                ),
                 workerStore,
                 workerProperties,
                 CLOCK
@@ -126,8 +134,12 @@ class ReservationQueueWorkerFlowIntegrationTest {
                 new ReservationQueueStreamPayloadDecoder(List.of(new ReservationQueuePayloadV1Decoder())),
                 new ReservationQueueWorkerPermits(1, 1),
                 processor,
+                new RedisReservationQueueRetryStore(
+                        redisTemplate, queueProperties, retryProperties, keyFactory
+                ),
                 Runnable::run,
                 workerProperties,
+                retryProperties,
                 queueProperties.processingLease(),
                 CLOCK
         );

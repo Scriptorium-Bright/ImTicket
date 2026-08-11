@@ -3,6 +3,7 @@ package org.example.ticket.reservation.queue.util.worker;
 import org.example.ticket.reservation.common.factory.ReservationIntentFingerprintFactory;
 import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 import org.example.ticket.reservation.queue.config.ReservationQueueWorkerProperties;
+import org.example.ticket.reservation.queue.config.ReservationQueueRetryProperties;
 import org.example.ticket.reservation.queue.dto.ReservationQueueClaimResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueuePayload;
 import org.example.ticket.reservation.queue.dto.ReservationQueueStreamMessage;
@@ -10,6 +11,7 @@ import org.example.ticket.reservation.queue.dto.ReservationQueueWorkItem;
 import org.example.ticket.reservation.queue.exception.ReservationQueuePayloadException;
 import org.example.ticket.reservation.queue.repository.ReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.service.ReservationQueueWorkHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +39,7 @@ class ReservationQueueWorkerPollerTest {
     private final ReservationQueueExpiryIndex expiryIndex = mock(ReservationQueueExpiryIndex.class);
     private final ReservationQueueStreamPayloadDecoder decoder = mock(ReservationQueueStreamPayloadDecoder.class);
     private final ReservationQueueWorkHandler handler = mock(ReservationQueueWorkHandler.class);
+    private final ReservationQueueRetryStore retryStore = mock(ReservationQueueRetryStore.class);
     private final ReservationQueueWorkerPermits permits = new ReservationQueueWorkerPermits(1, 1);
     private final ReservationQueueWorkerProperties properties = new ReservationQueueWorkerProperties(
             true,
@@ -153,8 +156,12 @@ class ReservationQueueWorkerPollerTest {
                 decoder,
                 permits,
                 handler,
+                retryStore,
                 executor,
                 properties,
+                new ReservationQueueRetryProperties(
+                        3, Duration.ofMillis(10), Duration.ofSeconds(1), 10
+                ),
                 Duration.ofSeconds(30),
                 clock
         );

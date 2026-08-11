@@ -11,6 +11,9 @@ import org.springframework.data.redis.connection.stream.MapRecord;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
+import org.springframework.data.redis.connection.stream.PendingMessages;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.domain.Range;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -124,6 +127,34 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
     }
 
     /**
+     * Consumer Group pending 목록에서 idle 시간이 지난 첫 entry를 원본 payload와 함께 읽는다.
+     * Ticket lease fencing이 성공하기 전에는 Consumer ownership을 변경하지 않는다.
+     */
+    @Override
+    public Optional<ReservationQueueStreamMessage> readStaleCandidate(
+            long performanceTimeId,
+            String consumerGroup,
+            Duration minimumIdleTime
+    ) {
+        requireText(consumerGroup, "consumerGroup");
+        requireNonNegative(minimumIdleTime, "minimumIdleTime");
+        String streamKey = keyFactory.stream(performanceTimeId);
+        PendingMessages pending = redisTemplate.opsForStream().pending(
+                streamKey,
+                consumerGroup,
+                Range.unbounded(),
+                10
+        );
+        if (pending == null) {
+            return Optional.empty();
+        }
+        return pending.stream()
+                .filter(message -> message.getElapsedTimeSinceLastDelivery().compareTo(minimumIdleTime) >= 0)
+                .findFirst()
+                .flatMap(message -> recordById(performanceTimeId, streamKey, message.getIdAsString()));
+    }
+
+    /**
      * 검증된 Worker item의 WAITING ticket을 PROCESSING으로 claim한다.
      * 실제 원자 상태 변경과 owner 검증은 Lua command에 위임한다.
      */
@@ -139,6 +170,38 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
         Objects.requireNonNull(claimedAt, "claimedAt must not be null");
         requirePositive(processingLease, "processingLease");
         return redisCommands.claim(item, workerId, claimedAt, processingLease);
+    }
+
+    /**
+     * Redis ticket lease를 새 Worker에게 이전한 뒤 pending Stream ownership을 XCLAIM한다.
+     * Terminal 상태는 ownership 변경 없이 ACK 전용 결과로 반환한다.
+     */
+    @Override
+    public ReservationQueueClaimResult recover(
+            ReservationQueueWorkItem item,
+            String consumerGroup,
+            String workerId,
+            Instant recoveredAt,
+            Duration processingLease
+    ) {
+        requireText(consumerGroup, "consumerGroup");
+        ReservationQueueClaimResult result = redisCommands.recover(
+                item, workerId, recoveredAt, processingLease
+        );
+        if (result != ReservationQueueClaimResult.RECOVERED) {
+            return result;
+        }
+        List<MapRecord<String, Object, Object>> claimed = redisTemplate.opsForStream().claim(
+                keyFactory.stream(item.performanceTimeId()),
+                consumerGroup,
+                workerId,
+                Duration.ZERO,
+                RecordId.of(item.streamId())
+        );
+        if (claimed == null || claimed.isEmpty()) {
+            throw new IllegalStateException("Recovered ticket has no pending Stream entry");
+        }
+        return ReservationQueueClaimResult.RECOVERED;
     }
 
     /**
@@ -174,6 +237,29 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
                 streamId
         );
         return acknowledged == null ? 0L : acknowledged;
+    }
+
+    /**
+     * Pending ID와 정확히 일치하는 Stream record를 원본 message로 복원한다.
+     * Entry가 이미 정리된 경우 빈 결과로 반환한다.
+     */
+    private Optional<ReservationQueueStreamMessage> recordById(
+            long performanceTimeId,
+            String streamKey,
+            String streamId
+    ) {
+        List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().range(
+                streamKey,
+                Range.closed(streamId, streamId)
+        );
+        if (records == null || records.isEmpty()) {
+            return Optional.empty();
+        }
+        Map<String, String> fields = new LinkedHashMap<>();
+        records.getFirst().getValue().forEach(
+                (key, value) -> fields.put(String.valueOf(key), String.valueOf(value))
+        );
+        return Optional.of(new ReservationQueueStreamMessage(performanceTimeId, streamId, fields));
     }
 
     /**
@@ -231,6 +317,16 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
     private void requirePositive(Duration value, String name) {
         if (value == null || value.isZero() || value.isNegative()) {
             throw new IllegalArgumentException(name + " must be positive");
+        }
+    }
+
+    /**
+     * Pending 진단과 즉시 회수 테스트에 사용하는 idle 시간이 음수가 아닌지 확인한다.
+     * 운영 Poller는 양수 processing lease를 전달한다.
+     */
+    private void requireNonNegative(Duration value, String name) {
+        if (value == null || value.isNegative()) {
+            throw new IllegalArgumentException(name + " must not be negative");
         }
     }
 }

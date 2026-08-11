@@ -113,6 +113,7 @@ public final class RedisReservationQueueTicketStore implements ReservationQueueT
                 java.util.List.of(
                         keyFactory.admitted(performanceTimeId),
                         keyFactory.waiting(performanceTimeId),
+                        keyFactory.retry(performanceTimeId),
                         keyFactory.deadline(performanceTimeId),
                         keyFactory.ticket(performanceTimeId, ticketId)
                 ),

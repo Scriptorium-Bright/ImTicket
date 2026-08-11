@@ -11,8 +11,10 @@ import org.example.ticket.reservation.queue.dto.ReservationQueueStreamMessage;
 import org.example.ticket.reservation.queue.dto.ReservationQueueSuccessResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueueTerminalResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueueWorkItem;
+import org.example.ticket.reservation.queue.dto.ReservationQueueRetryResult;
 import org.example.ticket.reservation.queue.exception.ReservationQueuePayloadException;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTerminalStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +46,7 @@ class ReservationQueueProcessorTest {
     private final ReservationClaimExecutionService executionService = mock(ReservationClaimExecutionService.class);
     private final MemberRepository memberRepository = mock(MemberRepository.class);
     private final ReservationQueueTerminalStore terminalStore = mock(ReservationQueueTerminalStore.class);
+    private final ReservationQueueRetryStore retryStore = mock(ReservationQueueRetryStore.class);
     private final ReservationQueueWorkerStore workerStore = mock(ReservationQueueWorkerStore.class);
     private final ReservationFailureClassifier failureClassifier = new ReservationFailureClassifier();
     private ReservationQueueProcessor processor;
@@ -55,6 +58,7 @@ class ReservationQueueProcessorTest {
                 memberRepository,
                 failureClassifier,
                 terminalStore,
+                retryStore,
                 workerStore,
                 new ReservationQueueWorkerProperties(
                         true, GROUP, WORKER_ID, 1, 1,
@@ -122,15 +126,37 @@ class ReservationQueueProcessorTest {
     }
 
     @Test
-    void retryableFailureKeepsProcessingPendingForRecovery() {
+    void retryableFailureIsScheduledBeforeStreamAck() {
         ReservationQueueWorkItem item = QueueWorkerTestFixtures.item();
         when(executionService.execute(eq(7L), any(), any(), any()))
                 .thenThrow(new BusinessException(ReservationErrorCode.SEAT_ADMISSION_REJECTED));
+        when(retryStore.schedule(
+                item, WORKER_ID, "SEAT_ADMISSION_REJECTED", NOW
+        )).thenReturn(ReservationQueueRetryResult.SCHEDULED);
 
         processor.handle(item, WORKER_ID);
 
         verify(terminalStore, never()).completeFinal(any(), any(), any(), any());
-        verify(workerStore, never()).acknowledge(any(ReservationQueueWorkItem.class), any());
+        var order = inOrder(retryStore, workerStore);
+        order.verify(retryStore).schedule(item, WORKER_ID, "SEAT_ADMISSION_REJECTED", NOW);
+        order.verify(workerStore).acknowledge(item, GROUP);
+    }
+
+    @Test
+    void transientDatabaseFailureUsesStableRetryCode() {
+        ReservationQueueWorkItem item = QueueWorkerTestFixtures.item();
+        when(executionService.execute(eq(7L), any(), any(), any()))
+                .thenThrow(new QueryTimeoutException("database timeout detail"));
+        when(retryStore.schedule(
+                item, WORKER_ID, "QUEUE_TRANSIENT_PROCESSING_FAILURE", NOW
+        )).thenReturn(ReservationQueueRetryResult.SCHEDULED);
+
+        processor.handle(item, WORKER_ID);
+
+        verify(retryStore).schedule(
+                item, WORKER_ID, "QUEUE_TRANSIENT_PROCESSING_FAILURE", NOW
+        );
+        verify(workerStore).acknowledge(item, GROUP);
     }
 
     @Test

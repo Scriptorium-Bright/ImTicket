@@ -126,7 +126,7 @@ final class ReservationQueueTerminalRedisCommands {
     }
 
     /**
-     * Terminal 전이가 함께 정리할 네 ZSET과 ticket Hash key를 만든다.
+     * Terminal 전이가 함께 정리할 다섯 ZSET과 ticket Hash key를 만든다.
      * 모두 같은 회차 hash tag를 사용해 한 Lua에서 원자 변경된다.
      */
     private List<String> keys(long performanceTimeId, UUID ticketId) {
@@ -134,6 +134,7 @@ final class ReservationQueueTerminalRedisCommands {
                 keyFactory.admitted(performanceTimeId),
                 keyFactory.waiting(performanceTimeId),
                 keyFactory.processing(performanceTimeId),
+                keyFactory.retry(performanceTimeId),
                 keyFactory.deadline(performanceTimeId),
                 keyFactory.ticket(performanceTimeId, ticketId)
         );

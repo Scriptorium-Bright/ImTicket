@@ -43,6 +43,14 @@ public final class ReservationQueueKeyFactory {
     }
 
     /**
+     * 재시도 대기 ticket과 due 시각을 관리하는 ZSET key를 만든다.
+     * Worker thread가 sleep하지 않고 due 범위 조회로 재처리 대상을 찾게 한다.
+     */
+    public String retry(long performanceTimeId) {
+        return scoped(performanceTimeId, "retry");
+    }
+
+    /**
      * ticket 만료 시각을 관리하는 deadline ZSET key를 만든다.
      * 만료 scanner가 due ticket을 시간 순서로 찾게 한다.
      */
