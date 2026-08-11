@@ -18,6 +18,7 @@ class ReservationQueuePackageBoundaryTest {
             QUEUE_PACKAGE + ".service.ReservationQueueService",
             QUEUE_PACKAGE + ".service.ReservationQueueExpiryService",
             QUEUE_PACKAGE + ".config.ReservationQueueProperties",
+            QUEUE_PACKAGE + ".config.ReservationQueueWorkerProperties",
             QUEUE_PACKAGE + ".util.ReservationQueueIdentityHasher",
             QUEUE_PACKAGE + ".dto.ReservationQueueAdmissionCommand",
             QUEUE_PACKAGE + ".dto.ReservationQueueAdmissionResult",
@@ -29,15 +30,27 @@ class ReservationQueuePackageBoundaryTest {
             QUEUE_PACKAGE + ".repository.ReservationQueueAdmissionStore",
             QUEUE_PACKAGE + ".repository.ReservationQueueTicketStore",
             QUEUE_PACKAGE + ".repository.ReservationQueueExpiryIndex",
+            QUEUE_PACKAGE + ".repository.ReservationQueueWorkerStore",
             QUEUE_PACKAGE + ".exception.ReservationQueueStorageException",
             QUEUE_PACKAGE + ".constant.ReservationQueueStatus",
             QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueAdmissionStore",
             QUEUE_PACKAGE + ".repository.redis.ReservationQueueAdmissionRedisCommands",
             QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueTicketStore",
             QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueExpiryIndex",
+            QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueWorkerStore",
             QUEUE_PACKAGE + ".repository.redis.ReservationQueueKeyFactory",
             QUEUE_PACKAGE + ".util.scheduler.ReservationQueueExpiryScheduler",
-            QUEUE_PACKAGE + ".config.ReservationQueueConfiguration"
+            QUEUE_PACKAGE + ".config.ReservationQueueConfiguration",
+            QUEUE_PACKAGE + ".service.ReservationQueueWorkHandler",
+            QUEUE_PACKAGE + ".dto.ReservationQueueStreamMessage",
+            QUEUE_PACKAGE + ".dto.ReservationQueueWorkItem",
+            QUEUE_PACKAGE + ".dto.ReservationQueueClaimResult",
+            QUEUE_PACKAGE + ".exception.ReservationQueuePayloadException",
+            QUEUE_PACKAGE + ".util.worker.ReservationQueuePayloadVersionDecoder",
+            QUEUE_PACKAGE + ".util.worker.ReservationQueuePayloadV1Decoder",
+            QUEUE_PACKAGE + ".util.worker.ReservationQueueStreamPayloadDecoder",
+            QUEUE_PACKAGE + ".util.worker.ReservationQueueWorkerPermits",
+            QUEUE_PACKAGE + ".util.worker.ReservationQueueWorkerPoller"
     );
 
     @Test

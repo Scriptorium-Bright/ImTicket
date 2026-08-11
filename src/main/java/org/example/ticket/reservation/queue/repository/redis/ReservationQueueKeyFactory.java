@@ -35,6 +35,14 @@ public final class ReservationQueueKeyFactory {
     }
 
     /**
+     * 처리 lease가 유효한 ticket을 관리하는 processing ZSET key를 만든다.
+     * score에는 lease 만료 시각을 저장해 137.6 recovery가 범위 조회할 수 있게 한다.
+     */
+    public String processing(long performanceTimeId) {
+        return scoped(performanceTimeId, "processing");
+    }
+
+    /**
      * ticket 만료 시각을 관리하는 deadline ZSET key를 만든다.
      * 만료 scanner가 due ticket을 시간 순서로 찾게 한다.
      */

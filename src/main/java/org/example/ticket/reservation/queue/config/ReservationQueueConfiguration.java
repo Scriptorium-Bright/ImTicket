@@ -7,11 +7,17 @@ import org.example.ticket.reservation.queue.service.ReservationQueueService;
 import org.example.ticket.reservation.queue.repository.ReservationQueueAdmissionStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTicketStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueAdmissionStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTicketStore;
+import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.ReservationQueueKeyFactory;
 import org.example.ticket.reservation.queue.util.scheduler.ReservationQueueExpiryScheduler;
+import org.example.ticket.reservation.queue.util.worker.ReservationQueuePayloadV1Decoder;
+import org.example.ticket.reservation.queue.util.worker.ReservationQueuePayloadVersionDecoder;
+import org.example.ticket.reservation.queue.util.worker.ReservationQueueStreamPayloadDecoder;
+import org.example.ticket.reservation.queue.util.worker.ReservationQueueWorkerPermits;
 import org.example.ticket.reservation.common.policy.ReservationProcessingLeasePolicy;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -24,11 +30,17 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Queue feature flag가 켜진 경우에만 Redis queue bean을 구성한다. */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "reservation.queue", name = "enabled", havingValue = "true")
-@EnableConfigurationProperties(ReservationQueueProperties.class)
+@EnableConfigurationProperties({ReservationQueueProperties.class, ReservationQueueWorkerProperties.class})
 public class ReservationQueueConfiguration {
 
     /**
@@ -156,5 +168,83 @@ public class ReservationQueueConfiguration {
             Clock clock
     ) {
         return new ReservationQueueExpiryScheduler(expiryService, clock);
+    }
+
+    /**
+     * Queue payload schema v1 decoder를 Worker registry에 등록한다.
+     * 지원 version별 구현을 분리해 schema 추가가 기존 decoder를 바꾸지 않게 한다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueuePayloadVersionDecoder reservationQueuePayloadV1Decoder() {
+        return new ReservationQueuePayloadV1Decoder();
+    }
+
+    /**
+     * 등록된 version decoder를 Stream payload registry로 구성한다.
+     * 중복 schema version은 registry 생성 단계에서 시작 실패로 처리된다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueueStreamPayloadDecoder reservationQueueStreamPayloadDecoder(
+            List<ReservationQueuePayloadVersionDecoder> decoders
+    ) {
+        return new ReservationQueueStreamPayloadDecoder(decoders);
+    }
+
+    /**
+     * Consumer Group 읽기와 PROCESSING claim을 수행하는 Redis 저장소를 등록한다.
+     * Admission 저장소와 같은 template, 보존 설정과 key factory를 공유한다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueueWorkerStore reservationQueueWorkerStore(
+            StringRedisTemplate redisTemplate,
+            ReservationQueueProperties properties,
+            ReservationQueueKeyFactory keyFactory
+    ) {
+        return new RedisReservationQueueWorkerStore(redisTemplate, properties, keyFactory);
+    }
+
+    /**
+     * 전체와 회차별 Worker 동시 처리 permit 관리자를 등록한다.
+     * Stream 읽기 전에 두 상한을 함께 적용해 처리량 초과 entry 선점을 막는다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueueWorkerPermits reservationQueueWorkerPermits(
+            ReservationQueueWorkerProperties properties
+    ) {
+        return new ReservationQueueWorkerPermits(
+                properties.concurrency(),
+                properties.perPerformanceConcurrency()
+        );
+    }
+
+    /**
+     * Worker 동시성 수와 같은 고정 thread 수의 executor를 등록한다.
+     * SynchronousQueue와 AbortPolicy를 사용해 executor 내부 대기 작업을 허용하지 않는다.
+     */
+    @Bean(destroyMethod = "shutdown")
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ThreadPoolExecutor reservationQueueWorkerExecutor(
+            ReservationQueueWorkerProperties properties
+    ) {
+        AtomicInteger sequence = new AtomicInteger();
+        ThreadFactory threadFactory = task -> {
+            Thread thread = new Thread(task);
+            thread.setName("reservation-queue-worker-" + sequence.incrementAndGet());
+            thread.setDaemon(false);
+            return thread;
+        };
+        return new ThreadPoolExecutor(
+                properties.concurrency(),
+                properties.concurrency(),
+                0L,
+                TimeUnit.MILLISECONDS,
+                new SynchronousQueue<>(),
+                threadFactory,
+                new ThreadPoolExecutor.AbortPolicy()
+        );
     }
 }

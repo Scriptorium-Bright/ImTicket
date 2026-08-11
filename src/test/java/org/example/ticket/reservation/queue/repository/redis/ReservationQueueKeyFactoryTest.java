@@ -20,6 +20,7 @@ class ReservationQueueKeyFactoryTest {
         assertThat(keyFactory.admitted(performanceTimeId)).contains("{42}");
         assertThat(keyFactory.waiting(performanceTimeId)).contains("{42}");
         assertThat(keyFactory.deadline(performanceTimeId)).contains("{42}");
+        assertThat(keyFactory.processing(performanceTimeId)).contains("{42}");
         assertThat(keyFactory.sequence(performanceTimeId)).contains("{42}");
         assertThat(keyFactory.ticket(performanceTimeId, ticketId)).contains("{42}");
     }
