@@ -6,6 +6,7 @@ import org.example.ticket.reservation.queue.exception.ReservationQueueStorageExc
 import org.example.ticket.reservation.queue.repository.ReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
 import org.example.ticket.reservation.queue.dto.ReservationQueuePayload;
+import org.example.ticket.reservation.queue.dto.ReservationQueueSuccessResult;
 import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
 
 import org.springframework.core.io.ClassPathResource;
@@ -14,6 +15,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -88,7 +90,9 @@ public final class RedisReservationQueueTicketStore implements ReservationQueueT
                     Long.parseLong(required(fields, "sequence")),
                     position,
                     Instant.ofEpochMilli(Long.parseLong(required(fields, "enqueuedAt"))),
-                    Instant.ofEpochMilli(Long.parseLong(required(fields, "deadlineAt")))
+                    Instant.ofEpochMilli(Long.parseLong(required(fields, "deadlineAt"))),
+                    successResult(fields, status),
+                    finalErrorCode(fields, status)
             ));
         } catch (ReservationQueueStorageException exception) {
             throw exception;
@@ -160,6 +164,36 @@ public final class RedisReservationQueueTicketStore implements ReservationQueueT
         return Arrays.stream(required(fields, "seatIds").split(",", -1))
                 .map(Long::parseLong)
                 .toList();
+    }
+
+    /**
+     * SUCCEEDED ticket의 versioned 예약 결과 field를 복원한다.
+     * 다른 상태에서는 성공 결과가 존재하지 않는 것으로 반환한다.
+     */
+    private ReservationQueueSuccessResult successResult(
+            Map<Object, Object> fields,
+            ReservationQueueStatus status
+    ) {
+        if (status != ReservationQueueStatus.SUCCEEDED) {
+            return null;
+        }
+        return new ReservationQueueSuccessResult(
+                Integer.parseInt(required(fields, "resultSchemaVersion")),
+                Long.parseLong(required(fields, "reservationId")),
+                Integer.parseInt(required(fields, "totalPrice")),
+                required(fields, "orderUid"),
+                LocalDateTime.parse(required(fields, "expiredTime"))
+        );
+    }
+
+    /**
+     * FAILED_FINAL ticket에 저장된 공개 오류 code를 읽는다.
+     * 다른 상태에서는 오류 결과가 존재하지 않는 것으로 반환한다.
+     */
+    private String finalErrorCode(Map<Object, Object> fields, ReservationQueueStatus status) {
+        return status == ReservationQueueStatus.FAILED_FINAL
+                ? required(fields, "errorCode")
+                : null;
     }
 
     /**

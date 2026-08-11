@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -105,6 +106,33 @@ class RedisReservationQueueTicketStoreTest {
                 .isTrue();
         assertThat(store.expireIfDue(42L, TICKET_ID, Instant.parse("2026-08-10T10:09:59Z")))
                 .isFalse();
+    }
+
+    @Test
+    void readsSucceededResultAndFinalErrorCode() {
+        Map<Object, Object> succeededFields = waitingFields();
+        succeededFields.put("status", "SUCCEEDED");
+        succeededFields.put("resultSchemaVersion", "1");
+        succeededFields.put("reservationId", "20");
+        succeededFields.put("totalPrice", "10000");
+        succeededFields.put("orderUid", "reservation-20");
+        succeededFields.put("expiredTime", "2026-08-10T10:07:00");
+        Map<Object, Object> failedFields = waitingFields();
+        failedFields.put("status", "FAILED_FINAL");
+        failedFields.put("errorCode", "SEAT_ALREADY_RESERVED");
+        when(hashOperations.entries(ticketKey()))
+                .thenReturn(succeededFields)
+                .thenReturn(failedFields);
+
+        ReservationQueueTicketSnapshot succeeded = store.find(42L, TICKET_ID).orElseThrow();
+        ReservationQueueTicketSnapshot failed = store.find(42L, TICKET_ID).orElseThrow();
+
+        assertThat(succeeded.result().reservationId()).isEqualTo(20L);
+        assertThat(succeeded.result().expiredTime())
+                .isEqualTo(LocalDateTime.parse("2026-08-10T10:07:00"));
+        assertThat(succeeded.errorCode()).isNull();
+        assertThat(failed.result()).isNull();
+        assertThat(failed.errorCode()).isEqualTo("SEAT_ALREADY_RESERVED");
     }
 
     private Map<Object, Object> waitingFields() {

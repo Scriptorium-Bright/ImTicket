@@ -54,6 +54,16 @@ public enum ReservationQueueErrorCode implements ErrorCode {
             HttpStatus.GONE,
             "QUEUE_TICKET_EXPIRED",
             "예약 대기열 ticket이 만료되었습니다."
+    ),
+    WORKER_PAYLOAD_UNSUPPORTED(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "QUEUE_WORKER_PAYLOAD_UNSUPPORTED",
+            "지원하지 않는 예약 작업 형식입니다."
+    ),
+    WORKER_PAYLOAD_INVALID(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "QUEUE_WORKER_PAYLOAD_INVALID",
+            "예약 작업 데이터가 올바르지 않습니다."
     );
 
     private final HttpStatus status;

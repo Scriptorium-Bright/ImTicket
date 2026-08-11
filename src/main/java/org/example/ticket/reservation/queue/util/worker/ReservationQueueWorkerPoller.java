@@ -1,5 +1,6 @@
 package org.example.ticket.reservation.queue.util.worker;
 
+import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.reservation.queue.config.ReservationQueueWorkerProperties;
 import org.example.ticket.reservation.queue.dto.ReservationQueueClaimResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueueStreamMessage;
@@ -8,15 +9,19 @@ import org.example.ticket.reservation.queue.exception.ReservationQueuePayloadExc
 import org.example.ticket.reservation.queue.repository.ReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.service.ReservationQueueWorkHandler;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Active 회차를 순회하며 permit 범위 안에서 Stream 작업 한 건씩 전달하는 poller다. */
+@Slf4j
 public final class ReservationQueueWorkerPoller {
 
     private final ReservationQueueWorkerStore workerStore;
@@ -28,6 +33,7 @@ public final class ReservationQueueWorkerPoller {
     private final ReservationQueueWorkerProperties properties;
     private final Duration processingLease;
     private final Clock clock;
+    private final AtomicLong nextStart = new AtomicLong();
 
     /**
      * Stream intake에 필요한 저장소, decoder, permit과 실행기를 연결한다.
@@ -60,8 +66,16 @@ public final class ReservationQueueWorkerPoller {
      * 정상 claim 또는 payload 거절 작업을 executor에 넘긴 횟수를 반환한다.
      */
     public int pollOnce() {
+        List<Long> activePerformanceTimeIds = expiryIndex.activePerformanceTimeIds();
+        if (activePerformanceTimeIds.isEmpty()) {
+            return 0;
+        }
         int dispatched = 0;
-        for (Long performanceTimeId : expiryIndex.activePerformanceTimeIds()) {
+        int start = (int) Math.floorMod(nextStart.getAndIncrement(), activePerformanceTimeIds.size());
+        for (int offset = 0; offset < activePerformanceTimeIds.size(); offset++) {
+            Long performanceTimeId = activePerformanceTimeIds.get(
+                    (start + offset) % activePerformanceTimeIds.size()
+            );
             Optional<ReservationQueueWorkerPermits.Permit> acquired = permits.tryAcquire(performanceTimeId);
             if (acquired.isEmpty()) {
                 continue;
@@ -84,9 +98,30 @@ public final class ReservationQueueWorkerPoller {
                 }
             } catch (RuntimeException exception) {
                 permit.close();
+                log.warn(
+                        "Reservation Queue Worker intake failed: performanceTimeId={}, cause={}",
+                        performanceTimeId,
+                        exception.getMessage()
+                );
             }
         }
         return dispatched;
+    }
+
+    /**
+     * 설정된 고정 간격마다 bounded polling 한 회를 실행한다.
+     * Redis 조회 실패는 기록하고 다음 scheduler 실행에서 다시 시도한다.
+     */
+    @Scheduled(
+            fixedDelayString = "${reservation.queue.worker.poll-interval:100ms}",
+            scheduler = "reservationQueuePollScheduler"
+    )
+    public void pollScheduled() {
+        try {
+            pollOnce();
+        } catch (RuntimeException exception) {
+            log.warn("Reservation Queue Worker polling failed: {}", exception.getMessage());
+        }
     }
 
     /**

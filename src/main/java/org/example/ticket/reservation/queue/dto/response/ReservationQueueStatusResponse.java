@@ -1,6 +1,7 @@
 package org.example.ticket.reservation.queue.dto.response;
 
 import org.example.ticket.reservation.queue.constant.ReservationQueueStatus;
+import org.example.ticket.reservation.queue.dto.ReservationQueueSuccessResult;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -14,7 +15,9 @@ public record ReservationQueueStatusResponse(
         Long position,
         Instant enqueuedAt,
         Instant deadlineAt,
-        long pollAfterMs
+        long pollAfterMs,
+        ReservationQueueSuccessResult result,
+        String errorCode
 ) {
 
     /**
@@ -32,5 +35,38 @@ public record ReservationQueueStatusResponse(
         if (position != null && position <= 0) {
             throw new IllegalArgumentException("position must be positive");
         }
+        if (status == ReservationQueueStatus.SUCCEEDED && result == null) {
+            throw new IllegalArgumentException("SUCCEEDED response must have result");
+        }
+        if (status == ReservationQueueStatus.FAILED_FINAL
+                && (errorCode == null || errorCode.isBlank())) {
+            throw new IllegalArgumentException("FAILED_FINAL response must have errorCode");
+        }
+    }
+
+    /**
+     * terminal 결과가 없는 기존 Queue 상태를 만드는 호환 생성자다.
+     * WAITING, PROCESSING과 EXPIRED 응답이 null field를 반복하지 않게 한다.
+     */
+    public ReservationQueueStatusResponse(
+            long performanceTimeId,
+            UUID ticketId,
+            ReservationQueueStatus status,
+            Long position,
+            Instant enqueuedAt,
+            Instant deadlineAt,
+            long pollAfterMs
+    ) {
+        this(
+                performanceTimeId,
+                ticketId,
+                status,
+                position,
+                enqueuedAt,
+                deadlineAt,
+                pollAfterMs,
+                null,
+                null
+        );
     }
 }

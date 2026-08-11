@@ -1,16 +1,22 @@
 package org.example.ticket.reservation.queue.config;
 
+import org.example.ticket.member.repository.MemberRepository;
+import org.example.ticket.reservation.booking.service.ReservationClaimExecutionService;
+import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
 import org.example.ticket.reservation.queue.service.ReservationQueueExpiryService;
+import org.example.ticket.reservation.queue.service.ReservationQueueProcessor;
 import org.example.ticket.reservation.queue.util.ReservationQueueIdentityHasher;
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.example.ticket.reservation.queue.service.ReservationQueueService;
 import org.example.ticket.reservation.queue.repository.ReservationQueueAdmissionStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTicketStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueTerminalStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueAdmissionStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTicketStore;
+import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTerminalStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.ReservationQueueKeyFactory;
 import org.example.ticket.reservation.queue.util.scheduler.ReservationQueueExpiryScheduler;
@@ -18,6 +24,7 @@ import org.example.ticket.reservation.queue.util.worker.ReservationQueuePayloadV
 import org.example.ticket.reservation.queue.util.worker.ReservationQueuePayloadVersionDecoder;
 import org.example.ticket.reservation.queue.util.worker.ReservationQueueStreamPayloadDecoder;
 import org.example.ticket.reservation.queue.util.worker.ReservationQueueWorkerPermits;
+import org.example.ticket.reservation.queue.util.worker.ReservationQueueWorkerPoller;
 import org.example.ticket.reservation.common.policy.ReservationProcessingLeasePolicy;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +34,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -245,6 +253,91 @@ public class ReservationQueueConfiguration {
                 new SynchronousQueue<>(),
                 threadFactory,
                 new ThreadPoolExecutor.AbortPolicy()
+        );
+    }
+
+    /**
+     * Worker의 blocking Stream read를 다른 예약 scheduler와 분리하는 전용 scheduler를 등록한다.
+     * Polling thread는 DB 작업을 실행하지 않고 bounded executor에 전달하는 역할만 수행한다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ThreadPoolTaskScheduler reservationQueuePollScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("reservation-queue-poller-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(5);
+        return scheduler;
+    }
+
+    /**
+     * DB 처리 결과를 Queue terminal 상태로 반영하는 Redis 저장소를 등록한다.
+     * 성공과 공개 final 전이가 같은 index 정리 규칙을 사용하게 한다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueueTerminalStore reservationQueueTerminalStore(
+            StringRedisTemplate redisTemplate,
+            ReservationQueueProperties properties,
+            ReservationQueueKeyFactory keyFactory
+    ) {
+        return new RedisReservationQueueTerminalStore(redisTemplate, properties, keyFactory);
+    }
+
+    /**
+     * 검증된 Queue 작업을 공통 DB claim과 terminal, ACK 순서로 연결하는 processor를 등록한다.
+     * 예약 transaction과 Redis 명령이 서로의 transaction 경계 안에 들어가지 않게 한다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueueProcessor reservationQueueProcessor(
+            ReservationClaimExecutionService executionService,
+            MemberRepository memberRepository,
+            ReservationFailureClassifier failureClassifier,
+            ReservationQueueTerminalStore terminalStore,
+            ReservationQueueWorkerStore workerStore,
+            ReservationQueueWorkerProperties workerProperties,
+            Clock clock
+    ) {
+        return new ReservationQueueProcessor(
+                executionService,
+                memberRepository,
+                failureClassifier,
+                terminalStore,
+                workerStore,
+                workerProperties,
+                clock
+        );
+    }
+
+    /**
+     * Worker intake 구성요소와 processor를 scheduled poller로 연결한다.
+     * queue와 worker feature flag가 모두 켜진 instance에서만 비동기 처리를 시작한다.
+     */
+    @Bean
+    @ConditionalOnProperty(prefix = "reservation.queue.worker", name = "enabled", havingValue = "true")
+    public ReservationQueueWorkerPoller reservationQueueWorkerPoller(
+            ReservationQueueWorkerStore workerStore,
+            ReservationQueueExpiryIndex expiryIndex,
+            ReservationQueueStreamPayloadDecoder payloadDecoder,
+            ReservationQueueWorkerPermits permits,
+            ReservationQueueProcessor processor,
+            ThreadPoolExecutor reservationQueueWorkerExecutor,
+            ReservationQueueWorkerProperties workerProperties,
+            ReservationQueueProperties queueProperties,
+            Clock clock
+    ) {
+        return new ReservationQueueWorkerPoller(
+                workerStore,
+                expiryIndex,
+                payloadDecoder,
+                permits,
+                processor,
+                reservationQueueWorkerExecutor,
+                workerProperties,
+                queueProperties.processingLease(),
+                clock
         );
     }
 }

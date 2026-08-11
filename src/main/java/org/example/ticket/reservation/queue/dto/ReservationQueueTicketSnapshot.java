@@ -18,7 +18,9 @@ public record ReservationQueueTicketSnapshot(
         long sequence,
         Long position,
         Instant enqueuedAt,
-        Instant deadlineAt
+        Instant deadlineAt,
+        ReservationQueueSuccessResult result,
+        String errorCode
 ) {
 
     private static final Pattern SHA_256 = Pattern.compile("[0-9a-f]{64}");
@@ -43,6 +45,51 @@ public record ReservationQueueTicketSnapshot(
         if (position != null && position <= 0) {
             throw new IllegalArgumentException("position must be positive");
         }
+        if (status == ReservationQueueStatus.SUCCEEDED && result == null) {
+            throw new IllegalArgumentException("SUCCEEDED ticket must have result");
+        }
+        if (status == ReservationQueueStatus.FAILED_FINAL
+                && (errorCode == null || errorCode.isBlank())) {
+            throw new IllegalArgumentException("FAILED_FINAL ticket must have errorCode");
+        }
+        if (status != ReservationQueueStatus.SUCCEEDED && result != null) {
+            throw new IllegalArgumentException("Only SUCCEEDED ticket can have result");
+        }
+        if (status != ReservationQueueStatus.FAILED_FINAL && errorCode != null) {
+            throw new IllegalArgumentException("Only FAILED_FINAL ticket can have errorCode");
+        }
+    }
+
+    /**
+     * terminal 결과가 없는 기존 대기와 처리 snapshot을 만드는 호환 생성자다.
+     * Admission, 만료와 기존 테스트가 result field를 반복해서 전달하지 않게 한다.
+     */
+    public ReservationQueueTicketSnapshot(
+            UUID ticketId,
+            long performanceTimeId,
+            String ownerHash,
+            UUID ownerToken,
+            ReservationQueuePayload payload,
+            ReservationQueueStatus status,
+            long sequence,
+            Long position,
+            Instant enqueuedAt,
+            Instant deadlineAt
+    ) {
+        this(
+                ticketId,
+                performanceTimeId,
+                ownerHash,
+                ownerToken,
+                payload,
+                status,
+                sequence,
+                position,
+                enqueuedAt,
+                deadlineAt,
+                null,
+                null
+        );
     }
 
     /**

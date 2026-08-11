@@ -172,7 +172,9 @@ public final class ReservationQueueService {
                     snapshot.position(),
                     snapshot.enqueuedAt(),
                     snapshot.deadlineAt(),
-                    properties.pollInterval().toMillis()
+                    properties.pollInterval().toMillis(),
+                    snapshot.result(),
+                    snapshot.errorCode()
             );
         } catch (BusinessException exception) {
             throw exception;

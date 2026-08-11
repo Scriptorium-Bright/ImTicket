@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Redis Consumer Group 읽기, PROCESSING claim과 ACK를 구현하는 Worker 저장소다. */
 public final class RedisReservationQueueWorkerStore implements ReservationQueueWorkerStore {
@@ -28,6 +30,7 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
     private final StringRedisTemplate redisTemplate;
     private final ReservationQueueKeyFactory keyFactory;
     private final ReservationQueueWorkerRedisCommands redisCommands;
+    private final Set<String> ensuredConsumerGroups = ConcurrentHashMap.newKeySet();
 
     /**
      * Worker Stream과 claim에 필요한 Redis template, Queue 설정과 key factory를 연결한다.
@@ -55,6 +58,10 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
     public void ensureConsumerGroup(long performanceTimeId, String consumerGroup) {
         requireText(consumerGroup, "consumerGroup");
         String streamKey = keyFactory.stream(performanceTimeId);
+        String groupIdentity = groupIdentity(streamKey, consumerGroup);
+        if (ensuredConsumerGroups.contains(groupIdentity)) {
+            return;
+        }
         byte[] rawKey = Objects.requireNonNull(
                 redisTemplate.getStringSerializer().serialize(streamKey),
                 "serialized stream key must not be null"
@@ -72,6 +79,7 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
                 throw exception;
             }
         }
+        ensuredConsumerGroups.add(groupIdentity);
     }
 
     /**
@@ -89,11 +97,19 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
         requireText(consumerName, "consumerName");
         requirePositive(blockTimeout, "blockTimeout");
         String streamKey = keyFactory.stream(performanceTimeId);
-        List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream().read(
-                Consumer.from(consumerGroup, consumerName),
-                StreamReadOptions.empty().count(1).block(blockTimeout),
-                StreamOffset.create(streamKey, ReadOffset.lastConsumed())
-        );
+        List<MapRecord<String, Object, Object>> records;
+        try {
+            records = redisTemplate.opsForStream().read(
+                    Consumer.from(consumerGroup, consumerName),
+                    StreamReadOptions.empty().count(1).block(blockTimeout),
+                    StreamOffset.create(streamKey, ReadOffset.lastConsumed())
+            );
+        } catch (DataAccessException exception) {
+            if (isNoGroup(exception)) {
+                ensuredConsumerGroups.remove(groupIdentity(streamKey, consumerGroup));
+            }
+            throw exception;
+        }
         if (records == null || records.isEmpty()) {
             return Optional.empty();
         }
@@ -173,6 +189,29 @@ public final class RedisReservationQueueWorkerStore implements ReservationQueueW
             current = current.getCause();
         }
         return false;
+    }
+
+    /**
+     * 예외 원인 체인에서 Redis NOGROUP 응답을 찾는다.
+     * Redis 재시작이나 group 삭제 뒤 local 생성 cache를 비울 때 사용한다.
+     */
+    private boolean isNoGroup(RuntimeException exception) {
+        Throwable current = exception;
+        while (current != null) {
+            if (current.getMessage() != null && current.getMessage().contains("NOGROUP")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    /**
+     * Stream key와 Consumer Group을 local 생성 cache 식별자로 결합한다.
+     * 같은 group 이름을 사용하는 서로 다른 회차 Stream을 구분한다.
+     */
+    private String groupIdentity(String streamKey, String consumerGroup) {
+        return streamKey + "\n" + consumerGroup;
     }
 
     /**

@@ -9,6 +9,7 @@ import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionCommand
 import org.example.ticket.reservation.queue.dto.ReservationQueueAdmissionResult;
 import org.example.ticket.reservation.queue.dto.ReservationQueuePayload;
 import org.example.ticket.reservation.queue.dto.ReservationQueueTicketSnapshot;
+import org.example.ticket.reservation.queue.dto.ReservationQueueSuccessResult;
 import org.example.ticket.reservation.queue.dto.request.ReservationQueueApiRequest;
 import org.example.ticket.reservation.queue.dto.response.ReservationQueueEnqueueResponse;
 import org.example.ticket.reservation.queue.dto.response.ReservationQueueStatusResponse;
@@ -21,6 +22,7 @@ import org.springframework.dao.QueryTimeoutException;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -148,6 +150,32 @@ class ReservationQueueServiceTest {
     }
 
     @Test
+    void returnsSucceededResultAndFinalPublicError() {
+        ReservationQueueSuccessResult result = new ReservationQueueSuccessResult(
+                1, 20L, 10_000, "reservation-20", LocalDateTime.parse("2026-08-10T10:07:00")
+        );
+        ReservationQueueTicketSnapshot succeeded = terminalSnapshot(
+                ReservationQueueStatus.SUCCEEDED, result, null
+        );
+        ReservationQueueTicketSnapshot failed = terminalSnapshot(
+                ReservationQueueStatus.FAILED_FINAL, null, "SEAT_ALREADY_RESERVED"
+        );
+        when(ticketStore.find(42L, TICKET_ID))
+                .thenReturn(Optional.of(succeeded))
+                .thenReturn(Optional.of(failed));
+
+        ReservationQueueStatusResponse successResponse = service.status("0xowner", 42L, TICKET_ID);
+        ReservationQueueStatusResponse failureResponse = service.status("0xowner", 42L, TICKET_ID);
+
+        assertThat(successResponse.status()).isEqualTo(ReservationQueueStatus.SUCCEEDED);
+        assertThat(successResponse.result()).isEqualTo(result);
+        assertThat(successResponse.errorCode()).isNull();
+        assertThat(failureResponse.status()).isEqualTo(ReservationQueueStatus.FAILED_FINAL);
+        assertThat(failureResponse.result()).isNull();
+        assertThat(failureResponse.errorCode()).isEqualTo("SEAT_ALREADY_RESERVED");
+    }
+
+    @Test
     void ownerMismatchAndMissingTicketShareNotFoundError() {
         when(ticketStore.find(42L, TICKET_ID))
                 .thenReturn(Optional.of(waitingSnapshot("d".repeat(64), NOW.plusSeconds(600), 1L)))
@@ -223,6 +251,27 @@ class ReservationQueueServiceTest {
                 position,
                 NOW,
                 deadline
+        );
+    }
+
+    private ReservationQueueTicketSnapshot terminalSnapshot(
+            ReservationQueueStatus status,
+            ReservationQueueSuccessResult result,
+            String errorCode
+    ) {
+        return new ReservationQueueTicketSnapshot(
+                TICKET_ID,
+                42L,
+                ownerHash(),
+                OWNER_TOKEN,
+                payload(),
+                status,
+                7L,
+                null,
+                NOW,
+                NOW.plusSeconds(600),
+                result,
+                errorCode
         );
     }
 
