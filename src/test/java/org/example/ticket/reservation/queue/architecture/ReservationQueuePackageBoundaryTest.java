@@ -18,9 +18,11 @@ class ReservationQueuePackageBoundaryTest {
             QUEUE_PACKAGE + ".service.ReservationQueueService",
             QUEUE_PACKAGE + ".service.ReservationQueueExpiryService",
             QUEUE_PACKAGE + ".service.ReservationQueueProcessor",
+            QUEUE_PACKAGE + ".service.ReservationQueueMaintenanceService",
             QUEUE_PACKAGE + ".config.ReservationQueueProperties",
             QUEUE_PACKAGE + ".config.ReservationQueueWorkerProperties",
             QUEUE_PACKAGE + ".config.ReservationQueueRetryProperties",
+            QUEUE_PACKAGE + ".config.ReservationQueueMaintenanceProperties",
             QUEUE_PACKAGE + ".util.ReservationQueueIdentityHasher",
             QUEUE_PACKAGE + ".dto.ReservationQueueAdmissionCommand",
             QUEUE_PACKAGE + ".dto.ReservationQueueAdmissionResult",
@@ -35,6 +37,7 @@ class ReservationQueuePackageBoundaryTest {
             QUEUE_PACKAGE + ".repository.ReservationQueueWorkerStore",
             QUEUE_PACKAGE + ".repository.ReservationQueueTerminalStore",
             QUEUE_PACKAGE + ".repository.ReservationQueueRetryStore",
+            QUEUE_PACKAGE + ".repository.ReservationQueueMaintenanceStore",
             QUEUE_PACKAGE + ".exception.ReservationQueueStorageException",
             QUEUE_PACKAGE + ".constant.ReservationQueueStatus",
             QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueAdmissionStore",
@@ -44,6 +47,7 @@ class ReservationQueuePackageBoundaryTest {
             QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueWorkerStore",
             QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueTerminalStore",
             QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueRetryStore",
+            QUEUE_PACKAGE + ".repository.redis.RedisReservationQueueMaintenanceStore",
             QUEUE_PACKAGE + ".repository.redis.ReservationQueueKeyFactory",
             QUEUE_PACKAGE + ".util.scheduler.ReservationQueueExpiryScheduler",
             QUEUE_PACKAGE + ".config.ReservationQueueConfiguration",
@@ -54,12 +58,15 @@ class ReservationQueuePackageBoundaryTest {
             QUEUE_PACKAGE + ".dto.ReservationQueueSuccessResult",
             QUEUE_PACKAGE + ".dto.ReservationQueueTerminalResult",
             QUEUE_PACKAGE + ".dto.ReservationQueueRetryResult",
+            QUEUE_PACKAGE + ".dto.ReservationQueueMaintenanceResult",
+            QUEUE_PACKAGE + ".dto.ReservationQueueMappingRepairResult",
             QUEUE_PACKAGE + ".exception.ReservationQueuePayloadException",
             QUEUE_PACKAGE + ".util.worker.ReservationQueuePayloadVersionDecoder",
             QUEUE_PACKAGE + ".util.worker.ReservationQueuePayloadV1Decoder",
             QUEUE_PACKAGE + ".util.worker.ReservationQueueStreamPayloadDecoder",
             QUEUE_PACKAGE + ".util.worker.ReservationQueueWorkerPermits",
-            QUEUE_PACKAGE + ".util.worker.ReservationQueueWorkerPoller"
+            QUEUE_PACKAGE + ".util.worker.ReservationQueueWorkerPoller",
+            QUEUE_PACKAGE + ".util.scheduler.ReservationQueueMaintenanceScheduler"
     );
 
     @Test

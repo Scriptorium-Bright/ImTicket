@@ -79,6 +79,8 @@ public final class RedisReservationQueueRetryStore implements ReservationQueueRe
                         keyFactory.retry(item.performanceTimeId()),
                         keyFactory.admitted(item.performanceTimeId()),
                         keyFactory.deadline(item.performanceTimeId()),
+                        keyFactory.terminal(item.performanceTimeId()),
+                        keyFactory.activeRepairCandidates(),
                         keyFactory.ticket(item.performanceTimeId(), item.ticketId())
                 ),
                 item.ticketId().toString(),
@@ -90,7 +92,9 @@ public final class RedisReservationQueueRetryStore implements ReservationQueueRe
                 String.valueOf(retryProperties.maxAttempts()),
                 errorCode,
                 EXHAUSTED_CODE,
-                String.valueOf(queueProperties.ticketRetention().toMillis())
+                String.valueOf(
+                        queueProperties.idempotencyRetention().plus(queueProperties.ticketRetention()).toMillis()
+                )
         );
         return retryResult(result);
     }

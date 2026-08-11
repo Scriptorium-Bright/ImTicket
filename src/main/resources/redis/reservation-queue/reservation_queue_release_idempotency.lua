@@ -1,6 +1,7 @@
--- KEYS[1]: owner and idempotency key scoped mapping
+-- KEYS: owner and idempotency key scoped mapping, ENQUEUING index ZSET
 -- ARGV: ownerToken, ticketId
 if redis.call('EXISTS', KEYS[1]) == 0 then
+    redis.call('ZREM', KEYS[2], KEYS[1])
     return 'MISSING'
 end
 if redis.call('HGET', KEYS[1], 'ownerToken') ~= ARGV[1] then
@@ -14,4 +15,5 @@ if redis.call('HGET', KEYS[1], 'state') ~= 'ENQUEUING' then
 end
 
 redis.call('DEL', KEYS[1])
+redis.call('ZREM', KEYS[2], KEYS[1])
 return 'RELEASED'

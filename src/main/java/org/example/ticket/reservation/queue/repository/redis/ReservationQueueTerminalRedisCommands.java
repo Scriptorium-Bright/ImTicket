@@ -65,7 +65,7 @@ final class ReservationQueueTerminalRedisCommands {
                 item.ownerToken().toString(),
                 workerId,
                 String.valueOf(completedAt.toEpochMilli()),
-                String.valueOf(properties.ticketRetention().toMillis()),
+                String.valueOf(properties.idempotencyRetention().plus(properties.ticketRetention()).toMillis()),
                 String.valueOf(result.schemaVersion()),
                 String.valueOf(result.reservationId()),
                 String.valueOf(result.totalPrice()),
@@ -93,7 +93,7 @@ final class ReservationQueueTerminalRedisCommands {
                 item.ownerToken().toString(),
                 workerId,
                 String.valueOf(completedAt.toEpochMilli()),
-                String.valueOf(properties.ticketRetention().toMillis()),
+                String.valueOf(properties.idempotencyRetention().plus(properties.ticketRetention()).toMillis()),
                 String.valueOf(FAILURE_SCHEMA_VERSION),
                 errorCode
         );
@@ -118,7 +118,7 @@ final class ReservationQueueTerminalRedisCommands {
                 message.streamId(),
                 ownerToken.toString(),
                 String.valueOf(completedAt.toEpochMilli()),
-                String.valueOf(properties.ticketRetention().toMillis()),
+                String.valueOf(properties.idempotencyRetention().plus(properties.ticketRetention()).toMillis()),
                 String.valueOf(FAILURE_SCHEMA_VERSION),
                 errorCode
         );
@@ -136,6 +136,8 @@ final class ReservationQueueTerminalRedisCommands {
                 keyFactory.processing(performanceTimeId),
                 keyFactory.retry(performanceTimeId),
                 keyFactory.deadline(performanceTimeId),
+                keyFactory.terminal(performanceTimeId),
+                keyFactory.activeRepairCandidates(),
                 keyFactory.ticket(performanceTimeId, ticketId)
         );
     }

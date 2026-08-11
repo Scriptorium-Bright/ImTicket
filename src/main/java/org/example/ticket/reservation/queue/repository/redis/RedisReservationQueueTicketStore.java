@@ -115,11 +115,13 @@ public final class RedisReservationQueueTicketStore implements ReservationQueueT
                         keyFactory.waiting(performanceTimeId),
                         keyFactory.retry(performanceTimeId),
                         keyFactory.deadline(performanceTimeId),
+                        keyFactory.terminal(performanceTimeId),
+                        keyFactory.activeRepairCandidates(),
                         keyFactory.ticket(performanceTimeId, ticketId)
                 ),
                 ticketId.toString(),
                 String.valueOf(now.toEpochMilli()),
-                String.valueOf(properties.ticketRetention().toMillis())
+                String.valueOf(properties.idempotencyRetention().plus(properties.ticketRetention()).toMillis())
         );
         if ("EXPIRED".equals(result)) {
             return true;

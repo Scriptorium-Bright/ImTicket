@@ -53,7 +53,10 @@ final class ReservationQueueAdmissionRedisCommands {
     ) {
         String result = execute(
                 RESERVE_IDEMPOTENCY,
-                List.of(keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash())),
+                List.of(
+                        keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash()),
+                        keyFactory.enqueuingMappings()
+                ),
                 command.payload().requestHash(),
                 command.ticketId().toString(),
                 String.valueOf(command.performanceTimeId()),
@@ -99,7 +102,8 @@ final class ReservationQueueAdmissionRedisCommands {
                         keyFactory.deadline(performanceTimeId),
                         keyFactory.sequence(performanceTimeId),
                         keyFactory.ticket(performanceTimeId, command.ticketId()),
-                        keyFactory.stream(performanceTimeId)
+                        keyFactory.stream(performanceTimeId),
+                        keyFactory.activeRepairCandidates()
                 ),
                 command.ticketId().toString(),
                 String.valueOf(performanceTimeId),
@@ -137,7 +141,10 @@ final class ReservationQueueAdmissionRedisCommands {
     void markIdempotencyQueued(ReservationQueueAdmissionCommand command, String ownerToken) {
         String result = execute(
                 MARK_IDEMPOTENCY_QUEUED,
-                List.of(keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash())),
+                List.of(
+                        keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash()),
+                        keyFactory.enqueuingMappings()
+                ),
                 ownerToken,
                 command.ticketId().toString(),
                 String.valueOf(command.enqueuedAt().toEpochMilli()),
@@ -157,7 +164,10 @@ final class ReservationQueueAdmissionRedisCommands {
     void releaseIdempotency(ReservationQueueAdmissionCommand command, String ownerToken) {
         String result = execute(
                 RELEASE_IDEMPOTENCY,
-                List.of(keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash())),
+                List.of(
+                        keyFactory.idempotency(command.ownerHash(), command.payload().idempotencyKey().hash()),
+                        keyFactory.enqueuingMappings()
+                ),
                 ownerToken,
                 command.ticketId().toString()
         );
@@ -176,6 +186,10 @@ final class ReservationQueueAdmissionRedisCommands {
                     keyFactory.activePerformanceTimes(),
                     String.valueOf(command.performanceTimeId()),
                     command.enqueuedAt().plus(properties.ticketRetention()).toEpochMilli()
+            );
+            redisTemplate.opsForZSet().remove(
+                    keyFactory.activeRepairCandidates(),
+                    String.valueOf(command.performanceTimeId())
             );
         } catch (DataAccessException ignored) {
             // Ticket과 Stream은 저장된 상태다. 만료 조회에서 registry를 다시 보완한다.

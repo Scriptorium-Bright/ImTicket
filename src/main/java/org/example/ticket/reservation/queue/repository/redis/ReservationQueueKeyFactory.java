@@ -51,6 +51,14 @@ public final class ReservationQueueKeyFactory {
     }
 
     /**
+     * 완료, 최종 실패와 만료 ticket의 정리 시각을 관리하는 ZSET key를 만든다.
+     * Cleanup이 비terminal ticket을 조회하지 않고 보존 기간이 지난 결과만 찾게 한다.
+     */
+    public String terminal(long performanceTimeId) {
+        return scoped(performanceTimeId, "terminal");
+    }
+
+    /**
      * ticket 만료 시각을 관리하는 deadline ZSET key를 만든다.
      * 만료 scanner가 due ticket을 시간 순서로 찾게 한다.
      */
@@ -91,6 +99,22 @@ public final class ReservationQueueKeyFactory {
      */
     public String activePerformanceTimes() {
         return PREFIX + "active-performance-times";
+    }
+
+    /**
+     * 확정되지 않은 idempotency mapping과 생성 시각을 관리하는 전역 ZSET key를 반환한다.
+     * Maintenance가 전체 mapping key를 scan하지 않고 stale 후보만 찾게 한다.
+     */
+    public String enqueuingMappings() {
+        return PREFIX + "enqueuing-mappings";
+    }
+
+    /**
+     * Enqueue 뒤 active registry 확정이 필요한 회차와 보존 시각을 관리하는 ZSET key를 반환한다.
+     * 정상 갱신은 후보를 제거하고 실패한 갱신만 maintenance 입력으로 남긴다.
+     */
+    public String activeRepairCandidates() {
+        return PREFIX + "active-repair-candidates";
     }
 
     /**

@@ -1,4 +1,5 @@
--- KEYS: admitted ZSET, waiting ZSET, deadline ZSET, sequence STRING, ticket HASH, stream
+-- KEYS: admitted ZSET, waiting ZSET, deadline ZSET, sequence STRING, ticket HASH, stream,
+--       active repair candidates ZSET
 -- ARGV: ticketId, performanceTimeId, ownerHash, ownerToken, payloadSchemaVersion,
 --       memberId, idempotencyKey, idempotencyKeyHash, requestHash, seatIds,
 --       enqueuedAtMs, deadlineAtMs, maxDepth, retentionMs
@@ -20,7 +21,8 @@ if not has_expected_type(KEYS[1], 'zset')
         or not has_expected_type(KEYS[3], 'zset')
         or not has_expected_type(KEYS[4], 'string')
         or not has_expected_type(KEYS[5], 'hash')
-        or not has_expected_type(KEYS[6], 'stream') then
+        or not has_expected_type(KEYS[6], 'stream')
+        or not has_expected_type(KEYS[7], 'zset') then
     return 'KEY_TYPE_ERROR'
 end
 if redis.call('EXISTS', KEYS[5]) == 1 then
@@ -68,5 +70,6 @@ redis.call('ZADD', KEYS[3], ARGV[12], ARGV[1])
 for index = 1, 6 do
     redis.call('PEXPIRE', KEYS[index], ARGV[14])
 end
+redis.call('ZADD', KEYS[7], 'GT', tonumber(ARGV[11]) + tonumber(ARGV[14]), ARGV[2])
 
 return 'ACCEPTED|' .. tostring(sequence) .. '|' .. stream_id

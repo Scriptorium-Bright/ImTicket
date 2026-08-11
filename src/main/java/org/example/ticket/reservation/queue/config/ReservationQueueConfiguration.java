@@ -5,6 +5,7 @@ import org.example.ticket.reservation.booking.service.ReservationClaimExecutionS
 import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
 import org.example.ticket.reservation.queue.service.ReservationQueueExpiryService;
 import org.example.ticket.reservation.queue.service.ReservationQueueProcessor;
+import org.example.ticket.reservation.queue.service.ReservationQueueMaintenanceService;
 import org.example.ticket.reservation.queue.util.ReservationQueueIdentityHasher;
 import org.example.ticket.reservation.queue.config.ReservationQueueProperties;
 import org.example.ticket.reservation.queue.service.ReservationQueueService;
@@ -12,16 +13,19 @@ import org.example.ticket.reservation.queue.repository.ReservationQueueAdmission
 import org.example.ticket.reservation.queue.repository.ReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueTerminalStore;
+import org.example.ticket.reservation.queue.repository.ReservationQueueMaintenanceStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.repository.ReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueAdmissionStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueExpiryIndex;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTicketStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueTerminalStore;
+import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueMaintenanceStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueRetryStore;
 import org.example.ticket.reservation.queue.repository.redis.RedisReservationQueueWorkerStore;
 import org.example.ticket.reservation.queue.repository.redis.ReservationQueueKeyFactory;
 import org.example.ticket.reservation.queue.util.scheduler.ReservationQueueExpiryScheduler;
+import org.example.ticket.reservation.queue.util.scheduler.ReservationQueueMaintenanceScheduler;
 import org.example.ticket.reservation.queue.util.worker.ReservationQueuePayloadV1Decoder;
 import org.example.ticket.reservation.queue.util.worker.ReservationQueuePayloadVersionDecoder;
 import org.example.ticket.reservation.queue.util.worker.ReservationQueueStreamPayloadDecoder;
@@ -53,7 +57,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 @EnableConfigurationProperties({
         ReservationQueueProperties.class,
         ReservationQueueWorkerProperties.class,
-        ReservationQueueRetryProperties.class
+        ReservationQueueRetryProperties.class,
+        ReservationQueueMaintenanceProperties.class
 })
 public class ReservationQueueConfiguration {
 
@@ -182,6 +187,52 @@ public class ReservationQueueConfiguration {
             Clock clock
     ) {
         return new ReservationQueueExpiryScheduler(expiryService, clock);
+    }
+
+    /**
+     * Stale mapping, active registry와 terminal cleanup을 수행하는 Redis 저장소를 등록한다.
+     * Admission과 Worker가 사용하는 Queue key factory와 보존 설정을 공유한다.
+     */
+    @Bean
+    public ReservationQueueMaintenanceStore reservationQueueMaintenanceStore(
+            StringRedisTemplate redisTemplate,
+            ReservationQueueProperties properties,
+            ReservationQueueKeyFactory keyFactory
+    ) {
+        return new RedisReservationQueueMaintenanceStore(redisTemplate, properties, keyFactory);
+    }
+
+    /**
+     * Mapping 복구와 retention cleanup의 실행 순서를 담당하는 service를 등록한다.
+     * 한 tick의 scan과 cleanup 양은 maintenance 설정으로 제한한다.
+     */
+    @Bean
+    public ReservationQueueMaintenanceService reservationQueueMaintenanceService(
+            ReservationQueueMaintenanceStore maintenanceStore,
+            ReservationQueueExpiryIndex expiryIndex,
+            ReservationQueueProperties queueProperties,
+            ReservationQueueWorkerProperties workerProperties,
+            ReservationQueueMaintenanceProperties maintenanceProperties
+    ) {
+        return new ReservationQueueMaintenanceService(
+                maintenanceStore,
+                expiryIndex,
+                queueProperties,
+                workerProperties,
+                maintenanceProperties
+        );
+    }
+
+    /**
+     * 설정된 주기마다 Queue maintenance service를 호출하는 scheduler를 등록한다.
+     * 공통 UTC Clock을 사용해 복구와 retention 기준 시각을 일치시킨다.
+     */
+    @Bean
+    public ReservationQueueMaintenanceScheduler reservationQueueMaintenanceScheduler(
+            ReservationQueueMaintenanceService maintenanceService,
+            Clock clock
+    ) {
+        return new ReservationQueueMaintenanceScheduler(maintenanceService, clock);
     }
 
     /**
