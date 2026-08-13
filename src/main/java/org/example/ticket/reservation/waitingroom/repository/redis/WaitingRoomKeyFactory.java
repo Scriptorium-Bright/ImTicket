@@ -25,6 +25,12 @@ public final class WaitingRoomKeyFactory {
         return scoped(performanceTimeId, "active");
     }
 
+    /** WAITING ticket의 deadline을 저장하는 Redis Sorted Set key를 반환한다.
+     * score에는 waiting deadline epoch millisecond를 저장해 만료 scan에 사용한다. */
+    public String deadline(long performanceTimeId) {
+        return scoped(performanceTimeId, "deadline");
+    }
+
     /** 개별 ticket의 상태와 claim을 저장하는 Redis Hash key를 반환한다.
      * ticket ID는 회차 hash tag 안에서만 식별자로 사용한다. */
     public String ticket(long performanceTimeId, UUID ticketId) {

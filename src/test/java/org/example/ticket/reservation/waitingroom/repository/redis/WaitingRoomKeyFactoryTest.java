@@ -18,6 +18,7 @@ class WaitingRoomKeyFactoryTest {
         assertThat(factory.sequence(7)).isEqualTo("reservation:waiting-room:{7}:sequence");
         assertThat(factory.waiting(7)).isEqualTo("reservation:waiting-room:{7}:waiting");
         assertThat(factory.active(7)).isEqualTo("reservation:waiting-room:{7}:active");
+        assertThat(factory.deadline(7)).isEqualTo("reservation:waiting-room:{7}:deadline");
         assertThat(factory.ticket(7, ticketId))
                 .isEqualTo("reservation:waiting-room:{7}:ticket:11111111-1111-1111-1111-111111111111");
         assertThat(factory.owner(7, 12)).isEqualTo("reservation:waiting-room:{7}:owner:12");
