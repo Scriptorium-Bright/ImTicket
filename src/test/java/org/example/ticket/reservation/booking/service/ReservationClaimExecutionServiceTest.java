@@ -10,7 +10,7 @@ import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
 import org.example.ticket.reservation.booking.util.ReservationFailureSnapshotCodec;
 import org.example.ticket.reservation.booking.util.ReservationResponseSnapshotCodec;
 import org.example.ticket.reservation.booking.util.admission.SeatAdmissionService;
-import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
+import org.example.ticket.reservation.booking.util.idempotency.ReservationIntentFingerprint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

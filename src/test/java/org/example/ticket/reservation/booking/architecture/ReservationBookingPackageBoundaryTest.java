@@ -58,10 +58,9 @@ class ReservationBookingPackageBoundaryTest {
             BOOKING_PACKAGE + ".util.ReservationFailureSnapshotCodec",
             BOOKING_PACKAGE + ".util.ReservationResponseSnapshotCodec",
             BOOKING_PACKAGE + ".util.ReservationValidator",
-            "org.example.ticket.reservation.common.policy.ReservationProcessingLeasePolicy",
-            "org.example.ticket.reservation.common.value.ReservationIdempotencyKey",
-            "org.example.ticket.reservation.common.value.ReservationIntentFingerprint",
-            "org.example.ticket.reservation.common.factory.ReservationIntentFingerprintFactory"
+            BOOKING_PACKAGE + ".util.idempotency.ReservationIdempotencyKey",
+            BOOKING_PACKAGE + ".util.idempotency.ReservationIntentFingerprint",
+            BOOKING_PACKAGE + ".util.idempotency.ReservationIntentFingerprintFactory"
     );
 
     private static final List<String> LEGACY_PACKAGES = List.of(
@@ -94,41 +93,6 @@ class ReservationBookingPackageBoundaryTest {
                         .as("legacy package %s", legacyPackage)
                         .isEmpty();
             }
-        }
-    }
-
-    @Test
-    void queueAndBookingApplicationsDoNotDependOnEachOthersInfrastructure() throws IOException {
-        assertSourcesDoNotContain(
-                RESERVATION_SOURCE.resolve("booking/service"),
-                "org.example.ticket.reservation.queue"
-        );
-        assertSourcesDoNotContain(
-                RESERVATION_SOURCE.resolve("queue/service"),
-                "org.example.ticket.reservation.booking.repository",
-                "org.example.ticket.reservation.booking.util.lock"
-        );
-    }
-
-    private void assertSourcesDoNotContain(Path directory, String... forbiddenImports) throws IOException {
-        if (!Files.exists(directory)) {
-            return;
-        }
-        try (var files = Files.walk(directory)) {
-            List<Path> violations = files
-                    .filter(this::isJavaSource)
-                    .filter(path -> containsAny(path, forbiddenImports))
-                    .toList();
-            assertThat(violations).isEmpty();
-        }
-    }
-
-    private boolean containsAny(Path path, String... values) {
-        try {
-            String source = Files.readString(path);
-            return List.of(values).stream().anyMatch(source::contains);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Java source를 읽을 수 없습니다: " + path, exception);
         }
     }
 

@@ -3,9 +3,9 @@ package org.example.ticket.reservation.booking.util;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
-import org.example.ticket.reservation.common.factory.ReservationIntentFingerprintFactory;
-import org.example.ticket.reservation.common.value.ReservationIdempotencyKey;
-import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
+import org.example.ticket.reservation.booking.util.idempotency.ReservationIdempotencyKey;
+import org.example.ticket.reservation.booking.util.idempotency.ReservationIntentFingerprint;
+import org.example.ticket.reservation.booking.util.idempotency.ReservationIntentFingerprintFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.HashSet;

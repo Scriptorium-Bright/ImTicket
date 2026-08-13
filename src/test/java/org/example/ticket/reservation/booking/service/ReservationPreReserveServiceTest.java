@@ -5,7 +5,7 @@ import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
 import org.example.ticket.reservation.booking.util.ReservationRequestHasher;
-import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
+import org.example.ticket.reservation.booking.util.idempotency.ReservationIntentFingerprint;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

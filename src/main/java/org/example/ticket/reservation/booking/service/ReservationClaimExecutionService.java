@@ -13,7 +13,7 @@ import org.example.ticket.reservation.booking.util.ReservationFailureClassifier;
 import org.example.ticket.reservation.booking.util.ReservationFailureSnapshotCodec;
 import org.example.ticket.reservation.booking.util.ReservationResponseSnapshotCodec;
 import org.example.ticket.reservation.booking.util.admission.SeatAdmissionService;
-import org.example.ticket.reservation.common.value.ReservationIntentFingerprint;
+import org.example.ticket.reservation.booking.util.idempotency.ReservationIntentFingerprint;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
