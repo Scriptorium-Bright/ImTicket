@@ -50,7 +50,7 @@ class ReservationControllerWebContractTest {
 
     @Test
     void missingIdempotencyHeaderUsesDomain400Response() throws Exception {
-        when(preReserveService.preReserve(eq("0xowner"), isNull(), any(ReservationRequest.class)))
+        when(preReserveService.preReserve(eq(12L), isNull(), isNull(), any(ReservationRequest.class)))
                 .thenThrow(new BusinessException(ReservationErrorCode.IDEMPOTENCY_KEY_REQUIRED));
 
         mockMvc.perform(post("/api/reservation/pre-reserve")
@@ -65,7 +65,7 @@ class ReservationControllerWebContractTest {
 
     @Test
     void validHeaderReturnsSnapshotCapableResponseContract() throws Exception {
-        when(preReserveService.preReserve(eq("0xowner"), eq(KEY), any(ReservationRequest.class)))
+        when(preReserveService.preReserve(eq(12L), eq(KEY), isNull(), any(ReservationRequest.class)))
                 .thenReturn(ReservationCreateResponse.builder()
                         .id(10L)
                         .orderUid("reservation-10")
@@ -86,6 +86,7 @@ class ReservationControllerWebContractTest {
 
     private HandlerMethodArgumentResolver authenticationPrincipalResolver() {
         MetamaskUserDetails principal = new MetamaskUserDetails(Member.builder()
+                .id(12L)
                 .walletAddress("0xowner")
                 .role("ROLE_USER")
                 .build());

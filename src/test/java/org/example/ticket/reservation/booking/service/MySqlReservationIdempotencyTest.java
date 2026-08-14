@@ -29,7 +29,12 @@ import org.example.ticket.reservation.booking.util.ReservationResponseSnapshotCo
 import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
 import org.example.ticket.util.constant.ReservationStatus;
+import org.example.ticket.reservation.waitingroom.service.WaitingRoomAccess;
+import org.example.ticket.reservation.waitingroom.service.WaitingRoomAccessDecision;
+import org.example.ticket.reservation.waitingroom.service.WaitingRoomAccessGuard;
+import org.example.ticket.reservation.waitingroom.service.WaitingRoomService;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -74,6 +79,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -172,6 +179,21 @@ class MySqlReservationIdempotencyTest {
 
     @MockitoSpyBean
     private SeatAdmissionService seatAdmissionService;
+
+    @MockitoBean
+    private WaitingRoomAccessGuard waitingRoomAccessGuard;
+
+    @MockitoBean
+    private WaitingRoomService waitingRoomService;
+
+    @MockitoBean
+    private io.micrometer.core.instrument.MeterRegistry meterRegistry;
+
+    @BeforeEach
+    void stubWaitingRoomBypass() {
+        when(waitingRoomAccessGuard.authorize(anyLong(), anyLong(), isNull()))
+                .thenReturn(new WaitingRoomAccess(WaitingRoomAccessDecision.BYPASS, null));
+    }
 
     @AfterEach
     void clearFixture() {
@@ -344,7 +366,7 @@ class MySqlReservationIdempotencyTest {
             seat.markAsReserved(SeatStatus.LOCKED);
         });
 
-        assertThatThrownBy(() -> preReserveService.preReserve(base.walletAddress(), KEY, request))
+        assertThatThrownBy(() -> preReserveService.preReserve(base.memberId(), KEY, null, request))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ReservationErrorCode.SEAT_ALREADY_RESERVED));
@@ -363,7 +385,7 @@ class MySqlReservationIdempotencyTest {
                 LocalDateTime.now().plusSeconds(30)
         )).isFalse();
 
-        assertThatThrownBy(() -> preReserveService.preReserve(base.walletAddress(), KEY, request))
+        assertThatThrownBy(() -> preReserveService.preReserve(base.memberId(), KEY, null, request))
                 .isInstanceOfSatisfying(BusinessException.class, exception ->
                         assertThat(exception.getErrorCode())
                                 .isEqualTo(ReservationErrorCode.SEAT_ALREADY_RESERVED));
@@ -415,12 +437,12 @@ class MySqlReservationIdempotencyTest {
         try {
             Future<org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse> winner =
                     executor.submit(() -> preReserveService.preReserve(
-                            base.walletAddress(), KEY, request
+                            base.memberId(), KEY, null, request
                     ));
             assertThat(snapshotEncoding.await(5, TimeUnit.SECONDS)).isTrue();
             Future<org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse> processingDuplicate =
                     executor.submit(() -> preReserveService.preReserve(
-                            base.walletAddress(), KEY, request
+                            base.memberId(), KEY, null, request
                     ));
 
             assertThatThrownBy(() -> processingDuplicate.get(5, TimeUnit.SECONDS))
@@ -433,7 +455,7 @@ class MySqlReservationIdempotencyTest {
             allowWinnerCommit.countDown();
 
             var winnerResponse = winner.get(10, TimeUnit.SECONDS);
-            var replayResponse = preReserveService.preReserve(base.walletAddress(), KEY, request);
+            var replayResponse = preReserveService.preReserve(base.memberId(), KEY, null, request);
             assertThat(replayResponse.getId()).isEqualTo(winnerResponse.getId());
             assertThat(replayResponse.getOrderUid()).isEqualTo(winnerResponse.getOrderUid());
             assertThat(replayResponse.getExpiredTime()).isEqualTo(winnerResponse.getExpiredTime());

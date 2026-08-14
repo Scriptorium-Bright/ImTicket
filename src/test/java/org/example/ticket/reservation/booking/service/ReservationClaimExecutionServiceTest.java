@@ -188,6 +188,99 @@ class ReservationClaimExecutionServiceTest {
     }
 
     @Test
+    void replayOnlyReturnsSucceededSnapshotWithoutCreatingOrReclaimingClaim() {
+        ReservationCreateResponse response = response();
+        ReservationClaimSnapshot succeeded = new ReservationClaimSnapshot(
+                CLAIM_ID,
+                MEMBER_ID,
+                HASH,
+                ReservationIdempotencyStatus.SUCCEEDED,
+                "old-token",
+                LocalDateTime.now().minusSeconds(1),
+                1,
+                "response-snapshot",
+                null,
+                null
+        );
+        when(transactionService.findExisting(MEMBER_ID, KEY)).thenReturn(Optional.of(succeeded));
+        when(responseSnapshotCodec.decode(1, "response-snapshot")).thenReturn(response);
+
+        assertThat(executionService.replayOnly(MEMBER_ID, KEY, fingerprint())).isSameAs(response);
+
+        verify(transactionService).findExisting(MEMBER_ID, KEY);
+        verify(transactionService, never()).createClaim(any(), any(), any(), any(), any());
+        verify(transactionService, never()).tryReclaim(any(), any(), any(), any(), any());
+        verifyNoInteractions(seatAdmissionService, creationService);
+    }
+
+    @Test
+    void replayOnlyReplaysFinalFailureWithoutCreatingOrReclaimingClaim() {
+        when(transactionService.findExisting(MEMBER_ID, KEY)).thenReturn(Optional.of(claim(
+                ReservationIdempotencyStatus.FAILED_FINAL,
+                "old-token",
+                LocalDateTime.now().minusSeconds(1),
+                ReservationFailureSnapshotCodec.CURRENT_SCHEMA_VERSION,
+                "SEAT_ALREADY_RESERVED"
+        )));
+
+        assertThatThrownBy(() -> executionService.replayOnly(MEMBER_ID, KEY, fingerprint()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ReservationErrorCode.SEAT_ALREADY_RESERVED));
+
+        verify(transactionService, never()).createClaim(any(), any(), any(), any(), any());
+        verify(transactionService, never()).tryReclaim(any(), any(), any(), any(), any());
+        verifyNoInteractions(seatAdmissionService, creationService);
+    }
+
+    @Test
+    void replayOnlyRejectsMissingOrRetryableSnapshot() {
+        when(transactionService.findExisting(MEMBER_ID, KEY)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> executionService.replayOnly(MEMBER_ID, KEY, fingerprint()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ReservationErrorCode.IDEMPOTENCY_REPLAY_ONLY));
+
+        when(transactionService.findExisting(MEMBER_ID, KEY)).thenReturn(Optional.of(claim(
+                ReservationIdempotencyStatus.FAILED_RETRYABLE,
+                "old-token",
+                LocalDateTime.now().minusSeconds(1),
+                null,
+                "SEAT_ADMISSION_REJECTED"
+        )));
+
+        assertThatThrownBy(() -> executionService.replayOnly(MEMBER_ID, KEY, fingerprint()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ReservationErrorCode.IDEMPOTENCY_REPLAY_ONLY));
+        verifyNoInteractions(seatAdmissionService, creationService);
+    }
+
+    @Test
+    void replayOnlyRejectsDifferentRequestHashBeforeSnapshotDecode() {
+        ReservationClaimSnapshot succeeded = new ReservationClaimSnapshot(
+                CLAIM_ID,
+                MEMBER_ID,
+                "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+                ReservationIdempotencyStatus.SUCCEEDED,
+                "old-token",
+                LocalDateTime.now().minusSeconds(1),
+                1,
+                "response-snapshot",
+                null,
+                null
+        );
+        when(transactionService.findExisting(MEMBER_ID, KEY)).thenReturn(Optional.of(succeeded));
+
+        assertThatThrownBy(() -> executionService.replayOnly(MEMBER_ID, KEY, fingerprint()))
+                .isInstanceOfSatisfying(BusinessException.class, exception ->
+                        assertThat(exception.getErrorCode())
+                                .isEqualTo(ReservationErrorCode.IDEMPOTENCY_CONFLICT));
+        verifyNoInteractions(responseSnapshotCodec, seatAdmissionService, creationService);
+    }
+
+    @Test
     void retryableFailureIsStoredForImmediateReclaim() {
         AtomicReference<String> token = stubNewProcessingClaim();
         doThrow(new BusinessException(ReservationErrorCode.SEAT_ADMISSION_REJECTED))
