@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
+import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomStorageException;
 import org.example.ticket.reservation.waitingroom.repository.WaitingRoomStore;
 import org.springframework.core.io.ClassPathResource;
@@ -22,6 +23,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Objects;
+import java.util.function.Supplier;
 
     /** Redis ZSET·Hash와 Lua script로 Waiting Room lifecycle을 원자적으로 처리한다.
      * 모든 회차별 key는 WaitingRoomKeyFactory의 공통 hash tag를 사용한다. */
@@ -45,7 +47,8 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
             UUID ticketId,
             Instant enqueuedAt,
             Instant waitingDeadline,
-            Duration storageRetention
+            Duration storageRetention,
+            int maxWaitingTickets
     ) {
         requirePositive(performanceTimeId, "performanceTimeId");
         requirePositive(memberId, "memberId");
@@ -53,6 +56,7 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
         Objects.requireNonNull(enqueuedAt, "enqueuedAt must not be null");
         Objects.requireNonNull(waitingDeadline, "waitingDeadline must not be null");
         requirePositiveDuration(storageRetention, "storageRetention");
+        requirePositive(maxWaitingTickets, "maxWaitingTickets");
         String result = execute(
                 JOIN_SCRIPT,
                 List.of(
@@ -67,8 +71,12 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
                 Long.toString(performanceTimeId),
                 Long.toString(enqueuedAt.toEpochMilli()),
                 Long.toString(waitingDeadline.toEpochMilli()),
-                Long.toString(storageRetention.toMillis())
+                Long.toString(storageRetention.toMillis()),
+                Integer.toString(maxWaitingTickets)
         );
+        if ("QUEUE_FULL".equals(result)) {
+            throw new WaitingRoomCapacityException();
+        }
         String[] parts = splitResult(result, 2);
         return switch (parts[0]) {
             case "CREATED" -> new WaitingRoomJoinResult(true, UUID.fromString(parts[1]), Long.parseLong(parts[2]));
@@ -130,45 +138,69 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
             Duration entryLease,
             int maxActiveSessions,
             int admitPerInterval,
+            Duration promotionInterval,
             Duration storageRetention
     ) {
         Objects.requireNonNull(now, "now must not be null");
         requirePositiveDuration(entryLease, "entryLease");
         requirePositive(maxActiveSessions, "maxActiveSessions");
         requirePositive(admitPerInterval, "admitPerInterval");
+        requirePositiveDuration(promotionInterval, "promotionInterval");
         requirePositiveDuration(storageRetention, "storageRetention");
+        long windowId = Math.floorDiv(now.toEpochMilli(), promotionInterval.toMillis());
         List<WaitingRoomTicketSnapshot> promoted = new ArrayList<>();
         expireDue(performanceTimeId, now, admitPerInterval, storageRetention);
 
         for (int attempt = 0; attempt < admitPerInterval; attempt++) {
-            Long activeCount = redisTemplate.opsForZSet().zCard(keyFactory.active(performanceTimeId));
+            Long activeCount = executeCommand(
+                    "active session count",
+                    () -> redisTemplate.opsForZSet().zCard(keyFactory.active(performanceTimeId))
+            );
             if (activeCount != null && activeCount >= maxActiveSessions) {
                 break;
             }
-            Set<String> candidates = redisTemplate.opsForZSet().range(keyFactory.waiting(performanceTimeId), 0, 0);
+            Set<String> candidates = executeCommand(
+                    "waiting candidate lookup",
+                    () -> redisTemplate.opsForZSet().range(keyFactory.waiting(performanceTimeId), 0, 0)
+            );
             if (candidates == null || candidates.isEmpty()) {
                 break;
             }
-            UUID ticketId = UUID.fromString(candidates.iterator().next());
+            UUID ticketId;
+            try {
+                ticketId = UUID.fromString(candidates.iterator().next());
+            } catch (IllegalArgumentException exception) {
+                throw storageFailure("waiting candidate ticket ID가 손상됐습니다.", exception);
+            }
+            WaitingRoomTicketSnapshot candidate = find(performanceTimeId, ticketId).orElse(null);
+            long ownerId = candidate == null ? 1L : candidate.memberId();
             String result = execute(
                     PROMOTE_SCRIPT,
                     List.of(
                         keyFactory.waiting(performanceTimeId),
                         keyFactory.active(performanceTimeId),
                         keyFactory.deadline(performanceTimeId),
-                        keyFactory.ticket(performanceTimeId, ticketId)
+                        keyFactory.ticket(performanceTimeId, ticketId),
+                        keyFactory.owner(performanceTimeId, ownerId),
+                        keyFactory.admission(performanceTimeId)
                     ),
                     ticketId.toString(),
                     Long.toString(now.toEpochMilli()),
                     Long.toString(now.plus(entryLease).toEpochMilli()),
                     Integer.toString(maxActiveSessions),
+                    Integer.toString(admitPerInterval),
+                    Long.toString(windowId),
                     Long.toString(storageRetention.toMillis())
             );
             if (result.startsWith("PROMOTED|")) {
                 find(performanceTimeId, ticketId).ifPresent(promoted::add);
-            } else if (result.equals("MISSING") || result.equals("STATE_MISMATCH")) {
+            } else if (result.startsWith("EXPIRED|")
+                    || result.equals("MISSING")
+                    || result.equals("STATE_MISMATCH")) {
                 continue;
             } else if (result.equals("FULL")) {
+                break;
+            } else if (result.equals("RATE_LIMIT")) {
                 break;
             } else {
                 throw unexpectedResult(result);
@@ -206,11 +238,17 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
     /** deadline·lease ZSET의 due ticket을 EXPIRED로 전이하고 index를 정리한다.
      * waiting ticket과 admitted lease를 같은 lifecycle 규칙으로 정리한다. */
     private void expireDue(long performanceTimeId, Instant now, int batchSize, Duration storageRetention) {
-        Set<String> waitingDue = redisTemplate.opsForZSet().rangeByScore(
-                keyFactory.deadline(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+        Set<String> waitingDue = executeCommand(
+                "waiting deadline lookup",
+                () -> redisTemplate.opsForZSet().rangeByScore(
+                        keyFactory.deadline(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+                )
         );
-        Set<String> activeDue = redisTemplate.opsForZSet().rangeByScore(
-                keyFactory.active(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+        Set<String> activeDue = executeCommand(
+                "active lease lookup",
+                () -> redisTemplate.opsForZSet().rangeByScore(
+                        keyFactory.active(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+                )
         );
         List<String> due = new ArrayList<>();
         if (waitingDue != null) {
@@ -279,6 +317,18 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
             throw exception;
         } catch (RuntimeException exception) {
             throw storageFailure("Redis script 실행에 실패했습니다.", exception);
+        }
+    }
+
+    /** 일반 Redis command 실패를 Waiting Room storage 오류로 표준화한다.
+     * service layer가 raw Redis 예외를 API 응답으로 노출하지 않게 한다. */
+    private <T> T executeCommand(String operation, Supplier<T> command) {
+        try {
+            return command.get();
+        } catch (WaitingRoomStorageException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw storageFailure("Redis " + operation + "에 실패했습니다.", exception);
         }
     }
 

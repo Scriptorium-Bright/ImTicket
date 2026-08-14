@@ -16,12 +16,17 @@ public class WaitingRoomProperties {
 
     private boolean enabled;
     private int maxActiveSessions = 100;
+    private int maxWaitingTickets = 50_000;
     private int admitPerInterval = 10;
     private Duration waitingTicketTtl = Duration.ofMinutes(30);
     private Duration entryLease = Duration.ofMinutes(5);
     private Duration terminalRetention = Duration.ofHours(1);
     private Duration promotionInterval = Duration.ofSeconds(1);
     private Duration statusPollAfter = Duration.ofSeconds(2);
+    private int statusPollMiddleThreshold = 100;
+    private int statusPollFarThreshold = 1_000;
+    private Duration statusPollMiddleAfter = Duration.ofSeconds(5);
+    private Duration statusPollFarAfter = Duration.ofSeconds(10);
     private String passSecret = "change-me-waiting-room-pass-secret";
     private Set<Long> enabledPerformanceTimeIds = new HashSet<>();
 
@@ -31,6 +36,9 @@ public class WaitingRoomProperties {
         if (maxActiveSessions <= 0) {
             throw new IllegalArgumentException("maxActiveSessions must be positive");
         }
+        if (maxWaitingTickets <= 0) {
+            throw new IllegalArgumentException("maxWaitingTickets must be positive");
+        }
         if (admitPerInterval <= 0) {
             throw new IllegalArgumentException("admitPerInterval must be positive");
         }
@@ -39,6 +47,20 @@ public class WaitingRoomProperties {
         requirePositive(terminalRetention, "terminalRetention");
         requirePositive(promotionInterval, "promotionInterval");
         requirePositive(statusPollAfter, "statusPollAfter");
+        requirePositive(statusPollMiddleAfter, "statusPollMiddleAfter");
+        requirePositive(statusPollFarAfter, "statusPollFarAfter");
+        if (statusPollMiddleThreshold < 0) {
+            throw new IllegalArgumentException("statusPollMiddleThreshold must not be negative");
+        }
+        if (statusPollFarThreshold <= statusPollMiddleThreshold) {
+            throw new IllegalArgumentException("statusPollFarThreshold must be greater than statusPollMiddleThreshold");
+        }
+        if (enabled && (enabledPerformanceTimeIds == null || enabledPerformanceTimeIds.isEmpty())) {
+            throw new IllegalArgumentException("enabledPerformanceTimeIds must contain at least one performance time when Waiting Room is enabled");
+        }
+        if (enabledPerformanceTimeIds != null && enabledPerformanceTimeIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("enabledPerformanceTimeIds must contain positive values");
+        }
         if (passSecret == null || passSecret.isBlank()) {
             throw new IllegalArgumentException("passSecret must not be blank");
         }

@@ -1,5 +1,6 @@
 package org.example.ticket.reservation.waitingroom.service;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.reservation.waitingroom.config.WaitingRoomProperties;
 import org.example.ticket.reservation.waitingroom.constant.WaitingRoomErrorCode;
@@ -7,6 +8,8 @@ import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomStatusResponse;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
+import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
+import org.example.ticket.reservation.waitingroom.exception.WaitingRoomStorageException;
 import org.example.ticket.reservation.waitingroom.pass.HmacWaitingRoomPassCodec;
 import org.example.ticket.reservation.waitingroom.repository.WaitingRoomStore;
 import org.example.ticket.reservation.waitingroom.util.WaitingRoomTimePolicy;
@@ -19,6 +22,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +44,7 @@ class WaitingRoomServiceTest {
     void setUp() {
         WaitingRoomProperties properties = new WaitingRoomProperties();
         properties.setEnabled(true);
+        properties.setEnabledPerformanceTimeIds(Set.of(7L));
         properties.setEntryLease(Duration.ofMinutes(5));
         properties.setWaitingTicketTtl(Duration.ofMinutes(30));
         properties.setTerminalRetention(Duration.ofHours(1));
@@ -54,7 +59,8 @@ class WaitingRoomServiceTest {
                 properties,
                 timePolicy,
                 performanceTimeId -> true,
-                new HmacWaitingRoomPassCodec("test-secret")
+                new HmacWaitingRoomPassCodec("test-secret"),
+                new SimpleMeterRegistry()
         );
     }
 
@@ -62,7 +68,7 @@ class WaitingRoomServiceTest {
     @Test
     void joinsAndReturnsOneBasedWaitingPosition() {
         WaitingRoomTicketSnapshot snapshot = waitingSnapshot();
-        when(store.join(eq(7L), eq(12L), any(UUID.class), any(), any(), any()))
+        when(store.join(eq(7L), eq(12L), any(UUID.class), any(), any(), any(), any(Integer.class)))
                 .thenReturn(new WaitingRoomJoinResult(true, TICKET_ID, 3L));
         when(store.find(7L, TICKET_ID)).thenReturn(Optional.of(snapshot));
         when(store.waitingRank(7L, TICKET_ID)).thenReturn(OptionalLong.of(2L));
@@ -117,7 +123,8 @@ class WaitingRoomServiceTest {
                 properties,
                 timePolicy,
                 performanceTimeId -> false,
-                new HmacWaitingRoomPassCodec("test-secret")
+                new HmacWaitingRoomPassCodec("test-secret"),
+                new SimpleMeterRegistry()
         );
 
         assertThatThrownBy(() -> service.join(7L, 12L))
@@ -135,6 +142,30 @@ class WaitingRoomServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(error -> ((BusinessException) error).getErrorCode())
                 .isEqualTo(WaitingRoomErrorCode.WAITING_ROOM_TICKET_NOT_OWNER);
+    }
+
+    /** Redis queue capacity 오류가 Waiting Room HTTP 오류 code로 변환되는지 검증한다. */
+    @Test
+    void mapsQueueCapacityToWaitingRoomError() {
+        when(store.join(eq(7L), eq(12L), any(UUID.class), any(), any(), any(), any(Integer.class)))
+                .thenThrow(new WaitingRoomCapacityException());
+
+        assertThatThrownBy(() -> service.join(7L, 12L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getErrorCode())
+                .isEqualTo(WaitingRoomErrorCode.WAITING_ROOM_QUEUE_FULL);
+    }
+
+    /** Redis storage 오류가 raw infrastructure exception 없이 Waiting Room 503으로 변환되는지 검증한다. */
+    @Test
+    void mapsStorageFailureToWaitingRoomError() {
+        when(store.join(eq(7L), eq(12L), any(UUID.class), any(), any(), any(), any(Integer.class)))
+                .thenThrow(new WaitingRoomStorageException("redis unavailable"));
+
+        assertThatThrownBy(() -> service.join(7L, 12L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(error -> ((BusinessException) error).getErrorCode())
+                .isEqualTo(WaitingRoomErrorCode.WAITING_ROOM_REDIS_FAILURE);
     }
 
     /** 테스트에서 사용할 WAITING snapshot을 생성한다. */

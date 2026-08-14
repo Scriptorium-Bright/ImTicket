@@ -25,6 +25,12 @@ public final class WaitingRoomKeyFactory {
         return scoped(performanceTimeId, "active");
     }
 
+    /** 회차별 admission window와 현재 interval count를 저장하는 Redis Hash key를 반환한다.
+     * 여러 application instance가 같은 회차의 admission quota를 공유하는 데 사용한다. */
+    public String admission(long performanceTimeId) {
+        return scoped(performanceTimeId, "admission");
+    }
+
     /** WAITING ticket의 deadline을 저장하는 Redis Sorted Set key를 반환한다.
      * score에는 waiting deadline epoch millisecond를 저장해 만료 scan에 사용한다. */
     public String deadline(long performanceTimeId) {

@@ -21,7 +21,8 @@ public interface WaitingRoomStore {
             UUID ticketId,
             Instant enqueuedAt,
             Instant waitingDeadline,
-            Duration storageRetention
+            Duration storageRetention,
+            int maxWaitingTickets
     );
 
     /** ticket Hash를 읽어 현재 lifecycle snapshot을 반환한다.
@@ -40,6 +41,7 @@ public interface WaitingRoomStore {
             Duration entryLease,
             int maxActiveSessions,
             int admitPerInterval,
+            Duration promotionInterval,
             Duration storageRetention
     );
 

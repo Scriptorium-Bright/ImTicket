@@ -3,7 +3,7 @@ package org.example.ticket.reservation.waitingroom.service;
 import lombok.RequiredArgsConstructor;
 import org.example.ticket.reservation.waitingroom.config.WaitingRoomProperties;
 
-/** 전역 flag와 선택 회차 목록으로 Waiting Room 적용 여부를 판정한다. */
+/** 전역 flag와 명시된 회차 목록으로 Waiting Room 적용 여부를 판정한다. */
 @RequiredArgsConstructor
 public final class DefaultWaitingRoomFeaturePolicy implements WaitingRoomFeaturePolicy {
 
@@ -16,7 +16,6 @@ public final class DefaultWaitingRoomFeaturePolicy implements WaitingRoomFeature
         if (!properties.isEnabled()) {
             return false;
         }
-        return properties.getEnabledPerformanceTimeIds().isEmpty()
-                || properties.getEnabledPerformanceTimeIds().contains(performanceTimeId);
+        return properties.getEnabledPerformanceTimeIds().contains(performanceTimeId);
     }
 }

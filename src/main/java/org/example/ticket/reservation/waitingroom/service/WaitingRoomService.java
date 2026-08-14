@@ -1,5 +1,6 @@
 package org.example.ticket.reservation.waitingroom.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.common.exception.BusinessException;
@@ -9,6 +10,7 @@ import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomStatusResponse;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
+import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomStorageException;
 import org.example.ticket.reservation.waitingroom.pass.WaitingRoomPassClaims;
 import org.example.ticket.reservation.waitingroom.pass.WaitingRoomPassCodec;
@@ -35,6 +37,7 @@ public class WaitingRoomService {
     private final WaitingRoomTimePolicy timePolicy;
     private final WaitingRoomFeaturePolicy featurePolicy;
     private final WaitingRoomPassCodec passCodec;
+    private final MeterRegistry meterRegistry;
 
     /** 회원을 회차별 Waiting Room에 등록하고 현재 ticket 상태를 반환한다.
      * 기존 owner mapping이 있으면 새 ticket을 만들지 않고 상태를 복구한다. */
@@ -43,14 +46,22 @@ public class WaitingRoomService {
         requirePositive(memberId, "memberId");
         requireEnabled(performanceTimeId);
         Instant now = timePolicy.now();
-        WaitingRoomJoinResult result = executeStorage(() -> waitingRoomStore.join(
-                performanceTimeId,
-                memberId,
-                UUID.randomUUID(),
-                now,
-                timePolicy.waitingDeadline(),
-                storageRetention()
-        ));
+        WaitingRoomJoinResult result;
+        try {
+            result = executeStorage(() -> waitingRoomStore.join(
+                    performanceTimeId,
+                    memberId,
+                    UUID.randomUUID(),
+                    now,
+                    timePolicy.waitingDeadline(),
+                    storageRetention(),
+                    properties.getMaxWaitingTickets()
+            ));
+        } catch (BusinessException exception) {
+            recordCounter("join", exception.getErrorCode().code());
+            throw exception;
+        }
+        recordCounter("join", result.created() ? "created" : "existing");
         WaitingRoomTicketSnapshot snapshot = executeStorage(() -> waitingRoomStore.find(
                 performanceTimeId,
                 result.ticketId()
@@ -65,6 +76,7 @@ public class WaitingRoomService {
         requirePositive(memberId, "memberId");
         requireEnabled(performanceTimeId);
         WaitingRoomTicketSnapshot snapshot = findOwnedSnapshot(performanceTimeId, memberId, ticketId);
+        recordCounter("status", snapshot.status().name());
         return toResponse(performanceTimeId, snapshot);
     }
 
@@ -110,14 +122,17 @@ public class WaitingRoomService {
             return List.of();
         }
         Instant now = timePolicy.now();
-        return executeStorage(() -> waitingRoomStore.promote(
+        List<WaitingRoomStatusResponse> promoted = executeStorage(() -> waitingRoomStore.promote(
                 performanceTimeId,
                 now,
                 properties.getEntryLease(),
                 properties.getMaxActiveSessions(),
                 properties.getAdmitPerInterval(),
+                properties.getPromotionInterval(),
                 storageRetention()
         )).stream().map(snapshot -> toResponse(performanceTimeId, snapshot)).toList();
+        meterRegistry.counter("imticket.waiting-room.promotions").increment(promoted.size());
+        return promoted;
     }
 
     /** feature policy에 따라 해당 회차의 Waiting Room 접근을 요구하는지 확인한다.
@@ -156,7 +171,7 @@ public class WaitingRoomService {
                 snapshot.waitingDeadline(),
                 snapshot.entryExpiresAt(),
                 entryPass,
-                timePolicy.statusPollAfter().toMillis()
+                timePolicy.statusPollAfter(position).toMillis()
         );
     }
 
@@ -198,10 +213,24 @@ public class WaitingRoomService {
     private <T> T executeStorage(Supplier<T> operation) {
         try {
             return operation.get();
+        } catch (WaitingRoomCapacityException exception) {
+            recordCounter("storage", "queue_full");
+            throw business(WaitingRoomErrorCode.WAITING_ROOM_QUEUE_FULL);
         } catch (WaitingRoomStorageException exception) {
+            recordCounter("storage", "redis_failure");
             log.warn("Waiting Room Redis storage failure", exception);
             throw new BusinessException(WaitingRoomErrorCode.WAITING_ROOM_REDIS_FAILURE, exception);
         }
+    }
+
+    /** lifecycle 결과를 low-cardinality counter로 기록한다.
+     * performanceTimeId와 memberId는 metric tag로 사용하지 않아 cardinality 증가를 막는다. */
+    private void recordCounter(String operation, String result) {
+        meterRegistry.counter(
+                "imticket.waiting-room.operations",
+                "operation", operation,
+                "result", result
+        ).increment();
     }
 
     /** 양수 식별자만 service lifecycle에 진입하도록 검증한다.

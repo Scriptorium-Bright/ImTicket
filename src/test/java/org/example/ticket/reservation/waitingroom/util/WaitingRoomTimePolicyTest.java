@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,6 +25,9 @@ class WaitingRoomTimePolicyTest {
         properties.setEntryLease(Duration.ofMinutes(5));
         properties.setTerminalRetention(Duration.ofHours(1));
         properties.setStatusPollAfter(Duration.ofSeconds(2));
+        properties.setStatusPollMiddleAfter(Duration.ofSeconds(5));
+        properties.setStatusPollFarAfter(Duration.ofSeconds(10));
+        properties.setEnabledPerformanceTimeIds(Set.of(7L));
     }
 
     /** 고정 clock에서 waiting deadline과 admitted lease의 계산 기준을 검증한다. */
@@ -36,6 +40,19 @@ class WaitingRoomTimePolicyTest {
         assertThat(policy.entryLeaseExpiresAt()).isEqualTo(NOW.plus(Duration.ofMinutes(5)));
         assertThat(policy.terminalRetentionExpiresAt()).isEqualTo(NOW.plus(Duration.ofHours(1)));
         assertThat(policy.statusPollAfter()).isEqualTo(Duration.ofSeconds(2));
+    }
+
+    /** 순번 구간별 polling 간격이 먼 대기자에게 더 길게 적용되는지 검증한다. */
+    @Test
+    void calculatesPollingIntervalByWaitingPosition() {
+        WaitingRoomTimePolicy policy = policy();
+
+        assertThat(policy.statusPollAfter(1L)).isEqualTo(Duration.ofSeconds(2));
+        assertThat(policy.statusPollAfter(100L)).isEqualTo(Duration.ofSeconds(2));
+        assertThat(policy.statusPollAfter(101L)).isEqualTo(Duration.ofSeconds(5));
+        assertThat(policy.statusPollAfter(1_000L)).isEqualTo(Duration.ofSeconds(5));
+        assertThat(policy.statusPollAfter(1_001L)).isEqualTo(Duration.ofSeconds(10));
+        assertThat(policy.statusPollAfter(null)).isEqualTo(Duration.ofSeconds(2));
     }
 
     /** 만료 판정과 Redis score 변환이 동일한 clock contract를 사용하는지 검증한다. */
@@ -58,6 +75,17 @@ class WaitingRoomTimePolicyTest {
         assertThatThrownBy(this::policy)
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("entryLease");
+    }
+
+    /** 활성화된 Waiting Room에 회차 목록이 없으면 설정 오류로 처리하는지 검증한다. */
+    @Test
+    void rejectsEnabledWaitingRoomWithoutTargetPerformanceTimes() {
+        properties.setEnabled(true);
+        properties.setEnabledPerformanceTimeIds(Set.of());
+
+        assertThatThrownBy(this::policy)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("enabledPerformanceTimeIds");
     }
 
     /** 테스트에서 사용할 고정 시각 policy를 구성한다. */

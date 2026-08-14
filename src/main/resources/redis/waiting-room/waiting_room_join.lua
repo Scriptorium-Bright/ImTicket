@@ -1,5 +1,5 @@
 -- KEYS: sequence, waiting, deadline, ticket hash, owner mapping
--- ARGV: ticketId, memberId, performanceTimeId, enqueuedAtMs, waitingDeadlineMs, retentionMs
+-- ARGV: ticketId, memberId, performanceTimeId, enqueuedAtMs, waitingDeadlineMs, retentionMs, maxWaitingTickets
 local existing = redis.call('GET', KEYS[5])
 if existing then
     return 'EXISTING|' .. existing
@@ -7,6 +7,10 @@ end
 
 if redis.call('EXISTS', KEYS[4]) == 1 then
     return 'TICKET_EXISTS'
+end
+
+if redis.call('ZCARD', KEYS[2]) >= tonumber(ARGV[7]) then
+    return 'QUEUE_FULL'
 end
 
 local sequence = redis.call('INCR', KEYS[1])

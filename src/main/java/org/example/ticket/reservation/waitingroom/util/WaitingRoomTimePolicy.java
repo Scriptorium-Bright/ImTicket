@@ -64,4 +64,16 @@ public final class WaitingRoomTimePolicy {
     public Duration statusPollAfter() {
         return properties.getStatusPollAfter();
     }
+
+    /** 대기 순번 구간에 맞는 다음 polling 간격을 반환한다.
+     * 먼 순번의 polling 빈도를 낮춰 대규모 status 요청이 만드는 Redis·Tomcat 부하를 분산한다. */
+    public Duration statusPollAfter(Long position) {
+        if (position == null || position <= properties.getStatusPollMiddleThreshold()) {
+            return properties.getStatusPollAfter();
+        }
+        if (position <= properties.getStatusPollFarThreshold()) {
+            return properties.getStatusPollMiddleAfter();
+        }
+        return properties.getStatusPollFarAfter();
+    }
 }

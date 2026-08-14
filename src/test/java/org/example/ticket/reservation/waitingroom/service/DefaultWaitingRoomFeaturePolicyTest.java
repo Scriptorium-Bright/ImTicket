@@ -29,4 +29,13 @@ class DefaultWaitingRoomFeaturePolicyTest {
         assertThat(policy.requiresWaitingRoom(7L)).isTrue();
         assertThat(policy.requiresWaitingRoom(9L)).isFalse();
     }
+
+    /** 활성 flag와 빈 회차 목록은 보호 대상이 없는 상태로 처리하는지 검증한다. */
+    @Test
+    void disablesAllPerformanceTimesWhenTargetListIsEmpty() {
+        WaitingRoomProperties properties = new WaitingRoomProperties();
+        properties.setEnabled(true);
+
+        assertThat(new DefaultWaitingRoomFeaturePolicy(properties).requiresWaitingRoom(7L)).isFalse();
+    }
 }
