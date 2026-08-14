@@ -68,7 +68,7 @@ public class ReservationClaimExecutionService {
      * 검증된 회원 ID와 canonical key로 claim을 선점하고 좌석 admission과 예약 생성을 실행한다.
      * 기존 claim은 요청 hash, 상태와 lease를 검사해 성공 또는 최종 실패를 재생하거나 조건부 회수한다.
      */
-    public ReservationCreateResponse execute(
+    public ReservationCreateResponse execute (
             Long memberId,
             String idempotencyKey,
             ReservationRequest request,
@@ -81,6 +81,7 @@ public class ReservationClaimExecutionService {
         String attemptToken = newAttemptToken();
         LocalDateTime now = LocalDateTime.now();
         ReservationClaimSnapshot claim;
+
         try {
             claim = transactionService.createClaim(
                     memberId,
@@ -97,6 +98,38 @@ public class ReservationClaimExecutionService {
         }
 
         return executeOwnedClaim(memberId, request, requestFingerprint, claim.id(), attemptToken);
+    }
+
+    /** 만료·완료 Waiting Room pass에서 기존 최종 snapshot만 조회해 재생한다.
+     * 새 claim 생성, retryable claim 회수와 좌석 admission은 이 경로에서 수행하지 않는다. */
+    public ReservationCreateResponse replayOnly(
+            Long memberId,
+            String idempotencyKey,
+            ReservationIntentFingerprint requestFingerprint
+    ) {
+        if (memberId == null || memberId <= 0) {
+            throw new BusinessException(ReservationErrorCode.RESERVATION_MEMBER_NOT_FOUND);
+        }
+
+        ReservationClaimSnapshot existing = transactionService.findExisting(memberId, idempotencyKey)
+                .orElseThrow(() -> new BusinessException(ReservationErrorCode.IDEMPOTENCY_REPLAY_ONLY));
+        if (!existing.requestHash().equals(requestFingerprint.requestHash())) {
+            throw new BusinessException(ReservationErrorCode.IDEMPOTENCY_CONFLICT);
+        }
+        if (existing.status() == ReservationIdempotencyStatus.SUCCEEDED) {
+            return responseSnapshotCodec.decode(
+                    existing.responseSchemaVersion(),
+                    existing.responsePayload()
+            );
+        }
+        if (existing.status() == ReservationIdempotencyStatus.FAILED_FINAL) {
+            ReservationErrorCode errorCode = failureSnapshotCodec.decode(
+                    existing.failureSchemaVersion(),
+                    existing.lastErrorCode()
+            );
+            throw new BusinessException(errorCode);
+        }
+        throw new BusinessException(ReservationErrorCode.IDEMPOTENCY_REPLAY_ONLY);
     }
 
     /**

@@ -17,6 +17,7 @@ public enum ReservationErrorCode implements ErrorCode {
     IDEMPOTENCY_KEY_INVALID(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_INVALID", "Idempotency-Key는 canonical UUID여야 합니다."),
     IDEMPOTENCY_CONFLICT(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT", "같은 Idempotency-Key에 다른 예약 요청을 사용할 수 없습니다."),
     IDEMPOTENCY_PROCESSING(HttpStatus.CONFLICT, "IDEMPOTENCY_PROCESSING", "같은 예약 요청이 처리 중입니다."),
+    IDEMPOTENCY_REPLAY_ONLY(HttpStatus.CONFLICT, "IDEMPOTENCY_REPLAY_ONLY", "만료된 입장 pass에서는 기존 최종 예약 결과만 조회할 수 있습니다."),
     RESERVATION_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "RESERVATION_MEMBER_NOT_FOUND", "예약 회원을 찾을 수 없습니다."),
     RESERVATION_SEAT_NOT_FOUND(HttpStatus.NOT_FOUND, "RESERVATION_SEAT_NOT_FOUND", "공연 회차에 속한 좌석을 찾을 수 없습니다."),
     SEAT_ALREADY_RESERVED(HttpStatus.CONFLICT, "SEAT_ALREADY_RESERVED", "이미 예약 완료된 좌석입니다."),

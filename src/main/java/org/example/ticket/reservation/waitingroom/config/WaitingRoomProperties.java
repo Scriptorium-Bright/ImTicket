@@ -14,6 +14,9 @@ import java.util.Set;
 @ConfigurationProperties(prefix = "reservation.waiting-room")
 public class WaitingRoomProperties {
 
+    /** 개발용 placeholder pass secret이다. Waiting Room 활성화 시 운영 설정으로 교체해야 한다. */
+    public static final String DEFAULT_PASS_SECRET = "change-me-waiting-room-pass-secret";
+
     private boolean enabled;
     private int maxActiveSessions = 100;
     private int maxWaitingTickets = 50_000;
@@ -27,7 +30,7 @@ public class WaitingRoomProperties {
     private int statusPollFarThreshold = 1_000;
     private Duration statusPollMiddleAfter = Duration.ofSeconds(5);
     private Duration statusPollFarAfter = Duration.ofSeconds(10);
-    private String passSecret = "change-me-waiting-room-pass-secret";
+    private String passSecret = DEFAULT_PASS_SECRET;
     private Set<Long> enabledPerformanceTimeIds = new HashSet<>();
 
     /** 설정값이 Waiting Room의 admission과 시간 계산에 사용할 수 있는지 검증한다.

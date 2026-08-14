@@ -53,6 +53,10 @@ public class WaitingRoomConfiguration {
      * pass secret은 WaitingRoomProperties에서 외부 설정으로 주입한다. */
     @Bean
     public WaitingRoomPassCodec waitingRoomPassCodec(WaitingRoomProperties properties) {
+        if (properties.isEnabled()
+                && WaitingRoomProperties.DEFAULT_PASS_SECRET.equals(properties.getPassSecret())) {
+            throw new IllegalArgumentException("Waiting Room 활성화 시 reservation.waiting-room.pass-secret을 변경해야 합니다.");
+        }
         return new HmacWaitingRoomPassCodec(properties.getPassSecret());
     }
 }

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.example.ticket.reservation.booking.dto.request.ReservationRequest;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
 import org.example.ticket.reservation.booking.service.ReservationPreReserveService;
+import org.example.ticket.reservation.waitingroom.service.WaitingRoomAccessGuard;
 import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -25,10 +26,12 @@ public class ReservationController {
     public ResponseEntity<ApiResponse<ReservationCreateResponse>> registerReservation(
             @AuthenticationPrincipal MetamaskUserDetails userDetails,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = WaitingRoomAccessGuard.PASS_HEADER, required = false) String entryPass,
             @RequestBody ReservationRequest reservationRequest) {
         ReservationCreateResponse response = preReserveService.preReserve(
-                userDetails.getAddress(),
+                userDetails == null ? null : userDetails.getMemberId(),
                 idempotencyKey,
+                entryPass,
                 reservationRequest
         );
         return ResponseEntity.ok(ApiResponse.success(response));
