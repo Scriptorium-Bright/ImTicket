@@ -11,7 +11,6 @@ import java.time.ZoneOffset;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class WaitingRoomTimePolicyTest {
 
@@ -65,27 +64,6 @@ class WaitingRoomTimePolicyTest {
         assertThat(policy.isExpired(NOW)).isTrue();
         assertThat(policy.isExpired(target)).isFalse();
         assertThat(policy.epochMillis(target)).isEqualTo(target.toEpochMilli());
-    }
-
-    /** 잘못된 시간 설정이 policy 생성 단계에서 실패하는지 검증한다. */
-    @Test
-    void rejectsInvalidDurationConfiguration() {
-        properties.setEntryLease(Duration.ZERO);
-
-        assertThatThrownBy(this::policy)
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("entryLease");
-    }
-
-    /** 활성화된 Waiting Room에 회차 목록이 없으면 설정 오류로 처리하는지 검증한다. */
-    @Test
-    void rejectsEnabledWaitingRoomWithoutTargetPerformanceTimes() {
-        properties.setEnabled(true);
-        properties.setEnabledPerformanceTimeIds(Set.of());
-
-        assertThatThrownBy(this::policy)
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("enabledPerformanceTimeIds");
     }
 
     /** 테스트에서 사용할 고정 시각 policy를 구성한다. */

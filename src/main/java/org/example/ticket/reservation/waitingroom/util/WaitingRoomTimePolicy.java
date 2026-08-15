@@ -18,7 +18,6 @@ public final class WaitingRoomTimePolicy {
     public WaitingRoomTimePolicy(Clock clock, WaitingRoomProperties properties) {
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
-        properties.validate();
     }
 
     /** 현재 정책 기준 시각을 반환한다.

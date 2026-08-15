@@ -18,6 +18,13 @@ import java.time.Clock;
 @EnableConfigurationProperties(WaitingRoomProperties.class)
 public class WaitingRoomConfiguration {
 
+    /** ConfigurationProperties의 표준 binding lifecycle에 Waiting Room 교차 검증기를 연결한다.
+     * 애플리케이션 시작 시 Properties binding과 함께 설정 관계를 검증한다. */
+    @Bean(name = "configurationPropertiesValidator")
+    public static WaitingRoomPropertiesValidator configurationPropertiesValidator() {
+        return new WaitingRoomPropertiesValidator();
+    }
+
     /** 애플리케이션에 사용할 UTC clock을 등록한다.
      * Waiting Room의 deadline과 entry lease 계산이 같은 시간 기준을 사용하게 한다. */
     @Bean
@@ -53,10 +60,6 @@ public class WaitingRoomConfiguration {
      * pass secret은 WaitingRoomProperties에서 외부 설정으로 주입한다. */
     @Bean
     public WaitingRoomPassCodec waitingRoomPassCodec(WaitingRoomProperties properties) {
-        if (properties.isEnabled()
-                && WaitingRoomProperties.DEFAULT_PASS_SECRET.equals(properties.getPassSecret())) {
-            throw new IllegalArgumentException("Waiting Room 활성화 시 reservation.waiting-room.pass-secret을 변경해야 합니다.");
-        }
         return new HmacWaitingRoomPassCodec(properties.getPassSecret());
     }
 }
