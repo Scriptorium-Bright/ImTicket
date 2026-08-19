@@ -32,6 +32,13 @@ public final class WaitingRoomTimePolicy {
         return now().plus(properties.getWaitingTicketTtl());
     }
 
+    /** 접수 시각을 기준으로 WAITING ticket 만료 시각을 계산한다.
+     * 비동기 접수에서 처리자 지연이 ticket 수명에 포함되지 않게 한다. */
+    public Instant waitingDeadline(Instant acceptedAt) {
+        Objects.requireNonNull(acceptedAt, "acceptedAt must not be null");
+        return acceptedAt.plus(properties.getWaitingTicketTtl());
+    }
+
     /** ADMITTED ticket의 entry lease 만료 시각을 계산한다.
      * promotion 시각에 active session lease를 더해 계산한다. */
     public Instant entryLeaseExpiresAt() {

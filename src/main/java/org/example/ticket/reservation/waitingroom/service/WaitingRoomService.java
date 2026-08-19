@@ -10,17 +10,20 @@ import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomStatusResponse;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketTransition;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomStorageException;
 import org.example.ticket.reservation.waitingroom.pass.WaitingRoomPassClaims;
 import org.example.ticket.reservation.waitingroom.pass.WaitingRoomPassCodec;
 import org.example.ticket.reservation.waitingroom.repository.WaitingRoomStore;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomPromotionResult;
+import org.example.ticket.reservation.waitingroom.sse.WaitingRoomTicketLifecycleEvent;
 import org.example.ticket.reservation.waitingroom.util.WaitingRoomTimePolicy;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -38,6 +41,7 @@ public class WaitingRoomService {
     private final WaitingRoomFeaturePolicy featurePolicy;
     private final WaitingRoomPassCodec passCodec;
     private final MeterRegistry meterRegistry;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** 회원을 회차별 Waiting Room에 등록하고 현재 ticket 상태를 반환한다.
      * 기존 owner mapping이 있으면 새 ticket을 만들지 않고 상태를 복구한다. */
@@ -94,6 +98,7 @@ public class WaitingRoomService {
                 timePolicy.now(),
                 storageRetention()
         )).orElseThrow(() -> business(WaitingRoomErrorCode.WAITING_ROOM_TICKET_STATE_CONFLICT));
+        publishLifecycle(snapshot, timePolicy.now());
         return toResponse(performanceTimeId, snapshot);
     }
 
@@ -111,18 +116,19 @@ public class WaitingRoomService {
                 timePolicy.now(),
                 storageRetention()
         )).orElseThrow(() -> business(WaitingRoomErrorCode.WAITING_ROOM_TICKET_STATE_CONFLICT));
+        publishLifecycle(snapshot, timePolicy.now());
         return toResponse(performanceTimeId, snapshot);
     }
 
     /** 한 회차의 만료 ticket 정리와 promotion batch를 실행한다.
      * scheduler와 수동 운영 작업이 같은 Redis admission 경계를 사용한다. */
-    public List<WaitingRoomStatusResponse> promote(long performanceTimeId) {
+    public void promote(long performanceTimeId) {
         requirePositive(performanceTimeId, "performanceTimeId");
         if (!featurePolicy.requiresWaitingRoom(performanceTimeId)) {
-            return List.of();
+            return;
         }
         Instant now = timePolicy.now();
-        List<WaitingRoomStatusResponse> promoted = executeStorage(() -> waitingRoomStore.promote(
+        WaitingRoomPromotionResult result = executeStorage(() -> waitingRoomStore.promote(
                 performanceTimeId,
                 now,
                 properties.getEntryLease(),
@@ -130,15 +136,31 @@ public class WaitingRoomService {
                 properties.getAdmitPerInterval(),
                 properties.getPromotionInterval(),
                 storageRetention()
-        )).stream().map(snapshot -> toResponse(performanceTimeId, snapshot)).toList();
-        meterRegistry.counter("imticket.waiting-room.promotions").increment(promoted.size());
-        return promoted;
+        ));
+        result.expired().forEach(transition -> publishLifecycle(performanceTimeId, transition, now));
+        result.admitted().forEach(transition -> publishLifecycle(performanceTimeId, transition, now));
+        meterRegistry.counter("imticket.waiting-room.promotions").increment(result.admitted().size());
     }
 
     /** feature policy에 따라 해당 회차의 Waiting Room 접근을 요구하는지 확인한다.
      * protected zone guard가 API 접근을 결정할 때 호출한다. */
     public boolean requiresWaitingRoom(long performanceTimeId) {
         return featurePolicy.requiresWaitingRoom(performanceTimeId);
+    }
+
+    /** join handoff가 기존 join과 같은 feature 검증을 사용하도록 enabled 조건을 노출한다.
+     * disabled 회차는 Redis enqueue 전에 domain 오류로 거절한다. */
+    public void requireEnabledForJoin(long performanceTimeId) {
+        requireEnabled(performanceTimeId);
+    }
+
+    /** owner mapping에 등록된 ticket ID를 조회한다.
+     * Redis storage 예외는 기존 Waiting Room 오류 contract로 변환한다. */
+    public Optional<UUID> findTicketIdByOwner(long performanceTimeId, long memberId) {
+        requirePositive(performanceTimeId, "performanceTimeId");
+        requirePositive(memberId, "memberId");
+        requireEnabled(performanceTimeId);
+        return executeStorage(() -> waitingRoomStore.findTicketIdByOwner(performanceTimeId, memberId));
     }
 
     /** owner가 ticket의 회원과 일치하는지 확인하고 snapshot을 반환한다.
@@ -188,6 +210,32 @@ public class WaitingRoomService {
                 snapshot.performanceTimeId(),
                 issuedAt,
                 snapshot.entryExpiresAt()
+        ));
+    }
+
+    /** Redis lifecycle 전이를 local·remote stream notification으로 전달한다.
+     * Pub/Sub publisher가 다른 application instance에 상태 변경을 전파한다. */
+    private void publishLifecycle(WaitingRoomTicketSnapshot snapshot, Instant occurredAt) {
+        eventPublisher.publishEvent(new WaitingRoomTicketLifecycleEvent(
+                snapshot.performanceTimeId(),
+                snapshot.ticketId(),
+                snapshot.status(),
+                occurredAt
+        ));
+    }
+
+    /** promotion 결과의 최소 전이 정보로 lifecycle event를 생성한다.
+     * scheduler가 API 응답용 ticket Hash를 다시 읽지 않게 한다. */
+    private void publishLifecycle(
+            long performanceTimeId,
+            WaitingRoomTicketTransition transition,
+            Instant occurredAt
+    ) {
+        eventPublisher.publishEvent(new WaitingRoomTicketLifecycleEvent(
+                performanceTimeId,
+                transition.ticketId(),
+                transition.status(),
+                occurredAt
         ));
     }
 

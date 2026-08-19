@@ -25,6 +25,7 @@ public class WaitingRoomProperties {
     public static final String DEFAULT_PASS_SECRET = "change-me-waiting-room-pass-secret";
 
     private boolean enabled;
+    private boolean asyncJoinEnabled;
     @Positive
     private int maxActiveSessions = 100;
     @Positive
@@ -49,6 +50,38 @@ public class WaitingRoomProperties {
     private Duration statusPollMiddleAfter = Duration.ofSeconds(5);
     @NotNull
     private Duration statusPollFarAfter = Duration.ofSeconds(10);
+    @NotNull
+    private Duration sseConnectionTimeout = Duration.ofMinutes(10);
+    @NotNull
+    private Duration sseKeepaliveInterval = Duration.ofSeconds(15);
+    @Positive
+    private int sseMaxConnectionsPerTicket = 2;
+    @Positive
+    private int sseDeliveryCorePoolSize = 4;
+    @Positive
+    private int sseDeliveryMaxPoolSize = 16;
+    @Positive
+    private int sseDeliveryQueueCapacity = 1_000;
+    @Positive
+    private int lifecyclePublisherCorePoolSize = 4;
+    @Positive
+    private int lifecyclePublisherMaxPoolSize = 16;
+    @Positive
+    private int lifecyclePublisherQueueCapacity = 1_000;
+    @Positive
+    private int sseMaxPendingWritesPerConnection = 8;
+    @Positive
+    private int joinHandoffQueueCapacity = 50_000;
+    @NotNull
+    private Duration joinHandoffPollInterval = Duration.ofMillis(50);
+    @NotNull
+    private Duration joinHandoffRetryAfter = Duration.ofSeconds(1);
+    @NotNull
+    private Duration joinHandoffRecoveryAfter = Duration.ofSeconds(30);
+    @Positive
+    private int joinHandoffWorkerQueueCapacity = 1_000;
+    @Positive
+    private int joinHandoffWorkerConcurrency = 8;
     @NotBlank
     private String passSecret = DEFAULT_PASS_SECRET;
     @NotNull
