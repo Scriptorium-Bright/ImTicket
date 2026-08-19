@@ -6,15 +6,19 @@ import org.example.ticket.reservation.waitingroom.config.WaitingRoomProperties;
 import org.example.ticket.reservation.waitingroom.constant.WaitingRoomErrorCode;
 import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomPromotionResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomStatusResponse;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketTransition;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomStorageException;
 import org.example.ticket.reservation.waitingroom.pass.HmacWaitingRoomPassCodec;
 import org.example.ticket.reservation.waitingroom.repository.WaitingRoomStore;
+import org.example.ticket.reservation.waitingroom.sse.WaitingRoomTicketLifecycleEvent;
 import org.example.ticket.reservation.waitingroom.util.WaitingRoomTimePolicy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -22,14 +26,18 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 class WaitingRoomServiceTest {
@@ -37,6 +45,7 @@ class WaitingRoomServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-14T00:00:00Z");
     private static final UUID TICKET_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private WaitingRoomStore store;
+    private ApplicationEventPublisher eventPublisher;
     private WaitingRoomService service;
 
     /** 고정 clock과 enabled policy를 사용해 service unit fixture를 구성한다. */
@@ -54,13 +63,15 @@ class WaitingRoomServiceTest {
                 properties
         );
         store = mock(WaitingRoomStore.class);
+        eventPublisher = mock(ApplicationEventPublisher.class);
         service = new WaitingRoomService(
                 store,
                 properties,
                 timePolicy,
                 performanceTimeId -> true,
                 new HmacWaitingRoomPassCodec("test-secret"),
-                new SimpleMeterRegistry()
+                new SimpleMeterRegistry(),
+                eventPublisher
         );
     }
 
@@ -124,7 +135,8 @@ class WaitingRoomServiceTest {
                 timePolicy,
                 performanceTimeId -> false,
                 new HmacWaitingRoomPassCodec("test-secret"),
-                new SimpleMeterRegistry()
+                new SimpleMeterRegistry(),
+                eventPublisher
         );
 
         assertThatThrownBy(() -> service.join(7L, 12L))
@@ -166,6 +178,46 @@ class WaitingRoomServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(error -> ((BusinessException) error).getErrorCode())
                 .isEqualTo(WaitingRoomErrorCode.WAITING_ROOM_REDIS_FAILURE);
+    }
+
+    /** 취소 전이 뒤 SSE subscriber가 사용할 lifecycle event를 발행하는지 검증한다. */
+    @Test
+    void publishesLifecycleEventAfterCancel() {
+        WaitingRoomTicketSnapshot cancelled = new WaitingRoomTicketSnapshot(
+                TICKET_ID,
+                12L,
+                7L,
+                WaitingRoomTicketStatus.CANCELED,
+                3L,
+                NOW,
+                NOW.plus(Duration.ofMinutes(30)),
+                null
+        );
+        when(store.find(7L, TICKET_ID)).thenReturn(Optional.of(waitingSnapshot()));
+        when(store.cancel(eq(7L), eq(12L), eq(TICKET_ID), any(), any())).thenReturn(Optional.of(cancelled));
+        when(store.waitingRank(7L, TICKET_ID)).thenReturn(OptionalLong.empty());
+
+        service.cancel(7L, 12L, TICKET_ID);
+
+        org.mockito.ArgumentCaptor<WaitingRoomTicketLifecycleEvent> captor =
+                org.mockito.ArgumentCaptor.forClass(WaitingRoomTicketLifecycleEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertThat(captor.getValue().ticketId()).isEqualTo(TICKET_ID);
+        assertThat(captor.getValue().status()).isEqualTo(WaitingRoomTicketStatus.CANCELED);
+    }
+
+    /** scheduler promotion이 사용하지 않는 API 응답 변환과 rank 조회를 수행하지 않는지 검증한다. */
+    @Test
+    void promotesWithoutBuildingUnusedStatusResponses() {
+        when(store.promote(eq(7L), any(), any(), anyInt(), anyInt(), any(), any()))
+                .thenReturn(new WaitingRoomPromotionResult(List.of(
+                        new WaitingRoomTicketTransition(TICKET_ID, WaitingRoomTicketStatus.ADMITTED)
+                ), List.of()));
+
+        service.promote(7L);
+
+        verify(store, never()).waitingRank(7L, TICKET_ID);
+        verify(eventPublisher).publishEvent(any(WaitingRoomTicketLifecycleEvent.class));
     }
 
     /** 테스트에서 사용할 WAITING snapshot을 생성한다. */

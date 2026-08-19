@@ -24,6 +24,9 @@ public final class WaitingRoomPropertiesValidator implements Validator {
 
         validateDurations(properties, errors);
         validatePollingThresholds(properties, errors);
+        validateSseExecutor(properties, errors);
+        validateLifecyclePublisherExecutor(properties, errors);
+        validateJoinHandoff(properties, errors);
         validatePerformanceTimeIds(properties, errors);
         validatePassSecret(properties, errors);
     }
@@ -38,6 +41,8 @@ public final class WaitingRoomPropertiesValidator implements Validator {
         rejectNonPositive(errors, "statusPollAfter", properties.getStatusPollAfter());
         rejectNonPositive(errors, "statusPollMiddleAfter", properties.getStatusPollMiddleAfter());
         rejectNonPositive(errors, "statusPollFarAfter", properties.getStatusPollFarAfter());
+        rejectNonPositive(errors, "sseConnectionTimeout", properties.getSseConnectionTimeout());
+        rejectNonPositive(errors, "sseKeepaliveInterval", properties.getSseKeepaliveInterval());
     }
 
     /** polling 순번 구간이 앞 구간보다 뒤에 오도록 검증한다.
@@ -48,6 +53,47 @@ public final class WaitingRoomPropertiesValidator implements Validator {
                     "statusPollFarThreshold",
                     "waitingRoom.statusPollFarThreshold.order",
                     "statusPollFarThreshold must be greater than statusPollMiddleThreshold"
+            );
+        }
+    }
+
+    /** SSE 전달 executor의 core와 max pool 관계를 설정 binding 단계에서 검증한다.
+     * max pool이 core보다 작으면 application startup을 실패시킨다. */
+    private void validateSseExecutor(WaitingRoomProperties properties, Errors errors) {
+        if (properties.getSseDeliveryMaxPoolSize() < properties.getSseDeliveryCorePoolSize()) {
+            errors.rejectValue(
+                    "sseDeliveryMaxPoolSize",
+                    "waitingRoom.sseDeliveryMaxPoolSize.order",
+                    "sseDeliveryMaxPoolSize must be greater than or equal to sseDeliveryCorePoolSize"
+            );
+        }
+    }
+
+    /** lifecycle event publisher의 core와 max pool 관계를 설정 binding 단계에서 검증한다.
+     * max pool이 core보다 작으면 event 전달 executor의 동시성 설정이 성립하지 않는다. */
+    private void validateLifecyclePublisherExecutor(WaitingRoomProperties properties, Errors errors) {
+        if (properties.getLifecyclePublisherMaxPoolSize() < properties.getLifecyclePublisherCorePoolSize()) {
+            errors.rejectValue(
+                    "lifecyclePublisherMaxPoolSize",
+                    "waitingRoom.lifecyclePublisherMaxPoolSize.order",
+                    "lifecyclePublisherMaxPoolSize must be greater than or equal to lifecyclePublisherCorePoolSize"
+            );
+        }
+    }
+
+    /** 비동기 join handoff의 worker와 Redis Stream 복구 시간을 검증한다.
+     * worker가 처리 시간을 초과하기 전에 pending entry를 중복 claim하지 않도록 관계를 확인한다. */
+    private void validateJoinHandoff(WaitingRoomProperties properties, Errors errors) {
+        rejectNonPositive(errors, "joinHandoffPollInterval", properties.getJoinHandoffPollInterval());
+        rejectNonPositive(errors, "joinHandoffRetryAfter", properties.getJoinHandoffRetryAfter());
+        rejectNonPositive(errors, "joinHandoffRecoveryAfter", properties.getJoinHandoffRecoveryAfter());
+        if (properties.getJoinHandoffRecoveryAfter() != null
+                && properties.getJoinHandoffPollInterval() != null
+                && properties.getJoinHandoffRecoveryAfter().compareTo(properties.getJoinHandoffPollInterval()) <= 0) {
+            errors.rejectValue(
+                    "joinHandoffRecoveryAfter",
+                    "waitingRoom.joinHandoffRecoveryAfter.order",
+                    "joinHandoffRecoveryAfter must be greater than joinHandoffPollInterval"
             );
         }
     }
