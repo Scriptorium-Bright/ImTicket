@@ -277,14 +277,20 @@ public class RedisWaitingRoomJoinHandoffStore implements WaitingRoomJoinHandoffS
         }
     }
 
-    /** Redis 재시작이나 key 만료로 consumer group이 사라지면 다음 poll에서 재생성한다. */
+    /**
+     * Redis 재시작이나 key 만료로 consumer group이 사라지면 다음 poll에서 재생성한다.
+     * 초기화 집합에서 해당 Stream을 제거해 재생성을 허용한다.
+     */
     private void forgetConsumerGroupWhenMissing(String stream, Throwable throwable) {
         if (containsRedisError(throwable, "NOGROUP")) {
             initializedConsumerGroups.remove(stream);
         }
     }
 
-    /** Redis 오류 code가 cause chain에 포함되어 있는지 확인한다. */
+    /**
+     * Redis 오류 code가 cause chain에 포함되어 있는지 확인한다.
+     * 중첩된 원인 예외의 메시지까지 순서대로 검사한다.
+     */
     private boolean containsRedisError(Throwable throwable, String errorCode) {
         Throwable current = throwable;
         while (current != null) {

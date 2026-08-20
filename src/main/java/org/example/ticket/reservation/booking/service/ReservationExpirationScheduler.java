@@ -20,7 +20,10 @@ public class ReservationExpirationScheduler {
 
     private final ReservationService reservationService;
 
-    /** 여러 Reservation Application 인스턴스의 중복 정리를 ShedLock으로 제어한다. */
+    /**
+     * 여러 Reservation Application 인스턴스의 중복 정리를 ShedLock으로 제어한다.
+     * 만료된 예약과 점유 좌석을 주기적으로 정리한다.
+     */
     @Scheduled(fixedDelay = EXPIRED_SCHEDULING_TIME)
     @SchedulerLock(name = "cleanupExpiredReservation", lockAtMostFor = "PT6M")
     public void cleanupExpiredReservation() {
