@@ -52,12 +52,17 @@ const seatMapRequests = new Counter('waiting_room_seat_map_requests');
 const seatMapSuccess = new Counter('waiting_room_seat_map_success');
 const preReserveRequests = new Counter('waiting_room_pre_reserve_requests');
 const preReserveExpected = new Counter('waiting_room_pre_reserve_expected');
+const preReserveSuccess = new Counter('waiting_room_pre_reserve_success');
+const preReserveConflict = new Counter('waiting_room_pre_reserve_conflict');
+const preReserveAdmissionRejected = new Counter('waiting_room_pre_reserve_admission_rejected');
 const unexpectedResponse = new Counter('waiting_room_unexpected_response');
 const joinDuration = new Trend('waiting_room_join_duration', true);
 const statusDuration = new Trend('waiting_room_status_duration', true);
 const protectedDuration = new Trend('waiting_room_protected_duration', true);
 const seatMapDuration = new Trend('waiting_room_seat_map_duration', true);
 const preReserveDuration = new Trend('waiting_room_pre_reserve_duration', true);
+const preReserveSuccessDuration = new Trend('waiting_room_pre_reserve_success_duration', true);
+const preReserveConflictDuration = new Trend('waiting_room_pre_reserve_conflict_duration', true);
 const queueWaitDuration = new Trend('waiting_room_queue_wait_duration', true);
 const journeyDuration = new Trend('waiting_room_total_journey_duration', true);
 const contractSuccess = new Rate('waiting_room_contract_success');
@@ -271,6 +276,15 @@ function preReserve(identity, headers, entryPass) {
   const expected = (response.status === 200 && body?.success === true)
     || (response.status === 409 && body?.error?.code === 'SEAT_ALREADY_RESERVED')
     || (response.status === 429 && body?.error?.code === 'SEAT_ADMISSION_REJECTED');
+  if (response.status === 200 && body?.success === true) {
+    preReserveSuccess.add(1);
+    preReserveSuccessDuration.add(response.timings.duration);
+  } else if (response.status === 409 && body?.error?.code === 'SEAT_ALREADY_RESERVED') {
+    preReserveConflict.add(1);
+    preReserveConflictDuration.add(response.timings.duration);
+  } else if (response.status === 429 && body?.error?.code === 'SEAT_ADMISSION_REJECTED') {
+    preReserveAdmissionRejected.add(1);
+  }
   if (expected) {
     preReserveExpected.add(1, { status: String(response.status), error_code: errorCode(body) });
   } else {
