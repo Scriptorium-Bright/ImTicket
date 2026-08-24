@@ -2,8 +2,6 @@ package org.example.ticket.reservation.waitingroom.config;
 
 import org.example.ticket.reservation.waitingroom.sse.WaitingRoomLifecyclePublisher;
 import org.example.ticket.reservation.waitingroom.sse.WaitingRoomLifecycleSubscriber;
-import org.example.ticket.reservation.waitingroom.sse.WaitingRoomJoinHandoffLifecyclePublisher;
-import org.example.ticket.reservation.waitingroom.sse.WaitingRoomJoinHandoffLifecycleSubscriber;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -68,17 +66,4 @@ public class WaitingRoomSseConfiguration {
         return container;
     }
 
-    /** join handoff 완료 event를 모든 application instance에 전달한다.
-     * request SSE connection이 worker instance와 달라도 완료 상태를 수신한다. */
-    @Bean
-    @ConditionalOnExpression("'${reservation.waiting-room.enabled:false}' == 'true' && '${ticket.application.role:reservation}' == 'waiting-room'")
-    public RedisMessageListenerContainer waitingRoomJoinHandoffRedisMessageListenerContainer(
-            RedisConnectionFactory connectionFactory,
-            WaitingRoomJoinHandoffLifecycleSubscriber subscriber
-    ) {
-        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-        container.setConnectionFactory(connectionFactory);
-        container.addMessageListener(subscriber, new ChannelTopic(WaitingRoomJoinHandoffLifecyclePublisher.CHANNEL));
-        return container;
-    }
 }

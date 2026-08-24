@@ -4,7 +4,7 @@ import { Navbar } from "@/components/layout/navbar"
 import { Footer } from "@/components/layout/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Calendar, MapPin, Clock, Share2, Heart } from "lucide-react"
+import { Calendar, MapPin, Share2, Heart } from "lucide-react"
 import Image from "next/image"
 import { useParams } from "next/navigation"
 import Link from "next/link"
@@ -124,7 +124,7 @@ export default function PerformanceDetail() {
                                     </div>
 
                                     <div className="pt-4 space-y-3">
-                                        <Link href={`/booking/${id}/seat`} className="w-full">
+                                        <Link href={`/waiting-room/${id}`} className="w-full">
                                             <Button className="w-full" size="lg" variant="gradient">
                                                 좌석 선택하기
                                             </Button>

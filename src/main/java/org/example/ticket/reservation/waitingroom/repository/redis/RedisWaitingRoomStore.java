@@ -3,7 +3,9 @@ package org.example.ticket.reservation.waitingroom.repository.redis;
 import lombok.RequiredArgsConstructor;
 import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomPromotionResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketTransition;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomStorageException;
 import org.example.ticket.reservation.waitingroom.repository.WaitingRoomStore;
@@ -32,7 +34,9 @@ import java.util.function.Supplier;
 public class RedisWaitingRoomStore implements WaitingRoomStore {
 
     private static final RedisScript<String> JOIN_SCRIPT = script("redis/waiting-room/waiting_room_join.lua");
-    private static final RedisScript<String> PROMOTE_SCRIPT = script("redis/waiting-room/waiting_room_promote.lua");
+    private static final RedisScript<String> PROMOTE_BATCH_SCRIPT = script(
+            "redis/waiting-room/waiting_room_promote_batch.lua"
+    );
     private static final RedisScript<String> TRANSITION_SCRIPT = script("redis/waiting-room/waiting_room_transition.lua");
 
     private final StringRedisTemplate redisTemplate;
@@ -132,7 +136,7 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
     /** 만료 대상 정리와 앞순번 promotion을 반복해 active 상한을 지킨다.
      * 각 후보 전이는 Lua에서 다시 상한과 상태를 확인한다. */
     @Override
-    public List<WaitingRoomTicketSnapshot> promote(
+    public WaitingRoomPromotionResult promote(
             long performanceTimeId,
             Instant now,
             Duration entryLease,
@@ -148,65 +152,97 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
         requirePositiveDuration(promotionInterval, "promotionInterval");
         requirePositiveDuration(storageRetention, "storageRetention");
         long windowId = Math.floorDiv(now.toEpochMilli(), promotionInterval.toMillis());
-        List<WaitingRoomTicketSnapshot> promoted = new ArrayList<>();
-        expireDue(performanceTimeId, now, admitPerInterval, storageRetention);
+        List<WaitingRoomTicketTransition> promoted = new ArrayList<>();
+        List<WaitingRoomTicketTransition> expired = expireDue(
+                performanceTimeId,
+                now,
+                admitPerInterval,
+                storageRetention
+        ).stream()
+                .map(snapshot -> new WaitingRoomTicketTransition(snapshot.ticketId(), snapshot.status()))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
 
-        for (int attempt = 0; attempt < admitPerInterval; attempt++) {
-            Long activeCount = executeCommand(
-                    "active session count",
-                    () -> redisTemplate.opsForZSet().zCard(keyFactory.active(performanceTimeId))
-            );
-            if (activeCount != null && activeCount >= maxActiveSessions) {
-                break;
-            }
-            Set<String> candidates = executeCommand(
-                    "waiting candidate lookup",
-                    () -> redisTemplate.opsForZSet().range(keyFactory.waiting(performanceTimeId), 0, 0)
-            );
-            if (candidates == null || candidates.isEmpty()) {
-                break;
-            }
-            UUID ticketId;
-            try {
-                ticketId = UUID.fromString(candidates.iterator().next());
-            } catch (IllegalArgumentException exception) {
-                throw storageFailure("waiting candidate ticket ID가 손상됐습니다.", exception);
-            }
+        Set<String> candidateSet = executeCommand(
+                "waiting candidate batch lookup",
+                () -> redisTemplate.opsForZSet().range(
+                        keyFactory.waiting(performanceTimeId),
+                        0,
+                        admitPerInterval - 1L
+                )
+        );
+        if (candidateSet == null || candidateSet.isEmpty()) {
+            return new WaitingRoomPromotionResult(promoted, expired);
+        }
+
+        List<UUID> candidateIds = candidateSet.stream()
+                .map(this::parseTicketId)
+                .toList();
+        List<String> keys = new ArrayList<>(4 + candidateIds.size() * 2);
+        keys.add(keyFactory.waiting(performanceTimeId));
+        keys.add(keyFactory.active(performanceTimeId));
+        keys.add(keyFactory.deadline(performanceTimeId));
+        keys.add(keyFactory.admission(performanceTimeId));
+        for (UUID ticketId : candidateIds) {
             WaitingRoomTicketSnapshot candidate = find(performanceTimeId, ticketId).orElse(null);
             long ownerId = candidate == null ? 1L : candidate.memberId();
-            String result = execute(
-                    PROMOTE_SCRIPT,
-                    List.of(
-                        keyFactory.waiting(performanceTimeId),
-                        keyFactory.active(performanceTimeId),
-                        keyFactory.deadline(performanceTimeId),
-                        keyFactory.ticket(performanceTimeId, ticketId),
-                        keyFactory.owner(performanceTimeId, ownerId),
-                        keyFactory.admission(performanceTimeId)
-                    ),
-                    ticketId.toString(),
-                    Long.toString(now.toEpochMilli()),
-                    Long.toString(now.plus(entryLease).toEpochMilli()),
-                    Integer.toString(maxActiveSessions),
-                    Integer.toString(admitPerInterval),
-                    Long.toString(windowId),
-                    Long.toString(storageRetention.toMillis())
-            );
-            if (result.startsWith("PROMOTED|")) {
-                find(performanceTimeId, ticketId).ifPresent(promoted::add);
-            } else if (result.startsWith("EXPIRED|")
-                    || result.equals("MISSING")
-                    || result.equals("STATE_MISMATCH")) {
-                continue;
-            } else if (result.equals("FULL")) {
-                break;
-            } else if (result.equals("RATE_LIMIT")) {
-                break;
-            } else {
-                throw unexpectedResult(result);
+            keys.add(keyFactory.ticket(performanceTimeId, ticketId));
+            keys.add(keyFactory.owner(performanceTimeId, ownerId));
+        }
+
+        List<String> arguments = new ArrayList<>(7 + candidateIds.size());
+        arguments.add(Long.toString(now.toEpochMilli()));
+        arguments.add(Long.toString(now.plus(entryLease).toEpochMilli()));
+        arguments.add(Integer.toString(maxActiveSessions));
+        arguments.add(Integer.toString(admitPerInterval));
+        arguments.add(Long.toString(windowId));
+        arguments.add(Long.toString(storageRetention.toMillis()));
+        arguments.add(Integer.toString(candidateIds.size()));
+        candidateIds.forEach(ticketId -> arguments.add(ticketId.toString()));
+
+        String result = execute(
+                PROMOTE_BATCH_SCRIPT,
+                keys,
+                arguments.toArray(String[]::new)
+        );
+        appendBatchResult(result, promoted, expired);
+        return new WaitingRoomPromotionResult(promoted, expired);
+    }
+
+    /** batch Lua 결과를 전이 상태별 최소 lifecycle 정보로 복원한다.
+     * script는 여러 ticket을 newline으로 반환하며, 알 수 없는 상태는 storage 오류로 처리한다. */
+    private void appendBatchResult(
+            String result,
+            List<WaitingRoomTicketTransition> promoted,
+            List<WaitingRoomTicketTransition> expired
+    ) {
+        if (result == null || result.isBlank()) {
+            return;
+        }
+        for (String transition : result.split("\\n")) {
+            String[] parts = splitResult(transition, 2);
+            UUID ticketId = parseTicketId(parts[1]);
+            switch (parts[0]) {
+                case "PROMOTED" -> promoted.add(new WaitingRoomTicketTransition(
+                        ticketId,
+                        WaitingRoomTicketStatus.ADMITTED
+                ));
+                case "EXPIRED" -> expired.add(new WaitingRoomTicketTransition(
+                        ticketId,
+                        WaitingRoomTicketStatus.EXPIRED
+                ));
+                default -> throw unexpectedResult(result);
             }
         }
-        return promoted;
+    }
+
+    /** Redis ZSET member를 UUID로 변환한다.
+     * 손상된 ticket ID는 batch 결과를 부분 성공으로 흘려보내지 않는다. */
+    private UUID parseTicketId(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException exception) {
+            throw storageFailure("waiting ticket ID가 손상됐습니다.", exception);
+        }
     }
 
     /** owner 검증과 WAITING·ADMITTED ticket 취소를 하나의 Lua transition으로 처리한다.
@@ -237,7 +273,12 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
 
     /** deadline·lease ZSET의 due ticket을 EXPIRED로 전이하고 index를 정리한다.
      * waiting ticket과 admitted lease를 같은 lifecycle 규칙으로 정리한다. */
-    private void expireDue(long performanceTimeId, Instant now, int batchSize, Duration storageRetention) {
+    private List<WaitingRoomTicketSnapshot> expireDue(
+            long performanceTimeId,
+            Instant now,
+            int batchSize,
+            Duration storageRetention
+    ) {
         Set<String> waitingDue = executeCommand(
                 "waiting deadline lookup",
                 () -> redisTemplate.opsForZSet().rangeByScore(
@@ -257,17 +298,21 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
         if (activeDue != null) {
             due.addAll(activeDue);
         }
+        List<WaitingRoomTicketSnapshot> expired = new ArrayList<>();
         for (String ticket : due) {
             UUID ticketId = UUID.fromString(ticket);
-            find(performanceTimeId, ticketId).ifPresent(snapshot -> transition(
-                    performanceTimeId,
-                    snapshot.memberId(),
-                    ticketId,
-                    "EXPIRE",
-                    now,
-                    storageRetention
-            ));
+            find(performanceTimeId, ticketId)
+                    .flatMap(snapshot -> transition(
+                            performanceTimeId,
+                            snapshot.memberId(),
+                            ticketId,
+                            "EXPIRE",
+                            now,
+                            storageRetention
+                    ))
+                    .ifPresent(expired::add);
         }
+        return expired;
     }
 
     /** 지정한 action을 ticket Hash와 모든 lifecycle index에 원자적으로 적용한다.

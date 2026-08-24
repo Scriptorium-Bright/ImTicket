@@ -6,6 +6,7 @@ import org.example.ticket.reservation.waitingroom.dto.WaitingRoomStatusResponse;
 import org.example.ticket.reservation.waitingroom.service.WaitingRoomService;
 import org.example.ticket.security.principal.MetamaskUserDetails;
 import org.springframework.http.ResponseEntity;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +19,7 @@ import java.util.UUID;
 /** 회원의 Waiting Room join·status·cancel HTTP lifecycle을 제공한다. */
 @RestController
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "ticket.application.role", havingValue = "waiting-room")
 @RequestMapping("/api/reservation/waiting-room")
 public class WaitingRoomController {
 

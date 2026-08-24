@@ -11,6 +11,7 @@ public enum WaitingRoomErrorCode implements ErrorCode {
     WAITING_ROOM_TICKET_NOT_FOUND(HttpStatus.NOT_FOUND, "WAITING_ROOM_TICKET_NOT_FOUND", "입장 대기 ticket을 찾을 수 없습니다."),
     WAITING_ROOM_TICKET_NOT_OWNER(HttpStatus.FORBIDDEN, "WAITING_ROOM_TICKET_NOT_OWNER", "본인의 입장 대기 ticket만 조회할 수 있습니다."),
     WAITING_ROOM_TICKET_STATE_CONFLICT(HttpStatus.CONFLICT, "WAITING_ROOM_TICKET_STATE_CONFLICT", "현재 입장 대기 ticket 상태에서 처리할 수 없습니다."),
+    WAITING_ROOM_STREAM_LIMIT_REACHED(HttpStatus.TOO_MANY_REQUESTS, "WAITING_ROOM_STREAM_LIMIT_REACHED", "이 입장 대기 ticket의 연결 수가 한도에 도달했습니다."),
     WAITING_ROOM_QUEUE_FULL(HttpStatus.TOO_MANY_REQUESTS, "WAITING_ROOM_QUEUE_FULL", "입장 대기열이 가득 찼습니다.") {
         /**
          * 대기열 수용량이 회복된 뒤 재시도할 간격을 반환한다.

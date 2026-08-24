@@ -1,9 +1,7 @@
 package org.example.ticket.config;
 
 import org.example.ticket.util.tracing.MdcTaskDecorator;
-import org.example.ticket.reservation.waitingroom.config.WaitingRoomProperties;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskDecorator;
@@ -43,23 +41,6 @@ public class AsyncConfig {
         executor.setMaxPoolSize(1);
         executor.setQueueCapacity(queueCapacity);
         executor.setThreadNamePrefix("ReservationSingle-");
-        executor.setTaskDecorator(mdcTaskDecorator);
-        executor.initialize();
-        return executor;
-    }
-
-    @Bean(name = "waitingRoomJoinHandoffTaskExecutor")
-    @ConditionalOnProperty(name = "reservation.waiting-room.async-join-enabled", havingValue = "true")
-    public ThreadPoolTaskExecutor waitingRoomJoinHandoffTaskExecutor(
-            TaskDecorator mdcTaskDecorator,
-            WaitingRoomProperties properties,
-            @Value("${reservation.waiting-room.join-handoff-worker-queue-capacity:1000}") int queueCapacity
-    ) {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(properties.getJoinHandoffWorkerConcurrency());
-        executor.setMaxPoolSize(properties.getJoinHandoffWorkerConcurrency());
-        executor.setQueueCapacity(queueCapacity);
-        executor.setThreadNamePrefix("WaitingRoomJoin-");
         executor.setTaskDecorator(mdcTaskDecorator);
         executor.initialize();
         return executor;

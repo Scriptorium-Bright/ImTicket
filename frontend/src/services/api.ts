@@ -78,10 +78,145 @@ export const nftApi = {
     buyTicket: (walletAddress: string) => api.post('/api/nft/ticket/buy', { to: walletAddress }),
 };
 
+export const waitingRoomEntryPassStorageKey = (performanceTimeId: string) =>
+    `waiting-room:entry-pass:${performanceTimeId}`;
+
+export const storeWaitingRoomEntryPass = (performanceTimeId: string, entryPass: string) => {
+    if (typeof window !== 'undefined') {
+        sessionStorage.setItem(waitingRoomEntryPassStorageKey(performanceTimeId), entryPass);
+    }
+};
+
+export const clearWaitingRoomEntryPass = (performanceTimeId: string) => {
+    if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(waitingRoomEntryPassStorageKey(performanceTimeId));
+    }
+};
+
+const waitingRoomPassHeader = (performanceTimeId: string) => {
+    if (typeof window === 'undefined') {
+        return {};
+    }
+    const entryPass = sessionStorage.getItem(waitingRoomEntryPassStorageKey(performanceTimeId));
+    return entryPass ? { 'X-Waiting-Room-Pass': entryPass } : {};
+};
+
 export const seatApi = {
-    getSeats: (performanceTimeId: string) => api.get(`/api/seats/${performanceTimeId}`),
-    preReserve: (data: any) => api.post('/api/reservation/pre-reserve', data),
+    getSeats: (performanceTimeId: string) => api.get(`/api/seats/${performanceTimeId}`, {
+        headers: waitingRoomPassHeader(performanceTimeId),
+    }),
+    preReserve: (data: any, idempotencyKey: string = createReservationIdempotencyKey()) =>
+        api.post('/api/reservation/pre-reserve', data, {
+            headers: {
+                'Idempotency-Key': idempotencyKey,
+                ...waitingRoomPassHeader(String(data.performanceTimeId)),
+            }
+        }),
     registerSeats: (performanceTimeId: number) => api.post(`/api/seats/${performanceTimeId}`),
+};
+
+export type WaitingRoomTicketStatus =
+    | 'WAITING'
+    | 'ADMITTED'
+    | 'COMPLETED'
+    | 'CANCELED'
+    | 'EXPIRED';
+
+export interface WaitingRoomStatusResponse {
+    ticketId: string;
+    status: WaitingRoomTicketStatus;
+    position: number | null;
+    sequence: number;
+    waitingDeadline: string | null;
+    entryExpiresAt: string | null;
+    entryPass: string | null;
+    pollAfterMs: number;
+}
+
+export type WaitingRoomSseEventType = 'snapshot' | 'admitted' | 'terminal' | 'keepalive';
+
+export interface WaitingRoomSseEvent {
+    type: WaitingRoomSseEventType;
+    data: WaitingRoomStatusResponse | { at: string };
+}
+
+const consumeWaitingRoomSse = async (
+    performanceTimeId: string,
+    ticketId: string,
+    signal: AbortSignal,
+    onEvent: (event: WaitingRoomSseEvent) => void,
+) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const response = await fetch(
+        `${API_BASE_URL}/api/reservation/waiting-room/${performanceTimeId}/tickets/${ticketId}/events`,
+        {
+            method: 'GET',
+            headers: {
+                Accept: 'text/event-stream',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            cache: 'no-store',
+            signal,
+        },
+    );
+    if (!response.ok || !response.body) {
+        throw new Error(`Waiting Room stream failed: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                return;
+            }
+            buffer += decoder.decode(value, { stream: true }).replace(/\r/g, '');
+            let boundary = buffer.indexOf('\n\n');
+            while (boundary >= 0) {
+                const frame = buffer.slice(0, boundary);
+                buffer = buffer.slice(boundary + 2);
+                let type: WaitingRoomSseEventType | null = null;
+                const data = frame.split('\n').reduce<string[]>((lines, line) => {
+                    if (line.startsWith('event:')) {
+                        type = line.slice('event:'.length).trim() as WaitingRoomSseEventType;
+                    }
+                    if (line.startsWith('data:')) {
+                        lines.push(line.slice('data:'.length).trim());
+                    }
+                    return lines;
+                }, []);
+                if (type && data.length > 0) {
+                    onEvent({ type, data: JSON.parse(data.join('\n')) });
+                }
+                boundary = buffer.indexOf('\n\n');
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+};
+
+export const waitingRoomApi = {
+    join: (performanceTimeId: string) =>
+        api.post<WaitingRoomStatusResponse>(`/api/reservation/waiting-room/${performanceTimeId}/join`),
+    status: (performanceTimeId: string, ticketId: string) =>
+        api.get<WaitingRoomStatusResponse>(`/api/reservation/waiting-room/${performanceTimeId}/tickets/${ticketId}`),
+    events: consumeWaitingRoomSse,
+    cancel: (performanceTimeId: string, ticketId: string) =>
+        api.post<WaitingRoomStatusResponse>(`/api/reservation/waiting-room/${performanceTimeId}/tickets/${ticketId}/cancel`),
+};
+
+export const createReservationIdempotencyKey = (): string => {
+    if (typeof globalThis.crypto?.randomUUID === 'function') {
+        return globalThis.crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+        const random = Math.floor(Math.random() * 16);
+        const value = character === 'x' ? random : (random & 0x3) | 0x8;
+        return value.toString(16);
+    });
 };
 
 export const groupApi = {

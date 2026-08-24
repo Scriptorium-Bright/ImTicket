@@ -1,6 +1,7 @@
 package org.example.ticket.reservation.waitingroom.repository;
 
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomPromotionResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
 
 import java.time.Duration;
@@ -35,7 +36,7 @@ public interface WaitingRoomStore {
 
     /** 만료 ticket을 정리한 뒤 waiting 앞순번을 admitted로 batch 전이한다.
      * Lua가 active session 상한을 다시 확인해 동시 promotion을 조정한다. */
-    List<WaitingRoomTicketSnapshot> promote(
+    WaitingRoomPromotionResult promote(
             long performanceTimeId,
             Instant now,
             Duration entryLease,

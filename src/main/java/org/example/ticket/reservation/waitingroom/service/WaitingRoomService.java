@@ -148,21 +148,6 @@ public class WaitingRoomService {
         return featurePolicy.requiresWaitingRoom(performanceTimeId);
     }
 
-    /** join handoff가 기존 join과 같은 feature 검증을 사용하도록 enabled 조건을 노출한다.
-     * disabled 회차는 Redis enqueue 전에 domain 오류로 거절한다. */
-    public void requireEnabledForJoin(long performanceTimeId) {
-        requireEnabled(performanceTimeId);
-    }
-
-    /** owner mapping에 등록된 ticket ID를 조회한다.
-     * Redis storage 예외는 기존 Waiting Room 오류 contract로 변환한다. */
-    public Optional<UUID> findTicketIdByOwner(long performanceTimeId, long memberId) {
-        requirePositive(performanceTimeId, "performanceTimeId");
-        requirePositive(memberId, "memberId");
-        requireEnabled(performanceTimeId);
-        return executeStorage(() -> waitingRoomStore.findTicketIdByOwner(performanceTimeId, memberId));
-    }
-
     /** owner가 ticket의 회원과 일치하는지 확인하고 snapshot을 반환한다.
      * 소유자가 다르면 리소스 존재 여부를 노출하지 않는 오류를 반환한다. */
     private WaitingRoomTicketSnapshot findOwnedSnapshot(long performanceTimeId, long memberId, UUID ticketId) {
