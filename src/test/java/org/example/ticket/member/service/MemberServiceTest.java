@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
@@ -42,7 +43,10 @@ class MemberServiceTest {
         assertNotNull(response.nonce());
         assertTrue(response.message().contains("Purpose: Register for ImTicket"));
         assertTrue(response.message().contains("Nonce: " + response.nonce()));
-        verify(memberRepository).save(any(Member.class));
+        ArgumentCaptor<Member> savedMember = ArgumentCaptor.forClass(Member.class);
+        verify(memberRepository).save(savedMember.capture());
+        assertEquals(0, savedMember.getValue().getNonceIssuedAt().getNano() % 1_000);
+        assertEquals(0, savedMember.getValue().getNonceExpiresAt().getNano() % 1_000);
     }
 
     @Test
