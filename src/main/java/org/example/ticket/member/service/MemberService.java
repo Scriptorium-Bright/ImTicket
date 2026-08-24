@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -39,7 +40,7 @@ public class MemberService {
 
         String normalizedWalletAddress = walletAddress.toLowerCase(Locale.ROOT);
         String newNonce = createNonce();
-        Instant issuedAt = Instant.now();
+        Instant issuedAt = databaseTimestampNow();
         Instant expiresAt = issuedAt.plus(NONCE_TTL);
         NoncePurpose noncePurpose = purpose == null ? NoncePurpose.LOGIN : purpose;
 
@@ -106,7 +107,7 @@ public class MemberService {
     @Transactional
     public void rotateNonce(String walletAddress) {
         Member member = getRegisteredMember(walletAddress);
-        Instant issuedAt = Instant.now();
+        Instant issuedAt = databaseTimestampNow();
         member.updateNonce(createNonce(), NoncePurpose.LOGIN, issuedAt, issuedAt.plus(NONCE_TTL));
     }
 
@@ -143,6 +144,10 @@ public class MemberService {
         byte[] bytes = new byte[32];
         SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private Instant databaseTimestampNow() {
+        return Instant.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     private void validateWalletAddress(String walletAddress) {

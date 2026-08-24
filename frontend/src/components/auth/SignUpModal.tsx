@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { authApi, memberApi } from "@/services/api"
+import { useUserStore } from "@/store/useUserStore"
 import { Loader2, CheckCircle2 } from "lucide-react"
 
 interface SignUpModalProps {
@@ -15,9 +16,39 @@ interface SignUpModalProps {
     onSuccess: () => void
 }
 
+const describeSignupError = (error: unknown, phase: string) => {
+    let message = "알 수 없는 오류"
+    let status: number | undefined
+    let url: string | undefined
+
+    if (error instanceof Error && error.message) {
+        message = error.message
+    }
+    if (typeof error === "object" && error !== null && "message" in error) {
+        const errorMessage = (error as { message?: unknown }).message
+        if (typeof errorMessage === "string" && errorMessage.length > 0) {
+            message = errorMessage
+        }
+    }
+
+    if (typeof error === "object" && error !== null) {
+        const axiosError = error as {
+            response?: { status?: number }
+            config?: { url?: string }
+        }
+        status = axiosError.response?.status
+        url = axiosError.config?.url
+    }
+
+    const responseStatus = status ? ` (HTTP ${status}${url ? `, ${url}` : ""})` : ""
+    return `${phase}: ${message}${responseStatus}`
+}
+
 export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignUpModalProps) {
     const [step, setStep] = React.useState<1 | 2>(1)
     const [isLoading, setIsLoading] = React.useState(false)
+    const loginWithWallet = useUserStore((state) => state.loginWithWallet)
+    const [feedback, setFeedback] = React.useState<string | null>(null)
 
     // Form State
     const [nickname, setNickname] = React.useState("")
@@ -30,18 +61,19 @@ export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignU
 
     const handleSendSms = async () => {
         if (!phoneNumber) {
-            alert("전화번호를 입력해주세요.")
+            setFeedback("전화번호를 입력해주세요.")
             return
         }
         setIsLoading(true)
+        setFeedback(null)
         try {
             // Mock SMS Send
             // await authApi.sendSms(phoneNumber)
             setIsSmsSent(true)
-            alert("인증번호가 발송되었습니다. (테스트용: 000000)")
+            setFeedback("인증번호가 발송되었습니다. 테스트 코드는 000000입니다.")
         } catch (error) {
             console.error(error)
-            alert("SMS 발송 실패")
+            setFeedback("SMS 발송에 실패했습니다.")
         } finally {
             setIsLoading(false)
         }
@@ -50,24 +82,25 @@ export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignU
     const handleVerifySms = async () => {
         if (!verificationCode) return
         setIsLoading(true)
+        setFeedback(null)
         try {
             // Mock Verification
             if (verificationCode === "000000") {
                 setIsVerified(true)
-                alert("인증되었습니다.")
+                setFeedback("전화번호 인증이 완료되었습니다.")
             } else {
                 // Fallback to real API if needed, or just fail
                 const res = await authApi.verifySms(phoneNumber, verificationCode)
                 if (res.data.success) {
                     setIsVerified(true)
-                    alert("인증되었습니다.")
+                    setFeedback("전화번호 인증이 완료되었습니다.")
                 } else {
-                    alert("인증번호가 일치하지 않습니다.")
+                    setFeedback("인증번호가 일치하지 않습니다.")
                 }
             }
         } catch (error) {
             console.error(error)
-            alert("인증 확인 실패")
+            setFeedback("인증 확인에 실패했습니다.")
         } finally {
             setIsLoading(false)
         }
@@ -75,10 +108,12 @@ export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignU
 
     const handleRegister = async () => {
         if (!nickname || !isVerified) {
-            alert("모든 정보를 입력하고 인증을 완료해주세요.")
+            setFeedback("모든 정보를 입력하고 인증을 완료해주세요.")
             return
         }
         setIsLoading(true)
+        setFeedback(null)
+        let phase = "가입 준비"
         try {
             // 1. Sign Message (This should ideally be done in useUserStore or passed down, 
             // but for simplicity we might need to trigger it here or assume it's part of the register flow if the backend requires a signature in the body)
@@ -92,10 +127,13 @@ export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignU
             // For now, let's assume the parent handles the actual signing or we import web3Service here.
             // Let's import web3Service dynamically or use a prop if possible, but importing is easier.
             const { web3Service } = await import("@/services/web3")
+            phase = "REGISTER nonce 발급"
             const nonceRes = await authApi.getNonce(walletAddress, 'REGISTER')
             const message = nonceRes.data.message
+            phase = "MetaMask 서명"
             const signature = await web3Service.signMessage(message)
 
+            phase = "회원가입 요청"
             await memberApi.register({
                 walletAddress,
                 nickname,
@@ -105,12 +143,14 @@ export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignU
                 signature
             })
 
-            alert("회원가입이 완료되었습니다!")
+            phase = "자동 로그인"
+            await loginWithWallet(walletAddress)
+            setFeedback("회원가입과 로그인이 완료되었습니다.")
             onSuccess()
             onClose()
         } catch (error) {
             console.error(error)
-            alert("회원가입 실패")
+            setFeedback(`회원가입에 실패했습니다: ${describeSignupError(error, phase)}`)
         } finally {
             setIsLoading(false)
         }
@@ -125,6 +165,12 @@ export function SignUpModal({ isOpen, onClose, walletAddress, onSuccess }: SignU
                         ImTicket 서비스를 이용하기 위해 추가 정보를 입력해주세요.
                     </DialogDescription>
                 </DialogHeader>
+
+                {feedback && (
+                    <p role="status" className="text-sm text-primary">
+                        {feedback}
+                    </p>
+                )}
 
                 <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
