@@ -251,11 +251,6 @@ for ((reset_attempt = 1; reset_attempt <= REDIS_RESET_ATTEMPTS; reset_attempt +=
         "reservation:waiting-room:{${PT_ID}}:admission")
           [[ "$(redis_exec HGET "${key}" count)" == "0" ]] && continue
           ;;
-        "reservation:waiting-room:{${PT_ID}}:join-handoff")
-          stream_length="$(redis_exec XLEN "${key}")"
-          pending_count="$(redis_exec XPENDING "${key}" waiting-room-join-workers | awk 'NR == 1 { print $1 }')"
-          [[ "${stream_length}" == "1" && "${pending_count}" == "0" ]] && continue
-          ;;
       esac
       REMAINING_DATA_KEYS+="${key}"$'\n'
     done <<< "${REMAINING_KEYS}"

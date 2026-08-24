@@ -269,7 +269,7 @@ printf 'concurrency\tcontract_success\tjoin_success\tseat_map_success\tpre_reser
   > "${MATRIX_FILE}"
 
 if [[ "${RECONFIGURE_SERVICES}" == "true" ]]; then
-  compose_up_args=(up -d)
+  compose_up_args=(up -d --force-recreate)
   if [[ "${BUILD_IMAGES}" == "true" ]]; then
     compose_up_args+=(--build)
   fi
@@ -279,7 +279,6 @@ if [[ "${RECONFIGURE_SERVICES}" == "true" ]]; then
     LOCK_REENTRANT_WAIT_TIMEOUT_MILLIS="${LOCK_REENTRANT_WAIT_TIMEOUT_MILLIS}" \
     RESERVATION_ADMISSION_PER_SEAT_PERMITS="${ADMISSION_PER_SEAT_PERMITS}" \
     RESERVATION_WAITING_ROOM_ENABLED=true \
-    RESERVATION_WAITING_ROOM_ASYNC_JOIN_ENABLED=false \
     RESERVATION_WAITING_ROOM_ENABLED_PERFORMANCE_TIME_IDS="${PT_ID}" \
     RESERVATION_WAITING_ROOM_MAX_ACTIVE_SESSIONS="${MAX_ACTIVE_SESSIONS}" \
     RESERVATION_WAITING_ROOM_ADMIT_PER_INTERVAL="${ADMIT_PER_INTERVAL}" \

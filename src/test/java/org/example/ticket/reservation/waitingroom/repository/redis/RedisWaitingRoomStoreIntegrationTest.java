@@ -3,6 +3,7 @@ package org.example.ticket.reservation.waitingroom.repository.redis;
 import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketTransition;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -87,10 +88,10 @@ class RedisWaitingRoomStoreIntegrationTest {
 
         assertThat(store.promote(
                 PERFORMANCE_TIME_ID, NOW, Duration.ofMinutes(5), 1, 2, Duration.ofSeconds(1), retention
-        )).extracting(WaitingRoomTicketSnapshot::ticketId).containsExactly(first);
+        ).admitted()).extracting(WaitingRoomTicketTransition::ticketId).containsExactly(first);
         assertThat(store.promote(
                 PERFORMANCE_TIME_ID, NOW, Duration.ofMinutes(5), 1, 2, Duration.ofSeconds(1), retention
-        )).isEmpty();
+        ).admitted()).isEmpty();
 
         assertThat(store.find(PERFORMANCE_TIME_ID, first)).get()
                 .extracting(WaitingRoomTicketSnapshot::status)
@@ -100,7 +101,61 @@ class RedisWaitingRoomStoreIntegrationTest {
                 .isEqualTo(WaitingRoomTicketStatus.COMPLETED);
         assertThat(store.promote(
                 PERFORMANCE_TIME_ID, NOW, Duration.ofMinutes(5), 1, 2, Duration.ofSeconds(1), retention
-        )).extracting(WaitingRoomTicketSnapshot::ticketId).containsExactly(second);
+        ).admitted()).extracting(WaitingRoomTicketTransition::ticketId).containsExactly(second);
+    }
+
+    /** 한 번의 batch가 FIFO 순서와 interval quota를 함께 지키는지 검증한다. */
+    @Test
+    void promotesCandidatesInFifoOrderWithinBatchQuota() {
+        Duration retention = Duration.ofHours(1);
+        List<UUID> tickets = List.of(
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1"),
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2"),
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3"),
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4"),
+                UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5")
+        );
+        for (int index = 0; index < tickets.size(); index++) {
+            store.join(
+                    PERFORMANCE_TIME_ID,
+                    100L + index,
+                    tickets.get(index),
+                    NOW,
+                    NOW.plus(Duration.ofMinutes(30)),
+                    retention,
+                    10
+            );
+        }
+
+        assertThat(store.promote(
+                PERFORMANCE_TIME_ID,
+                NOW,
+                Duration.ofMinutes(5),
+                10,
+                3,
+                Duration.ofSeconds(1),
+                retention
+        ).admitted()).extracting(WaitingRoomTicketTransition::ticketId)
+                .containsExactlyElementsOf(tickets.subList(0, 3));
+        assertThat(store.promote(
+                PERFORMANCE_TIME_ID,
+                NOW,
+                Duration.ofMinutes(5),
+                10,
+                3,
+                Duration.ofSeconds(1),
+                retention
+        ).admitted()).isEmpty();
+        assertThat(store.promote(
+                PERFORMANCE_TIME_ID,
+                NOW.plusSeconds(1),
+                Duration.ofMinutes(5),
+                10,
+                3,
+                Duration.ofSeconds(1),
+                retention
+        ).admitted()).extracting(WaitingRoomTicketTransition::ticketId)
+                .containsExactlyElementsOf(tickets.subList(3, 5));
     }
 
     /** waiting deadline과 admitted lease가 due scan에서 EXPIRED로 정리되는지 검증한다. */
@@ -178,7 +233,7 @@ class RedisWaitingRoomStoreIntegrationTest {
                 1,
                 Duration.ofSeconds(1),
                 retention
-        )).hasSize(1);
+        ).admitted()).hasSize(1);
         assertThat(secondStore.promote(
                 PERFORMANCE_TIME_ID,
                 NOW,
@@ -187,7 +242,7 @@ class RedisWaitingRoomStoreIntegrationTest {
                 1,
                 Duration.ofSeconds(1),
                 retention
-        )).isEmpty();
+        ).admitted()).isEmpty();
 
         assertThat(store.find(PERFORMANCE_TIME_ID, second)).get()
                 .extracting(WaitingRoomTicketSnapshot::status)
@@ -200,7 +255,7 @@ class RedisWaitingRoomStoreIntegrationTest {
                 1,
                 Duration.ofSeconds(1),
                 retention
-        )).extracting(WaitingRoomTicketSnapshot::ticketId).containsExactly(second);
+        ).admitted()).extracting(WaitingRoomTicketTransition::ticketId).containsExactly(second);
     }
 
     /** queue capacity 초과가 새 ticket을 만들지 않고 명시적 예외를 반환하는지 검증한다. */

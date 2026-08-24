@@ -23,6 +23,8 @@ RESULT_ROOT="${RESULT_ROOT:-${ROOT_DIR}/build/k6-results/146.8.3-join-before}"
 RUN_GROUP="${RUN_GROUP:-$(date -u +%Y%m%dT%H%M%SZ)}"
 GROUP_DIR="${RESULT_ROOT}/${RUN_GROUP}"
 MANIFEST_FILE="${GROUP_DIR}/run-manifest.tsv"
+# Nginx limit_req rate=100r/s, burst=2000 조건의 drain 시간을 수용한다.
+REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-30s}"
 
 if [[ -z "${JWT_SECRET}" ]]; then
   echo "JWT_SECRET 또는 SPRING_JWT_SECRET이 필요합니다." >&2
@@ -86,6 +88,7 @@ for run_index in 1 2 3; do
   MANAGEMENT_BASE_URL="${MANAGEMENT_BASE_URL}" \
   PT_ID="${PT_ID}" \
   JWT_SECRET="${JWT_SECRET}" \
+  REQUEST_TIMEOUT="${REQUEST_TIMEOUT}" \
   MODE=join \
   FLOW=waiting-room \
   CONCURRENCY=2000 \
@@ -98,7 +101,7 @@ for run_index in 1 2 3; do
   contract_value="$(jq -r '.metrics.waiting_room_contract_success.value // empty' "${run_dir}/k6-summary.json")"
   if [[ "${contract_value}" != "1" && "${contract_value}" != "1.0" ]]; then
     echo "join contract가 100%가 아니어서 A1 실행을 중단합니다: run=${run_name}, value=${contract_value:-missing}" >&2
-    echo "application의 async join 설정과 대상 회차 설정을 확인한 뒤 같은 RUN_GROUP으로 재실행하십시오." >&2
+    echo "대상 회차와 동기 join 설정을 확인한 뒤 같은 RUN_GROUP으로 재실행하십시오." >&2
     exit 1
   fi
 done

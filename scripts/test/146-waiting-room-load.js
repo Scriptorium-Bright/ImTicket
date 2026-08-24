@@ -169,7 +169,9 @@ function joinWaitingRoom(identity, headers) {
   if (success) {
     joinSuccess.add(1);
   } else {
-    joinUnexpected.add(1, { status: String(response.status), error_code: errorCode(body) });
+    const code = errorCode(body);
+    console.error(`Waiting Room join 실패: status=${response.status}, errorCode=${code}`);
+    joinUnexpected.add(1, { status: String(response.status), error_code: code });
     unexpectedResponse.add(1, { endpoint: 'join', status: String(response.status) });
   }
   check(response, {
