@@ -15,6 +15,7 @@ import org.example.ticket.performance.model.PerformanceTime;
 import org.example.ticket.performance.repository.PerformanceRepository;
 import org.example.ticket.performance.repository.PerformanceTimeRepository;
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.ReservedSeat;
 import org.example.ticket.reservation.booking.domain.Seat;
@@ -34,6 +35,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -116,6 +118,9 @@ class MySqlReservationStateRaceTest {
 
     @Autowired
     private ReservationExpirationService reservationExpirationService;
+
+    @MockitoBean
+    private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     @Autowired
     private org.springframework.transaction.PlatformTransactionManager transactionManager;

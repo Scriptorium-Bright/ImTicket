@@ -10,6 +10,7 @@ import org.example.ticket.payment.repository.PaymentAttemptRepository;
 import org.example.ticket.payment.repository.PaymentOrderRepository;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.model.PerformanceTime;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.ReservedSeat;
 import org.example.ticket.reservation.booking.domain.Seat;
@@ -46,6 +47,9 @@ class ReservationCompletionServiceTest {
 
     @Mock
     private SeatRepository seatRepository;
+
+    @Mock
+    private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     @InjectMocks
     private ReservationCompletionService reservationCompletionService;

@@ -1,10 +1,10 @@
 package org.example.ticket.venue.service;
 
 import org.example.ticket.util.constant.SeatInfo;
-import org.example.ticket.venue.dto.request.VenueHallFloorRequest;
-import org.example.ticket.venue.dto.request.VenueHallRowRequest;
-import org.example.ticket.venue.dto.request.VenueHallSeatRequest;
-import org.example.ticket.venue.dto.request.VenueHallSectionRequest;
+import org.example.ticket.venue.request.VenueHallFloorRequest;
+import org.example.ticket.venue.request.VenueHallRowRequest;
+import org.example.ticket.venue.request.VenueHallSeatRequest;
+import org.example.ticket.venue.request.VenueHallSectionRequest;
 import org.example.ticket.venue.model.VenueHall;
 import org.example.ticket.venue.model.VenueHallSeatTemplate;
 import org.example.ticket.venue.repository.VenueHallRepository;

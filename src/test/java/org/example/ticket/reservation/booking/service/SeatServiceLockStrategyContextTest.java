@@ -1,6 +1,8 @@
 package org.example.ticket.reservation.booking.service;
 
 import org.example.ticket.performance.repository.PerformanceTimeRepository;
+import org.example.ticket.reservation.booking.cache.SeatMapCacheReader;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.util.lock.ReservationLockStrategy;
 import org.example.ticket.reservation.booking.util.lock.ReservationLockStrategyContext;
 import org.example.ticket.common.exception.BusinessException;
@@ -34,6 +36,12 @@ class SeatServiceLockStrategyContextTest {
     @Mock
     private VenueHallSeatTemplateRepository seatTemplateRepository;
 
+    @Mock
+    private SeatMapCacheReader seatMapCacheReader;
+
+    @Mock
+    private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
+
     private ReservationLockStrategyContext strategyContext;
     private SeatService seatService;
 
@@ -44,7 +52,9 @@ class SeatServiceLockStrategyContextTest {
                 seatRepository,
                 performanceTimeRepository,
                 seatTemplateRepository,
-                strategyContext
+                strategyContext,
+                seatMapCacheReader,
+                seatMapInvalidationPublisher
         );
     }
 

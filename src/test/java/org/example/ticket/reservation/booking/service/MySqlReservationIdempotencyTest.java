@@ -11,6 +11,7 @@ import org.example.ticket.performance.model.PerformanceTime;
 import org.example.ticket.performance.repository.PerformanceRepository;
 import org.example.ticket.performance.repository.PerformanceTimeRepository;
 import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.exception.ReservationSnapshotException;
 import org.example.ticket.reservation.booking.util.admission.SeatAdmissionService;
 import org.example.ticket.reservation.booking.util.aop.ReservationLockAspect;
@@ -173,6 +174,9 @@ class MySqlReservationIdempotencyTest {
 
     @MockitoBean
     private SeatService seatService;
+
+    @MockitoBean
+    private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     @MockitoSpyBean
     private ReservationResponseSnapshotCodec snapshotCodec;

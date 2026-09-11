@@ -1,6 +1,7 @@
 package org.example.ticket.reservation.booking.service;
 
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.Seat;
 import org.example.ticket.reservation.booking.repository.ReservationRepository;
@@ -30,6 +31,9 @@ class ReservationExpirationServiceTest {
 
     @Mock
     private SeatRepository seatRepository;
+
+    @Mock
+    private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     @InjectMocks
     private ReservationExpirationService reservationExpirationService;

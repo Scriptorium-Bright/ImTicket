@@ -1,5 +1,6 @@
 package org.example.ticket.util.tracing;
 
+import org.example.ticket.config.TracingConfig;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

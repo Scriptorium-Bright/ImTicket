@@ -4,6 +4,8 @@ import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.model.PerformanceTime;
 import org.example.ticket.performance.model.SeatPrice;
 import org.example.ticket.performance.repository.PerformanceTimeRepository;
+import org.example.ticket.reservation.booking.cache.SeatMapCacheReader;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.domain.Seat;
 import org.example.ticket.reservation.booking.repository.SeatRepository;
 import org.example.ticket.util.constant.SeatInfo;
@@ -36,6 +38,12 @@ class SeatServiceTemplateTest {
 
     @Mock
     private VenueHallSeatTemplateRepository seatTemplateRepository;
+
+    @Mock
+    private SeatMapCacheReader seatMapCacheReader;
+
+    @Mock
+    private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     @InjectMocks
     private SeatService seatService;

@@ -16,16 +16,21 @@ class SeatMapCacheInvalidationListenerTest {
     @Mock
     private SeatMapCacheStore cacheStore;
 
+    @Mock
+    private SeatMapCacheReader cacheReader;
+
     @Test
     void evictsSnapshotAfterCommitEvent() {
         SeatMapCacheInvalidationListener listener = new SeatMapCacheInvalidationListener(
                 cacheStore,
+                cacheReader,
                 new SimpleMeterRegistry()
         );
 
         listener.invalidate(new SeatMapInvalidationEvent(7L));
 
         verify(cacheStore).evict(7L);
+        verify(cacheReader).resetReadGateAfterInvalidation(new SeatMapInvalidationEvent(7L));
     }
 
     @Test
@@ -35,6 +40,7 @@ class SeatMapCacheInvalidationListenerTest {
                 .evict(7L);
         SeatMapCacheInvalidationListener listener = new SeatMapCacheInvalidationListener(
                 cacheStore,
+                cacheReader,
                 new SimpleMeterRegistry()
         );
 

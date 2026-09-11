@@ -1,6 +1,8 @@
 package org.example.ticket.reservation.booking.service;
 
 import org.example.ticket.performance.repository.PerformanceTimeRepository;
+import org.example.ticket.reservation.booking.cache.SeatMapCacheReader;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.repository.SeatRepository;
 import org.example.ticket.reservation.booking.dto.response.SeatResponse;
 import org.example.ticket.util.constant.SeatInfo;
@@ -30,6 +32,12 @@ class SeatServiceSeatMapTest {
     @Mock
     private VenueHallSeatTemplateRepository seatTemplateRepository;
 
+    @Mock
+    private SeatMapCacheReader seatMapCacheReader;
+
+    @Mock
+    private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
+
     @InjectMocks
     private SeatService seatService;
 
@@ -48,7 +56,7 @@ class SeatServiceSeatMapTest {
                 .seatStatus(SeatStatus.LOCKED)
                 .build();
 
-        when(seatRepository.findSeatMapByPerformanceTimeId(performanceTimeId))
+        when(seatMapCacheReader.read(performanceTimeId))
                 .thenReturn(List.of(lockedSeat));
 
         List<SeatResponse> responses = seatService.viewSeatMap(performanceTimeId);
@@ -58,6 +66,6 @@ class SeatServiceSeatMapTest {
                 .first()
                 .extracting(SeatResponse::getSeatStatus)
                 .isEqualTo(SeatStatus.LOCKED);
-        verify(seatRepository).findSeatMapByPerformanceTimeId(performanceTimeId);
+        verify(seatMapCacheReader).read(performanceTimeId);
     }
 }
