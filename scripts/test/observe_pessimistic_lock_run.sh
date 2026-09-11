@@ -8,6 +8,9 @@ set -euo pipefail
 #   scripts/test/run_pessimistic_lock_natural_k6.sh
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/test/load_env_defaults.sh"
+load_imticket_env "${ROOT_DIR}/.env"
+
 BASE_URL="${BASE_URL:-http://127.0.0.1:10080}"
 MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
 MYSQL_PORT="${MYSQL_PORT:-10047}"
@@ -16,6 +19,7 @@ MYSQL_DATABASE="${MYSQL_DATABASE:-capstone}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-${MYSQL_LOCK_TEST_PASSWORD:-}}"
 SAMPLE_INTERVAL_SECONDS="${SAMPLE_INTERVAL_SECONDS:-0.2}"
 RESULT_DIR="${RESULT_DIR:-${ROOT_DIR}/build/k6-results}"
+LOCK_STRATEGY_LABEL="${LOCK_STRATEGY:-unknown}"
 
 if (( $# == 0 )); then
   echo "실행할 테스트 명령을 마지막 인자로 전달해야 합니다." >&2
@@ -31,7 +35,7 @@ if [[ ! "${SAMPLE_INTERVAL_SECONDS}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   exit 1
 fi
 
-RUN_ID="pessimistic-natural-observe-$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_ID="${LOCK_STRATEGY_LABEL}-natural-observe-$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="${RESULT_DIR}/${RUN_ID}"
 APP_METRICS_FILE="${RUN_DIR}/app-metrics.tsv"
 MYSQL_WAITS_FILE="${RUN_DIR}/mysql-lock-waits.tsv"
@@ -42,7 +46,7 @@ sampler_pid=""
 MYSQL_LOCK_WAIT_SOURCE=""
 
 mkdir -p "${RUN_DIR}"
-printf 'timestamp\ttomcat_busy\ttomcat_current\thikari_active\thikari_pending\thikari_max\tacquire_max_seconds\tconnection_timeouts\n' > "${APP_METRICS_FILE}"
+printf 'timestamp\ttomcat_busy\ttomcat_current\thikari_active\thikari_pending\thikari_max\tacquire_max_seconds\tconnection_timeouts\tjvm_threads_live\tjvm_threads_peak\tjvm_gc_pause_count\tjvm_gc_pause_seconds_sum\tprocess_cpu_usage\tsystem_cpu_usage\tprocess_rss_bytes\n' > "${APP_METRICS_FILE}"
 printf 'timestamp\tdata_lock_waits\n' > "${MYSQL_WAITS_FILE}"
 
 cleanup() {
@@ -163,11 +167,12 @@ capture_mysql_lock_wait_snapshot() {
 sample_metrics() {
   local snapshot_captured=false
   while :; do
-    local now payload busy current active pending maximum acquire timeouts lock_waits
+    local now payload busy current active pending maximum acquire timeouts jvm_live jvm_peak gc_count gc_sum process_cpu system_cpu process_rss lock_waits
     now="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
     payload="$(curl -fsS --connect-timeout 1 --max-time 2 "${BASE_URL}/actuator/prometheus" 2>/dev/null || true)"
     if [[ -z "${payload}" ]]; then
       busy=NA; current=NA; active=NA; pending=NA; maximum=NA; acquire=NA; timeouts=NA
+      jvm_live=NA; jvm_peak=NA; gc_count=NA; gc_sum=NA; process_cpu=NA; system_cpu=NA; process_rss=NA
     else
       busy="$(printf '%s\n' "${payload}" | prometheus_value tomcat_threads_busy_threads)"
       current="$(printf '%s\n' "${payload}" | prometheus_value tomcat_threads_current_threads)"
@@ -176,9 +181,17 @@ sample_metrics() {
       maximum="$(printf '%s\n' "${payload}" | prometheus_value hikaricp_connections_max)"
       acquire="$(printf '%s\n' "${payload}" | prometheus_value hikaricp_connections_acquire_seconds_max)"
       timeouts="$(printf '%s\n' "${payload}" | prometheus_value hikaricp_connections_timeout_total)"
+      jvm_live="$(printf '%s\n' "${payload}" | prometheus_value jvm_threads_live_threads)"
+      jvm_peak="$(printf '%s\n' "${payload}" | prometheus_value jvm_threads_peak_threads)"
+      gc_count="$(printf '%s\n' "${payload}" | prometheus_value jvm_gc_pause_seconds_count)"
+      gc_sum="$(printf '%s\n' "${payload}" | prometheus_value jvm_gc_pause_seconds_sum)"
+      process_cpu="$(printf '%s\n' "${payload}" | prometheus_value process_cpu_usage)"
+      system_cpu="$(printf '%s\n' "${payload}" | prometheus_value system_cpu_usage)"
+      process_rss="$(printf '%s\n' "${payload}" | prometheus_value process_resident_memory_bytes)"
     fi
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "${now}" "${busy}" "${current}" "${active}" "${pending}" "${maximum}" "${acquire}" "${timeouts}" \
+      "${jvm_live}" "${jvm_peak}" "${gc_count}" "${gc_sum}" "${process_cpu}" "${system_cpu}" "${process_rss}" \
       >> "${APP_METRICS_FILE}"
 
     lock_waits="$(mysql_lock_wait_count)"
@@ -239,16 +252,31 @@ tomcat_current_peak="$(peak_column "${APP_METRICS_FILE}" 3)"
 hikari_active_peak="$(peak_column "${APP_METRICS_FILE}" 4)"
 hikari_pending_peak="$(peak_column "${APP_METRICS_FILE}" 5)"
 hikari_max_peak="$(peak_column "${APP_METRICS_FILE}" 6)"
+jvm_threads_live_peak="$(peak_column "${APP_METRICS_FILE}" 9)"
+jvm_threads_peak_peak="$(peak_column "${APP_METRICS_FILE}" 10)"
+jvm_gc_pause_count_peak="$(peak_column "${APP_METRICS_FILE}" 11)"
+jvm_gc_pause_seconds_sum_peak="$(peak_column "${APP_METRICS_FILE}" 12)"
+process_cpu_peak="$(peak_column "${APP_METRICS_FILE}" 13)"
+system_cpu_peak="$(peak_column "${APP_METRICS_FILE}" 14)"
+process_rss_peak="$(peak_column "${APP_METRICS_FILE}" 15)"
 lock_wait_peak="$(peak_column "${MYSQL_WAITS_FILE}" 2)"
 
 {
   printf 'run_id=%s\n' "${RUN_ID}"
+  printf 'lock_strategy=%s\n' "${LOCK_STRATEGY_LABEL}"
   printf 'test_exit_code=%s\n' "${command_status}"
   printf 'tomcat_busy_peak=%s\n' "${tomcat_busy_peak}"
   printf 'tomcat_current_peak=%s\n' "${tomcat_current_peak}"
   printf 'hikari_active_peak=%s\n' "${hikari_active_peak}"
   printf 'hikari_pending_peak=%s\n' "${hikari_pending_peak}"
   printf 'hikari_max_peak=%s\n' "${hikari_max_peak}"
+  printf 'jvm_threads_live_peak=%s\n' "${jvm_threads_live_peak}"
+  printf 'jvm_threads_peak=%s\n' "${jvm_threads_peak_peak}"
+  printf 'jvm_gc_pause_count_peak=%s\n' "${jvm_gc_pause_count_peak}"
+  printf 'jvm_gc_pause_seconds_sum_peak=%s\n' "${jvm_gc_pause_seconds_sum_peak}"
+  printf 'process_cpu_peak=%s\n' "${process_cpu_peak}"
+  printf 'system_cpu_peak=%s\n' "${system_cpu_peak}"
+  printf 'process_rss_bytes_peak=%s\n' "${process_rss_peak}"
   printf 'mysql_data_lock_waits_peak=%s\n' "${lock_wait_peak}"
   printf 'app_metrics=%s\n' "${APP_METRICS_FILE}"
   printf 'mysql_lock_waits=%s\n' "${MYSQL_WAITS_FILE}"

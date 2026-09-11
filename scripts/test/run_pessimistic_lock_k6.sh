@@ -2,6 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/test/load_env_defaults.sh"
+load_imticket_env "${ROOT_DIR}/.env"
+
 MODE="${MODE:-baseline}"
 GRADE="${GRADE:-1}"
 TRAFFIC_PROFILE="${TRAFFIC_PROFILE:-minimum}"
@@ -16,6 +19,7 @@ START_AT_EPOCH_MS="${START_AT_EPOCH_MS:-}"
 MAX_DURATION="${MAX_DURATION:-10m}"
 REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-15s}"
 DISTRIBUTED="${DISTRIBUTED:-false}"
+LOCK_STRATEGY="${LOCK_STRATEGY:-pessimistic}"
 ALLOW_LARGE_LOAD="${ALLOW_LARGE_LOAD:-false}"
 K6_EXECUTION_SEGMENT="${K6_EXECUTION_SEGMENT:-}"
 K6_EXECUTION_SEGMENT_SEQUENCE="${K6_EXECUTION_SEGMENT_SEQUENCE:-}"
@@ -37,6 +41,10 @@ if [[ ! "${TRAFFIC_PROFILE}" =~ ^(minimum|maximum)$ ]]; then
 fi
 if [[ ! "${DISTRIBUTED}" =~ ^(true|false)$ ]]; then
   echo "DISTRIBUTED는 true 또는 false여야 합니다." >&2
+  exit 1
+fi
+if [[ ! "${LOCK_STRATEGY}" =~ ^(pessimistic|synchronized|reentrant|optimistic|mysql-named|single-thread)$ ]]; then
+  echo "LOCK_STRATEGY가 올바르지 않습니다: ${LOCK_STRATEGY}" >&2
   exit 1
 fi
 if [[ ! "${ALLOW_LARGE_LOAD}" =~ ^(true|false)$ ]]; then
@@ -150,6 +158,7 @@ k6_args=(
   -e "MAX_DURATION=${MAX_DURATION}"
   -e "REQUEST_TIMEOUT=${REQUEST_TIMEOUT}"
   -e "DISTRIBUTED=${DISTRIBUTED}"
+  -e "LOCK_STRATEGY=${LOCK_STRATEGY}"
   --summary-export "${summary_file}"
 )
 

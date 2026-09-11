@@ -5,6 +5,9 @@ set -euo pipefail
 # 실행 전 대상 좌석은 AVAILABLE 상태여야 하며, 애플리케이션은 LOCK_STRATEGY=pessimistic으로 기동한다.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/test/load_env_defaults.sh"
+load_imticket_env "${ROOT_DIR}/.env"
+
 BASE_URL="${BASE_URL:-http://127.0.0.1:10080}"
 PT_ID="${PT_ID:-}"
 SEAT_ID="${SEAT_ID:-}"

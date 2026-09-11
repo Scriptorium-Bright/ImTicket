@@ -16,10 +16,17 @@ const startAtEpochMs = optionalPositiveNumber('START_AT_EPOCH_MS');
 const requestTimeout = __ENV.REQUEST_TIMEOUT || '15s';
 const maxDuration = __ENV.MAX_DURATION || '2m';
 const explicitSeatIds = parseSeatIds(__ENV.SEAT_IDS || '');
+const seatSelectionMode = (__ENV.SEAT_SELECTION_MODE || 'round_robin').toLowerCase();
 const jwt = __ENV.JWT || createJwt(walletAddress, jwtSecret);
 
 if (seatsPerRequest > seatPoolSize) {
   throw new Error('SEATS_PER_REQUEST는 SEAT_POOL_SIZE보다 클 수 없습니다.');
+}
+if (!['round_robin', 'random'].includes(seatSelectionMode)) {
+  throw new Error(`SEAT_SELECTION_MODE는 round_robin 또는 random이어야 합니다. actual=${seatSelectionMode}`);
+}
+if (seatSelectionMode === 'random' && seatsPerRequest !== 1) {
+  throw new Error('SEAT_SELECTION_MODE=random은 SEATS_PER_REQUEST=1에서만 지원합니다.');
 }
 
 const reservationAttempts = new Counter('multi_hot_reservation_attempts');
@@ -54,6 +61,7 @@ export const options = {
         scenario: 'multi-hot-seat-diagnosis',
         seat_pool_size: String(seatPoolSize),
         seats_per_request: String(seatsPerRequest),
+        seat_selection_mode: seatSelectionMode,
       },
     },
   },
@@ -121,9 +129,13 @@ export default function (data) {
   requestStartLag.add(Math.max(0, Date.now() - data.startAt));
 
   const selectedSeatIds = [];
-  const startIndex = ((__VU - 1) * seatsPerRequest) % data.seatIds.length;
-  for (let i = 0; i < seatsPerRequest; i += 1) {
-    selectedSeatIds.push(data.seatIds[(startIndex + i) % data.seatIds.length]);
+  if (seatSelectionMode === 'random') {
+    selectedSeatIds.push(data.seatIds[Math.floor(Math.random() * data.seatIds.length)]);
+  } else {
+    const startIndex = ((__VU - 1) * seatsPerRequest) % data.seatIds.length;
+    for (let i = 0; i < seatsPerRequest; i += 1) {
+      selectedSeatIds.push(data.seatIds[(startIndex + i) % data.seatIds.length]);
+    }
   }
   selectedSeatIds.sort((left, right) => left - right);
 
@@ -134,6 +146,7 @@ export default function (data) {
       headers: {
         Authorization: `Bearer ${jwt}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': newIdempotencyKey(),
       },
       tags: {
         endpoint: 'pre-reserve',
@@ -206,6 +219,20 @@ export default function (data) {
     '응답이 계약 버킷으로 분류된다': () => expected,
     'correlation id가 반환된다': (res) => Boolean(res.headers['X-Correlation-Id']),
   });
+}
+
+function newIdempotencyKey() {
+  // 같은 VU가 한 번만 요청하는 burst 계약에서는 run 시각과 VU 번호를 합치면
+  // 재실행 간에도 충돌하지 않는 canonical UUID를 만들 수 있다.
+  // Math.random()만 쓰면 누적 fixture에서 발생한 IDEMPOTENCY_CONFLICT를 run/VU 단위로 재현·추적하기 어렵다.
+  const runPart = fixedWidthHex(startAtEpochMs || Date.now(), 4);
+  const vuPart = fixedWidthHex(__VU, 8);
+  const namespace = `${runPart}${vuPart}`;
+  return `${namespace.slice(0, 8)}-${namespace.slice(8, 12)}-4000-8000-${namespace}`;
+}
+
+function fixedWidthHex(value, width) {
+  return Math.floor(Number(value)).toString(16).padStart(width, '0').slice(-width);
 }
 
 function classify429(code) {

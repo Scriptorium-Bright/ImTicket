@@ -2,6 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+source "${SCRIPT_DIR}/load_env_defaults.sh"
+load_imticket_env "${ROOT_DIR}/.env"
+
 MYSQL_HOST="${MYSQL_HOST:-140.245.76.87}"
 MYSQL_PORT="${MYSQL_PORT:-10047}"
 MYSQL_USER="${MYSQL_USER:-capstone}"

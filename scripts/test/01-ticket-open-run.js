@@ -13,6 +13,8 @@ const walletAddress = __ENV.WALLET_ADDRESS || '0xLoadTestUser';
 const burstDelaySeconds = Number(__ENV.BURST_DELAY_SECONDS || 5);
 const trafficProfile = __ENV.TRAFFIC_PROFILE || 'minimum';
 const distributed = (__ENV.DISTRIBUTED || 'false').toLowerCase() === 'true';
+const lockStrategy = (__ENV.LOCK_STRATEGY || 'pessimistic').toLowerCase();
+const boundedSeatLock = lockStrategy === 'reentrant';
 const scheduledStartAt = optionalEpoch('START_AT_EPOCH_MS');
 const maxDuration = __ENV.MAX_DURATION || '10m';
 const requestTimeout = __ENV.REQUEST_TIMEOUT || '15s';
@@ -54,7 +56,9 @@ const jwt = __ENV.JWT || createJwt(walletAddress, required('JWT_SECRET'));
 const reservationSuccess = new Counter('reservation_success');
 const reservationConflict = new Counter('reservation_conflict');
 const reservationInternalError = new Counter('reservation_internal_error');
+const reservationLockTimeout = new Counter('reservation_lock_timeout');
 const authenticationFailure = new Counter('authentication_failure');
+const transportFailure = new Counter('transport_failure');
 const unexpectedResponse = new Counter('unexpected_response');
 const expectedOutcome = new Rate('expected_outcome');
 const reservationDuration = new Trend('reservation_duration', true);
@@ -62,6 +66,7 @@ const requestStartLag = new Trend('request_start_lag', true);
 
 const thresholds = {
   authentication_failure: ['count==0'],
+  transport_failure: ['count==0'],
   unexpected_response: ['count==0'],
   expected_outcome: ['rate==1'],
   checks: ['rate==1'],
@@ -69,7 +74,7 @@ const thresholds = {
 
 if (mode === 'baseline') {
   thresholds.reservation_success = [distributed ? 'count<=1' : 'count==1'];
-  if (!distributed) {
+  if (!distributed && !boundedSeatLock) {
     thresholds.reservation_conflict = [`count==${concurrency - 1}`];
   }
   thresholds.reservation_internal_error = ['count==0'];
@@ -140,14 +145,17 @@ export default function (data) {
       headers: {
         Authorization: `Bearer ${jwt}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': newIdempotencyKey(),
       },
       tags: {
         endpoint: 'pre-reserve',
         target: 'single-hot-seat',
       },
       responseCallback: mode === 'forced-timeout'
-        ? http.expectedStatuses(200, 201, 409, 500, 503)
-        : http.expectedStatuses(200, 201, 409),
+        ? http.expectedStatuses(200, 201, 409, 429, 500, 503)
+        : boundedSeatLock
+          ? http.expectedStatuses(200, 201, 409, 429)
+          : http.expectedStatuses(200, 201, 409),
       timeout: requestTimeout,
     },
   );
@@ -156,7 +164,9 @@ export default function (data) {
 
   const body = safeJson(response);
   let expected = false;
-  if (
+  if (response.status === 0) {
+    transportFailure.add(1);
+  } else if (
     (response.status === 200 || response.status === 201)
     && body?.success === true
     && Number.isInteger(Number(body?.data?.id))
@@ -170,6 +180,12 @@ export default function (data) {
   ) {
     reservationConflict.add(1);
     expected = true;
+  } else if (
+    response.status === 429
+    && body?.error?.code === 'SEAT_LOCK_TIMEOUT'
+  ) {
+    reservationLockTimeout.add(1);
+    expected = boundedSeatLock || mode === 'forced-timeout';
   } else if (response.status === 500 || response.status === 503) {
     reservationInternalError.add(1);
     expected = mode === 'forced-timeout';
@@ -183,6 +199,14 @@ export default function (data) {
   check(response, {
     '응답이 분류 가능한 상태다': () => expected,
     'correlation id가 반환된다': (res) => Boolean(res.headers['X-Correlation-Id']),
+  });
+}
+
+function newIdempotencyKey() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
   });
 }
 

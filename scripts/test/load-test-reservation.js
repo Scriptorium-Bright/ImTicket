@@ -94,7 +94,8 @@ export default function (data) {
     const params = {
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${token}`,
+            'Idempotency-Key': newIdempotencyKey()
         },
     };
 
@@ -105,9 +106,18 @@ export default function (data) {
         '성공 (200/201)': (r) => r.status === 200 || r.status === 201,
         '이미 예약됨 (409 Conflict)': (r) => r.status === 409,
         '회원 못찾음 (404)': (r) => r.status === 404,
+        '락 대기 제한 (429)': (r) => r.status === 429,
         '서버 에러 (500) - Lock/Connection Timeout': (r) => r.status === 500,
         '인증 에러 (401/403)': (r) => r.status === 401 || r.status === 403,
     });
     
     sleep(1);
+}
+
+function newIdempotencyKey() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+        const random = Math.floor(Math.random() * 16);
+        const value = character === 'x' ? random : (random & 0x3) | 0x8;
+        return value.toString(16);
+    });
 }

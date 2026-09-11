@@ -4,23 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SQL_FILE="${SCRIPT_DIR}/seed_mysql_benchmark_data.sql"
-
-if [[ -f "${REPO_ROOT}/.env" ]]; then
-  while IFS='=' read -r key value; do
-    case "${key}" in
-      MYSQL_DATABASE | MYSQL_USER | MYSQL_PASSWORD | MYSQL_ROOT_PASSWORD)
-        value="${value%$'\r'}"
-        value="${value%\"}"
-        value="${value#\"}"
-        value="${value%\'}"
-        value="${value#\'}"
-        if [[ -z "${!key:-}" ]]; then
-          export "${key}=${value}"
-        fi
-        ;;
-    esac
-  done < "${REPO_ROOT}/.env"
-fi
+source "${SCRIPT_DIR}/load_env_defaults.sh"
+load_imticket_env "${REPO_ROOT}/.env"
 
 MYSQL_HOST="${MYSQL_HOST:-127.0.0.1}"
 MYSQL_PORT="${MYSQL_PORT:-10047}"

@@ -185,6 +185,7 @@ INSERT INTO `Seat` (
     `seat_price`,
     `is_reservation`,
     `seat_status`,
+    `version`,
     `performance_time_id`
 )
 SELECT
@@ -214,6 +215,7 @@ SELECT
         WHEN MOD(n, 10) IN (0, 1, 2) THEN 'LOCKED'
         ELSE 'AVAILABLE'
     END AS seat_status,
+    0 AS version,
     @base_id + 1 + MOD(n - 1, @performance_time_count) AS performance_time_id
 FROM benchmark_numbers
 WHERE n <= @seat_count;

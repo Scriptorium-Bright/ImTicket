@@ -6,6 +6,9 @@ set -euo pipefail
 # 차이를 새 변수로 만들지 않는다. 실행 결과는 RESULT_ROOT 아래 한 디렉터리에만 기록한다.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/test/load_env_defaults.sh"
+load_imticket_env "${ROOT_DIR}/.env"
+
 RUN_LABEL="${1:-}"
 CONCURRENCY="${CONCURRENCY:-2000}"
 LOCK_STRATEGY="${LOCK_STRATEGY:-reentrant}"

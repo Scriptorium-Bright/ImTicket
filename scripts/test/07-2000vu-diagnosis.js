@@ -95,6 +95,7 @@ export default function (data) {
       headers: {
         Authorization: `Bearer ${jwt}`,
         'Content-Type': 'application/json',
+        'Idempotency-Key': newIdempotencyKey(),
       },
       tags: {
         endpoint: 'pre-reserve',
@@ -164,6 +165,14 @@ export default function (data) {
 
   outcomeBucket.add(1, { bucket });
   classifiedResponse.add(bucket !== 'unexpected_http');
+}
+
+function newIdempotencyKey() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+    const random = Math.floor(Math.random() * 16);
+    const value = character === 'x' ? random : (random & 0x3) | 0x8;
+    return value.toString(16);
+  });
 }
 
 function classify429(code) {

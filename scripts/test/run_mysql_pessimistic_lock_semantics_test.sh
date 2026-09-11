@@ -5,6 +5,9 @@ set -euo pipefail
 # 애플리케이션 endpoint 부하 시험과 달리 DB lock의 실패 모드 자체를 분리해서 검증한다.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/test/load_env_defaults.sh"
+load_imticket_env "${ROOT_DIR}/.env"
+
 MYSQL_LOCK_TEST_URL="${MYSQL_LOCK_TEST_URL:-jdbc:mysql://127.0.0.1:10047/capstone?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul}"
 MYSQL_LOCK_TEST_USERNAME="${MYSQL_LOCK_TEST_USERNAME:-capstone}"
 MYSQL_LOCK_TEST_PASSWORD="${MYSQL_LOCK_TEST_PASSWORD:-${MYSQL_PASSWORD:-}}"

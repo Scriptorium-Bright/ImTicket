@@ -19,6 +19,7 @@ const statusPollJitterRatio = boundedNumber(__ENV.STATUS_POLL_JITTER_RATIO || 0.
 const requestTimeout = __ENV.REQUEST_TIMEOUT || '10s';
 const maxDuration = __ENV.MAX_DURATION || '5m';
 const seatIds = parsePositiveNumberList(__ENV.SEAT_IDS || '');
+const seatMapFallbackRejectionExpected = (__ENV.SEAT_MAP_FALLBACK_REJECTION_EXPECTED || 'false') === 'true';
 const passHeader = 'X-Waiting-Room-Pass';
 
 if (!['join', 'status', 'seat-map', 'pre-reserve', 'full-flow'].includes(mode)) {
@@ -50,6 +51,7 @@ const statusAdmitted = new Counter('waiting_room_status_admitted');
 const admissionTimeout = new Counter('waiting_room_admission_timeout');
 const seatMapRequests = new Counter('waiting_room_seat_map_requests');
 const seatMapSuccess = new Counter('waiting_room_seat_map_success');
+const seatMapFallbackRejected = new Counter('waiting_room_seat_map_fallback_rejected');
 const preReserveRequests = new Counter('waiting_room_pre_reserve_requests');
 const preReserveExpected = new Counter('waiting_room_pre_reserve_expected');
 const preReserveSuccess = new Counter('waiting_room_pre_reserve_success');
@@ -63,6 +65,7 @@ const seatMapDuration = new Trend('waiting_room_seat_map_duration', true);
 const preReserveDuration = new Trend('waiting_room_pre_reserve_duration', true);
 const preReserveSuccessDuration = new Trend('waiting_room_pre_reserve_success_duration', true);
 const preReserveConflictDuration = new Trend('waiting_room_pre_reserve_conflict_duration', true);
+const activeSessionDuration = new Trend('waiting_room_active_session_duration', true);
 const queueWaitDuration = new Trend('waiting_room_queue_wait_duration', true);
 const journeyDuration = new Trend('waiting_room_total_journey_duration', true);
 const contractSuccess = new Rate('waiting_room_contract_success');
@@ -149,6 +152,9 @@ export default function (data) {
   const success = mode === 'pre-reserve'
     ? preReserve(identity, headers, status.entryPass)
     : loadFullFlow(identity, headers, status.entryPass);
+  if (status.admittedAt) {
+    activeSessionDuration.add(Date.now() - status.admittedAt);
+  }
   contractSuccess.add(success);
   journeyDuration.add(Date.now() - journeyStartedAt);
 }
@@ -239,15 +245,22 @@ function loadSeatMap(headers, entryPass) {
 
   const body = safeJson(response);
   const success = response.status === 200 && body?.success === true && Array.isArray(body?.data);
+  const fallbackRejected = response.status === 503
+    && body?.success === false
+    && body?.error?.code === 'SEAT_MAP_FALLBACK_OVER_CAPACITY';
+  const contract = success || (seatMapFallbackRejectionExpected && fallbackRejected);
   if (success) {
     seatMapSuccess.add(1);
-  } else {
+  } else if (fallbackRejected) {
+    seatMapFallbackRejected.add(1);
+  }
+  if (!contract) {
     unexpectedResponse.add(1, { endpoint: 'seat-map', status: String(response.status) });
   }
   check(response, {
-    'admitted seat map이 성공한다': () => success,
+    'seat map 응답이 계약을 충족한다': () => contract,
   });
-  return success;
+  return contract;
 }
 
 function loadFullFlow(identity, headers, entryPass) {

@@ -24,6 +24,11 @@ if [[ -z "${JWT}" ]]; then
   exit 1
 fi
 
+if ! command -v uuidgen >/dev/null 2>&1; then
+  echo "uuidgen is required to create per-request Idempotency-Key values." >&2
+  exit 1
+fi
+
 mkdir -p "${OUTPUT_DIR}"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RESULT_FILE="${OUTPUT_DIR}/lock-wait-${RUN_ID}.tsv"
@@ -42,6 +47,7 @@ echo -e "request\tstatus\ttime_total\tresponse_file" > "${RESULT_FILE}"
 for index in $(seq 1 "${CONCURRENCY}"); do
   (
     RESPONSE_FILE="${OUTPUT_DIR}/lock-wait-${RUN_ID}-${index}.body"
+    IDEMPOTENCY_KEY="$(uuidgen | tr '[:upper:]' '[:lower:]')"
     CURL_RESULT="$(
       curl -sS \
         -o "${RESPONSE_FILE}" \
@@ -49,6 +55,7 @@ for index in $(seq 1 "${CONCURRENCY}"); do
         -X POST "${BASE_URL}${ENDPOINT}" \
         -H "Authorization: Bearer ${JWT}" \
         -H "Content-Type: application/json" \
+        -H "Idempotency-Key: ${IDEMPOTENCY_KEY}" \
         --data-binary @"${BODY_FILE}" || echo -e "curl_error\t0"
     )"
     echo -e "${index}\t${CURL_RESULT}\t${RESPONSE_FILE}" >> "${RESULT_FILE}"

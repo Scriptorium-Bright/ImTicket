@@ -2,6 +2,16 @@
 
 이 디렉터리는 예매 경로를 검증하는 k6 시나리오, 셸 실행기, SQL fixture와 재현·관측 스크립트를 한곳에 둔다. 실행 결과 로그와 summary는 소스와 섞지 않고 `build/k6-results/`에 저장한다.
 
+인기 공연 좌석 캐시 활성·비활성 비교와 OCI 재현 명령은 [POPULAR_CACHE_TEST_COMMANDS.md](POPULAR_CACHE_TEST_COMMANDS.md)에 모아 두었다. 각 테스트의 가설·관측·설계 판단은 [인기 공연 캐시 활성·비활성 실험의 의미](../../docs/implements/seat-availability/146.6.3-popular-cache-toggle-test-meaning.md)에서 읽는다.
+
+### 로컬 `.env` 자동 로드
+
+주요 테스트 스크립트는 실행 시 저장소 루트의 `.env`를 자동으로 읽는다. 따라서 `MYSQL_PASSWORD`, `MYSQL_LOCK_TEST_PASSWORD`, `JWT_SECRET`을 매번 명령어 앞에 붙이지 않아도 된다. 이미 셸 환경이나 명령어에서 non-empty 값으로 지정한 값은 `.env`보다 우선한다. `.env`는 셸 코드로 실행하지 않고 `KEY=VALUE`만 읽으므로 JDBC URL의 `&`도 안전하게 보존한다.
+
+현재 로컬 진단용 JWT는 `.env`의 `JWT_SECRET`과 앱의 `SPRING_JWT_SECRET`을 같은 임시값으로 맞춰 둔다. 운영·공유 환경에서는 이 값을 사용하지 않는다.
+
+진단 collector의 MySQL lock metric은 `performance_schema.data_lock_waits` 권한이 필요하므로 앱 접속 계정(`capstone`)과 분리한다. 기본적으로 `.env`의 `MYSQL_ROOT_PASSWORD`를 `MYSQL_METRICS_USER=root`로 사용하며, 별도 계정이 있으면 `MYSQL_METRICS_USER`와 `MYSQL_METRICS_PASSWORD`로 덮어쓸 수 있다.
+
 ## 실행 순서와 명령어
 
 ### 지금 실행할 범위
@@ -91,6 +101,8 @@ scripts/test/run_pessimistic_lock_diagnosis.sh
 ```
 
 ## 현재 기준 k6 시나리오
+
+`POST /api/reservation/pre-reserve`는 UUID 형식의 `Idempotency-Key`가 필수다. 현재 예매 스크립트는 **VU의 요청 의도마다 서로 다른 key**를 생성한다. 그래야 같은 좌석을 향한 서로 다른 사용자 의도가 idempotency claim 하나로 합쳐지지 않고 실제 seat lock 경합까지 도달한다. 한 요청을 네트워크 오류 때문에 재전송하는 로직을 추가할 때만 최초 key를 보존해 재사용한다.
 
 | 스크립트 | 상태 | 이유 |
 |---|---|---|
@@ -237,6 +249,96 @@ scripts/test/observe_pessimistic_lock_run.sh \
 
 실행 중 출력된 `observation_run_dir` 아래의 `app-metrics.tsv`, `mysql-lock-waits.tsv`를 `tail -f`로 볼 수 있다. 완료 후 `observation-summary.txt`에서 peak를 확인한다. 같은 한 좌석에서는 정상적으로 성공 1건과 `SEAT_ALREADY_RESERVED` 충돌이 대부분이며, 이 테스트만으로 deadlock을 기대하지 않는다. deadlock은 두 좌석을 반대 순서로 잠그는 별도 JDBC 테스트로 재현한다. 현재 예매 경로는 좌석 ID를 정렬하므로 이 실패 모드를 방지하려는 코드 규칙을 가진다.
 
+### 2,000~5,000 VU lock overhead matrix
+
+비관락과 ReentrantLock을 같은 조건으로 비교하고 JFR·Prometheus·Grafana·MySQL·Docker metric을 case별로 남기려면 다음 matrix runner를 사용한다. 기본 VU는 2,000 → 3,000 → 4,000 → 5,000이며, 전략별로 새 app과 새 fixture를 만든다. admission permit은 최대 VU와 같게 두어 실제 lock 경로까지 요청을 보낸다.
+
+```bash
+DRY_RUN=true scripts/test/run_lock_overhead_matrix.sh lock-overhead
+```
+
+```bash
+ADMISSION_PER_SEAT_PERMITS=5000 \
+JFR_ENABLED=true \
+CAPTURE_THREAD_DUMPS=false \
+scripts/test/run_lock_overhead_matrix.sh lock-overhead
+```
+
+결과는 `build/k6-results/lock-overhead-matrix/<matrix-id>/matrix-summary.tsv`와 case별 JFR/분석 파일에 남는다. 2,000 VU의 원인 확인만 먼저 할 때는 `VUS_LIST=2000 LOCK_STRATEGIES=reentrant CAPTURE_THREAD_DUMPS=true`로 한 case만 실행한다.
+
+### 30-seat multi-hot-seat matrix
+
+4개 좌석 집중 경합과 분리해 30개 좌석에 요청을 분산한다. 기본 VU는 1,000 → 1,500 → 2,000이며 pessimistic/ReentrantLock을 각각 실행한다.
+
+```bash
+DRY_RUN=true scripts/test/run_multi_hot_seat_matrix.sh multi-hot-seat
+```
+
+```bash
+SEAT_POOL_SIZE=30 \
+VUS_LIST=1000,1500,2000 \
+ADMISSION_PER_SEAT_PERMITS=2000 \
+JFR_ENABLED=true \
+scripts/test/run_multi_hot_seat_matrix.sh multi-hot-seat
+```
+
+30-seat fixture는 `seed_multi_hot_seat_fixture.sh`가 매 run 새로 만들며, 결과는 `build/k6-results/multi-hot-seat-matrix/`에 저장한다. 자세한 Grafana·JFR 판정 순서는 [132 문서](../../docs/132-2000vu-lock-overhead-jfr-matrix.md)를 따른다.
+
+### 여러 좌석으로 분산되는 자연 경합
+
+`01-ticket-open-run.js`가 한 좌석에 모든 VU를 집중시키는 반면, `03-multi-seat-distributed-run.js`는 VU 번호를 좌석 풀에 매핑한다. 따라서 여러 사용자가 여러 좌석을 나눠 요청하면서도 같은 좌석을 선택한 요청끼리는 실제 `@ReservationLock` 경로에서 경합한다. 기본값은 한 요청에 한 좌석이며, `SEATS_PER_REQUEST=2`로 바꾸면 한 트랜잭션에서 여러 좌석을 잠그는 경로도 확인할 수 있다. 좌석 ID는 매 요청에서 정렬되므로 정상적인 multi-seat 경합과 반대 순서 deadlock 재현은 구분한다.
+
+기존 20~200 VU 기록은 admission 도입 전 `pessimistic` 조건의 결과다. 현재 단일 JVM 보호 경로(`reentrant` + seat admission permit 1)에서는 429가 정상적인 즉시 거절이므로, 단순 runner를 그대로 사용해 409만 정상으로 처리하면 안 된다. 300~3,000 VU 실험은 `run_multi_hot_seat_diagnosis.sh`만 사용한다. 이 runner는 429·transport·관측 손실을 분리하고, 새 app container·새 4-seat fixture·사후 DB 검증·management port 관측을 run 디렉터리에 함께 남긴다.
+
+먼저 20 VU dry-run으로 수집 계약을 확인한다.
+
+```bash
+MYSQL_PASSWORD='로컬 테스트 DB 비밀번호' \
+JWT_SECRET='서버와 같은 테스트용 secret' \
+CONCURRENCY=20 \
+scripts/test/run_multi_hot_seat_diagnosis.sh dry-run
+```
+
+dry-run의 `contract_status=pass`, observation loss=0, 성공 4건, 사후 `ReservedSeat` 4건을 확인한 뒤에만 300 → 600 → 1,000 → 2,000 → 3,000 VU로 올린다. runner는 `request_contract_status`(응답·정합성)와 `observation_contract_status`(표본 완결성)를 분리한다. 관측 손실은 요청 실패로 합산하지 않지만, 관측이 degraded인 run으로 resource peak의 부재를 주장하지 않는다. 3,000 VU는 새 app container·새 fixture로 세 번 독립 실행한다. capacity run은 `CAPTURE_THREAD_DUMPS=false`가 기본이다. `SIGQUIT` dump는 stdout에 큰 로그를 동기 출력해 응답시간과 management 관측을 흔들 수 있으므로, 필요하면 별도의 관측 control에서만 `true`로 실행한다.
+
+```bash
+MYSQL_PASSWORD='로컬 테스트 DB 비밀번호' \
+JWT_SECRET='서버와 같은 테스트용 secret' \
+CONCURRENCY=300 \
+scripts/test/run_multi_hot_seat_diagnosis.sh vu300
+```
+
+결과는 `build/k6-results/multi-hot-seat/<run-id>/`에 남는다. 5xx 또는 transport가 있으면 요청 계약 실패로 표시하고, 같은 조건을 두 번 더 독립 재현해 다음 VU 진행 여부를 판단한다. 관측 손실은 별도로 기록하며, 필요하면 더 높은 VU에서 요청 경계와 관측 경계를 각각 확인한다. 2026-07-18의 3,000 VU 결과와 해석은 [114 문서](../../docs/114-multi-hot-seat-3000vu-results.md)에 남겼다.
+
+먼저 새 fixture를 만든 뒤 낮은 VU부터 실행한다. 네 좌석 fixture를 사용할 때 `CONCURRENCY=20`이면 좌석별 약 5개 VU가 경쟁한다.
+
+```bash
+fixture="$(MYSQL_HOST=127.0.0.1 MYSQL_PORT=10047 MYSQL_PASSWORD='cider123' \
+  scripts/test/seed_pessimistic_lock_fixture.sh | tail -n 1)"
+pt_id="$(echo "$fixture" | awk '{print $2}')"
+s1="$(echo "$fixture" | awk '{print $3}')"
+s2="$(echo "$fixture" | awk '{print $4}')"
+s3="$(echo "$fixture" | awk '{print $5}')"
+s4="$(echo "$fixture" | awk '{print $6}')"
+
+LOCK_STRATEGY=pessimistic \
+SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=30 \
+docker compose up -d --force-recreate app
+
+BASE_URL=http://127.0.0.1:10080 \
+MYSQL_HOST=127.0.0.1 MYSQL_PORT=10047 MYSQL_PASSWORD='cider123' \
+LOCK_STRATEGY=pessimistic \
+RESULT_DIR="build/k6-results/multi-seat/concurrency-20" \
+scripts/test/observe_pessimistic_lock_run.sh \
+  env BASE_URL=http://127.0.0.1:10080 \
+  PT_ID="$pt_id" SEAT_IDS="$s1,$s2,$s3,$s4" \
+  SEAT_POOL_SIZE=4 SEATS_PER_REQUEST=1 CONCURRENCY=20 \
+  JWT_SECRET='change-me-jwt-secret-change-me-jwt-secret-change-me-jwt-secret' \
+  scripts/test/run_multi_seat_distributed_k6.sh
+```
+
+같은 fixture를 재사용하지 말고 `CONCURRENCY=50`, `100`, `200` 순서로 매번 새 fixture를 만든다. 각 실행에서 성공 수는 좌석 풀 크기 이하, 나머지는 `SEAT_ALREADY_RESERVED` 409가 정상이다. `unexpected_response`, 내부 오류, HTTP 실패율, Hikari pending, MySQL `data_lock_waits`, p95/p99를 함께 기록한다.
+
 ### 6. 부하 발생기와 앱 프로세스 분리
 
 20,000 VU에서 k6 자체 또는 호스트 OS가 병목인지 분리하려면 Docker k6 실행기를 사용한다. 앱·MySQL·관찰 래퍼는 호스트에서 실행하고, k6만 컨테이너에서 실행한다. macOS Docker Desktop에서는 컨테이너에서 호스트 앱으로 접근할 때 `127.0.0.1` 대신 `host.docker.internal`을 사용한다.
@@ -266,9 +368,57 @@ MYSQL_LOCK_TEST_PASSWORD='로컬 테스트 DB 비밀번호' \
 scripts/test/run_mysql_pessimistic_lock_semantics_test.sh
 ```
 
+## 인기 공연 쓰기·좌석 조회 갱신 부하
+
+`146-popular-write-refresh-load.js`는 인기 공연 한 회차의 좌석 상태 변경과 좌석 현황 조회를 별도 시나리오로 발생시킨다. `run_146_popular_write_refresh_test.sh`는 실행 전 snapshot warm-up, MySQL·Redis·Prometheus·컨테이너·macOS 관측, 실행 후 테스트 데이터 복구를 담당한다. 애플리케이션 코드는 부하 발생기 실행 중 변경하지 않는다.
+
+기본 실행은 다음 네 케이스를 순서대로 수행한다.
+
+| 케이스 | 부하 | 확인 목적 |
+| --- | --- | --- |
+| `write-10` | 상태 변경 10/s, 20초 | 인기 공연 쓰기 기준선 |
+| `write-50` | 상태 변경 50/s, 20초 | 높은 상태 변경률의 p95·redo·flush 관찰 |
+| `mixed-50-100` | 쓰기 50/s + 조회 100/s, 20초 | 상태 변경과 snapshot 재구축의 결합 비용 |
+| `invalidation-burst` | invalidation 직후 조회 2,000건 | cold burst의 fallback·tail latency와 사용자 응답 |
+
+```bash
+RESULT_ROOT=build/k6-results/146.6.3-popular-write-refresh \
+bash scripts/test/run_146_popular_write_refresh_test.sh
+```
+
+한 케이스만 실행하거나 입력률을 조정할 수 있다.
+
+```bash
+CASE_SELECTION=mixed-50-100 \
+MIXED_WRITE_RATE=50 \
+MIXED_READ_RATE=100 \
+MIXED_DURATION=20s \
+bash scripts/test/run_146_popular_write_refresh_test.sh
+```
+
+기본 대상은 `PT_ID=900000001`, Docker app `10080`, management `10081`, MySQL `10047`, Redis `16380`이다. `.env`의 `JWT_SECRET` 또는 `SPRING_JWT_SECRET`을 읽고, 전용 회원 `900009980`부터 21명을 사용한다. 다른 fixture를 사용할 때 `PT_ID`, `MEMBER_ID_BASE`, `MEMBER_POOL_SIZE`, `SEAT_COUNT_LIMIT`을 함께 지정한다.
+
+케이스별 결과 디렉터리에는 `k6-summary.json`, `summary-selected.json`, `mysql-delta.tsv`, Redis·Prometheus 전후 스냅샷, OS·컨테이너 관측 파일, `fixture-state-before.tsv`·`fixture-state-after.tsv`가 저장된다. `case-status.txt`의 `k6_exit=0`은 실행 프로세스의 정상 종료를 뜻한다. 혼합·burst에서 fallback 상한을 초과해 반환된 HTTP 503은 `popular_read_unexpected`와 애플리케이션의 `fallback_rejected` 증분으로 판정한다.
+
+MySQL status counter는 실행 구간의 누적 증분이다. `Innodb_data_writes`와 `Innodb_data_written`에는 page cleaner의 백그라운드 flush가 포함된다. `Innodb_log_waits`와 row lock wait가 0이어도 transaction p95 상승 원인을 단정하지 않고, `iostat`, transaction 구간, 저장장치 지연을 함께 확인한다.
+
+## 커밋 이후 캐시 무효화 유실 재현
+
+`run_148_after_commit_process_crash_test.sh`는 Redis `CLIENT PAUSE ALL`로 `AFTER_COMMIT` 무효화 호출을 대기시킨 뒤 MySQL에서 `LOCKED` commit을 관측하고 `imticket-app` 컨테이너를 종료한다. 재기동 직후 Redis의 이전 `AVAILABLE` snapshot과 좌석 API 응답을 확인하고, TTL 만료 뒤 MySQL 기반 `LOCKED` snapshot 재구축까지 기록한다. 전용 k6 시나리오는 pre-reserve 1회 요청과 프로세스 종료에 따른 전송 실패를 기록한다.
+
+```bash
+RESULT_ROOT=build/k6-results/148.3-after-commit-process-crash \
+TEST_TTL=60s \
+REDIS_PAUSE_MS=30000 \
+bash scripts/test/run_148_after_commit_process_crash_test.sh
+```
+
+실행 결과의 `timeline.tsv`, `k6-summary.json`, `result.txt`를 [인기 공연 캐시 실행 명령](POPULAR_CACHE_TEST_COMMANDS.md)과 [148.3 결과 문서](../../docs/implements/seat-availability/148.3-after-commit-cache-invalidation-failure-test.md)에서 확인한다.
+
 ## fixture·진단 파일
 
 - `seed_pessimistic_lock_fixture.{sh,sql}`: hot-seat 경합용 데이터
+- `seed_multi_hot_seat_fixture.{sh,sql}`: 30-seat distributed hot-seat 경합용 데이터
 - `seed_mysql_benchmark_data.{sh,sql}`: 대량 DB·만료 데이터
 - `seed_large_data.{sh,sql}`, `seed_data.sh`: 로컬 수동 시드
 - `frontend-seed.js`: 프런트 API를 이용한 통합 mock seed (`frontend/public` poster 참조)
