@@ -2,10 +2,13 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.4.4'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'me.champeau.jmh' version '0.7.2'
 }
 
 group = 'org.example'
 version = '0.0.1-SNAPSHOT'
+
+ext['testcontainers.version'] = '2.0.5'
 
 java {
      toolchain {
@@ -41,8 +44,14 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'com.h2database:h2'
+    testImplementation enforcedPlatform('org.testcontainers:testcontainers-bom:2.0.5')
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter:2.0.5'
+    testImplementation 'org.testcontainers:testcontainers-mysql:2.0.5'
 
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    jmh 'org.openjdk.jmh:jmh-core:1.37'
+    jmhAnnotationProcessor 'org.openjdk.jmh:jmh-generator-annprocess:1.37'
 
     implementation 'net.nurigo:sdk:4.3.0'
 
@@ -84,4 +93,8 @@ tasks.named('test') {
             }
         }
     }
+}
+
+tasks.named('jmhJar') {
+    zip64 = true
 }

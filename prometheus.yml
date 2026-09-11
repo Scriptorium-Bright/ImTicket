@@ -27,3 +27,13 @@ scrape_configs:
           - app:10080
         labels:
           component: backend
+
+  - job_name: imticket-waiting-room
+    metrics_path: /actuator/prometheus
+    scrape_interval: 1s
+    scrape_timeout: 900ms
+    static_configs:
+      - targets:
+          - waiting-room-service:10081
+        labels:
+          component: waiting-room
