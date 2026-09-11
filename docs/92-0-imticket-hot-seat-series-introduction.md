@@ -1,5 +1,7 @@
 # ImTicket 예약 경로와 좌석 선점 문제
 
+> VU, p95·p99, Tomcat, Hikari, JPA, JVM, JFR, admission, queue 용어는 [용어 사전](92-appendix-reservation-performance-glossary.md)에 정리했다.
+
 ## 1. 이 기능이 다루는 문제
 
 ImTicket은 공연 좌석 조회부터 예약, 결제, QR 입장까지를 제공하는 티켓팅 백엔드다. 이 글에서 다루는 범위는 사용자가 좌석을 선택하고 결제 화면으로 이동하기 전까지의 `pre-reserve` 경로다.
@@ -44,12 +46,13 @@ Spring Boot application
 예약 API의 진입점은 `ReservationController`의 `POST /api/reservation/pre-reserve`다. 컨트롤러는 요청을 `ReservationPreReserveService`로 전달하고, 서비스는 좌석을 잠그기 전에 요청 자체가 새로운 의도인지부터 확인한다.
 
 ```text
-ReservationController
+Tomcat · Spring Security · ReservationController
     │
     ▼
 ReservationPreReserveService
+    ├── 요청 hash·member ID 조회
     ├── Idempotency-Key claim / replay 판단
-    ├── SeatAdmissionService
+    ├── SeatAdmissionService (JVM-local, non-blocking)
     └── ReservationIdempotentCreationService
             ├── @ReservationLock
             └── ReservationService
@@ -60,7 +63,7 @@ ReservationPreReserveService
 
 `ReservationPreReserveService`는 `(member_id, idempotency_key)`를 기준으로 요청 claim을 만든다. 같은 key로 이미 성공한 요청은 새 예약을 만들지 않고 최초 응답 snapshot을 돌려준다. 같은 key에 다른 좌석이나 회차를 담아 보낸 경우는 의도가 바뀐 요청이므로 충돌로 처리한다.
 
-새 요청일 때만 `SeatAdmissionService`가 해당 좌석의 처리 진입을 판단한다. 이 단계는 성공할 가능성이 없는 대량 요청을 DB transaction까지 보내지 않기 위한 경계다. 통과한 요청은 `ReservationIdempotentCreationService`에서 좌석별 lock과 transaction을 함께 획득한 뒤 `ReservationService`로 들어간다. `ReservationService`는 좌석 ID를 정렬하고 `SeatService.findAndLockSeatsByPerformanceTime()`으로 좌석을 조회한 뒤, 모든 좌석이 `AVAILABLE`인 경우에만 `LOCKED`와 `PENDING_PAYMENT` 예약을 함께 만든다.
+새 요청일 때만 `SeatAdmissionService`가 해당 좌석의 처리 진입을 판단한다. 이 단계는 성공할 가능성이 없는 대량 요청을 좌석 lock과 예약 transaction까지 보내지 않기 위한 경계다. 다만 member ID 조회와 idempotency claim은 admission보다 앞에 있다. 따라서 이 admission은 Tomcat socket을 받는 순간의 ingress gate가 아니며, 이미 worker를 얻기 전의 연결·인증·MVC 대기나 claim 처리까지 없애지는 못한다. 통과한 요청은 `ReservationIdempotentCreationService`에서 좌석별 lock과 transaction을 함께 획득한 뒤 `ReservationService`로 들어간다. `ReservationService`는 좌석 ID를 정렬하고 `SeatService.findAndLockSeatsByPerformanceTime()`으로 좌석을 조회한 뒤, 모든 좌석이 `AVAILABLE`인 경우에만 `LOCKED`와 `PENDING_PAYMENT` 예약을 함께 만든다.
 
 다중 좌석 요청에서 ID를 정렬하는 이유도 이 경로에 있다. 두 transaction이 좌석을 서로 다른 순서로 잠그면 1번을 가진 transaction이 2번을 기다리고, 2번을 가진 transaction이 1번을 기다리는 순환 대기가 생길 수 있다. 요청마다 같은 정렬 순서를 사용하면 이 deadlock 가능성을 낮출 수 있다.
 
@@ -98,8 +101,21 @@ LOCKED + PENDING_PAYMENT
 
 ## 5. 이 연재에서 확인한 흐름
 
-연재는 MySQL 비관적 락을 기준선으로 시작한다. 같은 좌석 하나에 요청을 집중시켜 중복 예약이 사라지는지와, 후발 요청이 DB·connection pool·Tomcat 중 어디에서 기다리는지를 함께 측정했다. 그 결과를 바탕으로 낙관적 락, JVM monitor, `ReentrantLock`, MySQL named lock, 단일 executor를 같은 예약 로직에 대입해 비교했다.
+연재의 흐름은 하나의 성능 개선 직선이 아니라 두 축으로 읽어야 한다.
 
-비교 결과로 단일 JVM에서는 좌석별 공정 `ReentrantLock`을 선택했고, 이 선택만으로는 Tomcat worker가 lock queue를 기다리는 문제가 남는다는 사실을 확인했다. 이어 좌석별 admission을 넣어 대기 요청을 명시적 429로 정리하고, 한 개가 아닌 네 개의 인기 좌석에도 같은 계약이 유지되는지 검증했다.
+```text
+과부하·응답 축
+MySQL pessimistic lock 기준선
+  → JVM ReentrantLock으로 같은 좌석의 DB 대기 이동
+  → 좌석별 local admission으로 lock·예약 transaction 진입 제한
+  → Tomcat ingress·claim 이전 대기는 남음
+  → 제품 정책에 따라 early admission 또는 bounded queue를 다음 경계로 검토
 
-마지막에는 단일 서버를 유지한 이유와, application을 여러 대로 늘려야 하는 조건을 분리했다. 수평 확장은 락을 더 고급스럽게 바꾸는 작업이 아니라 공유 정합성 경계, connection budget, ingress 정책을 다시 설계하는 일이다. 그리고 선점이 끝난 뒤에도 남는 결제·만료 경쟁과 멱등성까지 연결해 예약 경로를 닫았다.
+정합성·재시도 축
+좌석 단일 선점
+  → lock 해제와 transaction commit 범위 정렬
+  → idempotency claim·response snapshot
+  → 결제 완료와 만료 cleanup의 상태 전이 정리
+```
+
+정리하면, JVM lock은 DB 대기 위치를 옮겼고 admission은 lock·예약 transaction 진입을 줄였다. 이후에도 admission 이전의 member lookup과 claim flush가 Tomcat·Hikari를 포화시켰다. 세부 수치와 stack은 [9편](92-9-lock-overhead-boundary-and-redis-queue.md)에 정리했다.
