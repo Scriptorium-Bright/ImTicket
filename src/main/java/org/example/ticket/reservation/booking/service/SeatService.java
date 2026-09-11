@@ -8,6 +8,8 @@ import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.model.PerformanceTime;
 import org.example.ticket.performance.model.SeatPrice;
 import org.example.ticket.performance.repository.PerformanceTimeRepository;
+import org.example.ticket.reservation.booking.cache.SeatMapCacheReader;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.dto.response.SeatResponse;
 import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.example.ticket.reservation.booking.domain.Seat;
@@ -39,6 +41,8 @@ public class SeatService {
     private final PerformanceTimeRepository performanceTimeRepository;
     private final VenueHallSeatTemplateRepository seatTemplateRepository;
     private final ReservationLockStrategyContext lockStrategyContext;
+    private final SeatMapCacheReader seatMapCacheReader;
+    private final SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     @Value("${reservation.lock-strategy:reentrant}")
     private String reservationLockStrategy;
@@ -69,19 +73,19 @@ public class SeatService {
 
     /**
      * 이미 조회하거나 잠근 좌석 목록의 상태를 일괄 변경한다.
-     * 같은 persistence context의 dirty checking으로 변경을 저장한다.
+     * 같은 persistence context의 dirty checking으로 변경을 저장하고 회차 snapshot invalidation event를 발행한다.
      */
     public void changeSeatsState(List<Seat> seats, SeatStatus seatStatus) {
         seats.forEach(seat -> seat.markAsReserved(seatStatus));
+        seatMapInvalidationPublisher.publishForSeats(seats);
     }
 
     /**
      * 공연 회차의 좌석 배치와 현재 상태를 읽기 전용으로 조회한다.
-     * repository DTO projection 결과를 그대로 API 계층에 반환한다.
+     * cache hit는 Redis snapshot을 사용하고, miss·비활성·장애는 기존 DB projection으로 fallback한다.
      */
-    @Transactional(readOnly = true)
     public List<SeatResponse> viewSeatMap(Long performanceTimeId) {
-        return repository.findSeatMapByPerformanceTimeId(performanceTimeId);
+        return seatMapCacheReader.read(performanceTimeId);
     }
 
     /**
@@ -119,6 +123,7 @@ public class SeatService {
                     .map(template -> processSeat(template, performanceTime, priceMap))
                     .toList();
             repository.saveAll(seatsToSave);
+            seatMapInvalidationPublisher.publishForPerformanceTime(performanceTimeId);
         } catch (IllegalStateException e) {
             log.error("Async seat preprocessing failed", e);
             return CompletableFuture.failedFuture(e);

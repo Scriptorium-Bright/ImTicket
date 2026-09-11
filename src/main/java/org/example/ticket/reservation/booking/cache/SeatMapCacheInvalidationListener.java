@@ -7,23 +7,25 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/** DB transaction commit 뒤에만 좌석 snapshot cache를 삭제한다. */
+/** DB transaction commit 뒤에만 좌석 snapshot version 증가와 무효화를 수행한다. */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class SeatMapCacheInvalidationListener {
 
     private final SeatMapCacheStore cacheStore;
+    private final SeatMapCacheReader cacheReader;
     private final MeterRegistry meterRegistry;
 
     /**
-     * transaction commit 뒤 대상 회차 snapshot을 삭제한다.
+     * transaction commit 뒤 대상 회차 version을 증가시키고 snapshot을 삭제한다.
      * commit 이전에 발생한 상태 변경은 listener 실행 대상이 되지 않는다.
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void invalidate(SeatMapInvalidationEvent event) {
         try {
             cacheStore.evict(event.performanceTimeId());
+            cacheReader.resetReadGateAfterInvalidation(event);
             count("invalidation");
         } catch (SeatMapCacheException exception) {
             count("invalidation_failure");

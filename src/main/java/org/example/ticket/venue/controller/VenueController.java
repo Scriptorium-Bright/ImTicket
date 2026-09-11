@@ -2,10 +2,9 @@ package org.example.ticket.venue.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.ticket.venue.dto.request.*;
-import org.example.ticket.venue.dto.request.ShowPlace;
-import org.example.ticket.venue.dto.response.VenueHallResponse;
-import org.example.ticket.venue.dto.response.VenueResponse;
+import org.example.ticket.venue.request.*;
+import org.example.ticket.venue.response.VenueHallResponse;
+import org.example.ticket.venue.response.VenueResponse;
 import org.example.ticket.venue.service.VenueHallService;
 import org.example.ticket.venue.service.VenueService;
 import org.springframework.http.HttpStatus;

@@ -2,8 +2,8 @@ package org.example.ticket.venue.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.example.ticket.venue.dto.request.*;
-import org.example.ticket.venue.dto.response.VenueHallResponse;
+import org.example.ticket.venue.request.*;
+import org.example.ticket.venue.response.VenueHallResponse;
 import org.example.ticket.venue.model.VenueHall;
 import org.example.ticket.venue.model.VenueHallSeatTemplate;
 import org.example.ticket.venue.repository.VenueHallRepository;

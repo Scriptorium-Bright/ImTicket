@@ -34,6 +34,7 @@ public class ReservationRequestHasher {
      */
     public ReservationIntentFingerprint fingerprint(ReservationRequest request) {
         ReservationValidator.validateCreateRequest(request);
+
         if (request.getSeatIds().stream().anyMatch(seatId -> seatId == null || seatId <= 0)) {
             throw new BusinessException(ReservationErrorCode.INVALID_SEAT_ID);
         }
@@ -41,10 +42,9 @@ public class ReservationRequestHasher {
             throw new BusinessException(ReservationErrorCode.DUPLICATE_SEAT_INCLUDED);
         }
 
-        ReservationIntentFingerprint fingerprint = ReservationIntentFingerprintFactory.create(
+        return ReservationIntentFingerprintFactory.create (
                 request.getPerformanceTimeId(),
                 request.getSeatIds()
         );
-        return fingerprint;
     }
 }

@@ -3,7 +3,7 @@ package org.example.ticket.config;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,10 +24,9 @@ public class ShedLockConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(
-            name = "ticket.application.role",
-            havingValue = "reservation",
-            matchIfMissing = true
+    @ConditionalOnExpression(
+            "'${ticket.application.role:reservation}' == 'reservation' && "
+                    + "'${ticket.shedlock.schema-initialization.enabled:true}' == 'true'"
     )
     public InitializingBean shedLockTableInitializer(JdbcTemplate jdbcTemplate) {
         return () -> jdbcTemplate.execute("""

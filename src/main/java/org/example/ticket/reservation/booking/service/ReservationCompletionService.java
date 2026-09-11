@@ -10,6 +10,7 @@ import org.example.ticket.payment.model.PaymentOrder;
 import org.example.ticket.payment.repository.PaymentAttemptRepository;
 import org.example.ticket.payment.repository.PaymentOrderRepository;
 import org.example.ticket.payment.response.PaymentVerificationResponse;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.Seat;
 import org.example.ticket.reservation.booking.repository.ReservationRepository;
@@ -37,6 +38,7 @@ public class ReservationCompletionService {
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final ReservationRepository reservationRepository;
     private final SeatRepository seatRepository;
+    private final SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     /**
      * PG에서 검증된 결제 정보를 예약, 좌석과 결제 주문에 하나의 트랜잭션으로 반영한다.
@@ -76,6 +78,7 @@ public class ReservationCompletionService {
             if (reservation.getReservationStatus() == ReservationStatus.PENDING_PAYMENT) {
                 reservation.expire();
                 seats.forEach(seat -> seat.markAsReserved(SeatStatus.AVAILABLE));
+                seatMapInvalidationPublisher.publishForSeats(seats);
             }
             order.markPaidUnapplied();
             order.markRefundPending();
@@ -87,6 +90,7 @@ public class ReservationCompletionService {
         order.markPaidUnapplied();
         reservation.manageReservationStatus(ReservationStatus.SUCCESS, null);
         seats.forEach(seat -> seat.markAsReserved(SeatStatus.RESERVED));
+        seatMapInvalidationPublisher.publishForSeats(seats);
         order.markApplied();
 
         return PaymentVerificationResponse.of(order, reservation, snapshot.providerTransactionId());

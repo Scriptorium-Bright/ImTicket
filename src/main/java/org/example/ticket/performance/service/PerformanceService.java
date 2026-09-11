@@ -11,6 +11,7 @@ import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.request.PerformanceDetailRequest;
 import org.example.ticket.performance.response.PerformanceOverviewResponse;
 import org.example.ticket.performance.repository.PerformanceRepository;
+import org.example.ticket.performance.storage.LocalImageStorage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -28,7 +29,7 @@ public class PerformanceService {
 
     private final PerformanceRepository performanceRepository;
     private final OrganizerRepository organizerRepository;
-    private final FileService fileService;
+    private final LocalImageStorage imageStorage;
     private final MeterRegistry meterRegistry;
 
     @Transactional
@@ -36,7 +37,7 @@ public class PerformanceService {
 
         Organizer organizer = organizerRepository.findByMemberWalletAddressIgnoreCase(walletAddress)
                 .orElseThrow(() -> new EntityNotFoundException("공연 등록 권한이 없습니다."));
-        String dbFilePath = fileService.saveImages(file);
+        String dbFilePath = imageStorage.saveImages(file);
 
         Performance performance = Performance.builder()
                 .ageLimit(detailsRequest.getAge())

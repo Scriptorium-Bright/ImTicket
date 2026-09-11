@@ -1,6 +1,7 @@
 package org.example.ticket.reservation.booking.service;
 
 import lombok.RequiredArgsConstructor;
+import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.Seat;
@@ -21,6 +22,7 @@ public class ReservationExpirationService {
 
     private final ReservationRepository reservationRepository;
     private final SeatRepository seatRepository;
+    private final SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
     /**
      * 지정 시각 이전에 만료된 결제 대기 예약을 한 배치만큼 정리하고 연결 좌석을 다시 예약 가능 상태로 되돌린다.
@@ -57,6 +59,7 @@ public class ReservationExpirationService {
 
         expiredReservations.forEach(Reservation::expire);
         lockedSeats.forEach(seat -> seat.markAsReserved(SeatStatus.AVAILABLE));
+        seatMapInvalidationPublisher.publishForSeats(lockedSeats);
 
         return new ReservationExpirationResult(expiredReservations.size(), lockedSeats.size());
     }

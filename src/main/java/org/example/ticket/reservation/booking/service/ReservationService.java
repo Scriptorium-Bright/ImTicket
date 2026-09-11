@@ -5,7 +5,6 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.common.exception.BusinessException;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
@@ -21,7 +20,6 @@ import org.example.ticket.reservation.booking.util.lock.ReservationLockStrategy;
 import org.example.ticket.reservation.booking.util.ReservationValidator;
 import org.example.ticket.util.tracing.TracingConstants;
 import org.slf4j.MDC;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
@@ -42,15 +40,12 @@ public class ReservationService {
     private final MemberRepository memberRepository;
     private final SeatService seatService;
     private final ReservationExpirationService reservationExpirationService;
-    private final static long EXPIRED_SCHEDULING_TIME = 30000;
     private static final int EXPIRED_CLEANUP_BATCH_SIZE = 5000;
 
     /**
      * 만료 시각이 지난 결제 대기 예약을 주기적으로 정리하고 좌석을 다시 예약 가능 상태로 돌린다.
      * ShedLock으로 여러 인스턴스가 있어도 한 번에 한 실행자만 정리하며, 실행 단위의 추적 ID를 MDC에 남긴다.
      */
-    @Scheduled(fixedDelay = EXPIRED_SCHEDULING_TIME)
-    @SchedulerLock(name = "cleanupExpiredReservation", lockAtMostFor = "PT6M")
     public void cleanupExpiredReservation() {
         String runId = UUID.randomUUID().toString();
         String correlationId = "cleanup:" + runId;

@@ -1,9 +1,9 @@
 package org.example.ticket.venue.service;
 
 import lombok.RequiredArgsConstructor;
-import org.example.ticket.venue.dto.request.VenueHallRequest;
-import org.example.ticket.venue.dto.request.VenueRequest;
-import org.example.ticket.venue.dto.response.VenueResponse;
+import org.example.ticket.venue.request.VenueHallRequest;
+import org.example.ticket.venue.request.VenueRequest;
+import org.example.ticket.venue.response.VenueResponse;
 import org.example.ticket.venue.model.Venue;
 import org.example.ticket.venue.model.VenueHall;
 import org.example.ticket.venue.repository.VenueRepository;

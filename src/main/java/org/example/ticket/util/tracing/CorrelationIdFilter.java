@@ -20,6 +20,16 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
     private static final Logger log = LoggerFactory.getLogger(CorrelationIdFilter.class);
 
     @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return true;
+    }
+
+    @Override
+    protected boolean shouldNotFilterErrorDispatch() {
+        return true;
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         Map<String, String> previousContext = MDC.getCopyOfContextMap();

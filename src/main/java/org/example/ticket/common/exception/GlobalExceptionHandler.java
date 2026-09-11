@@ -16,6 +16,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -23,10 +25,19 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleAsyncRequestNotUsableException(AsyncRequestNotUsableException exception) {
+        log.debug("Response closed while async request was completing: {}", exception.getMessage());
+    }
+
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException e) {
         ErrorCode errorCode = e.getErrorCode();
-        log.warn("BusinessException: code={}, message={}", errorCode.code(), errorCode.message());
+        if (errorCode == ReservationErrorCode.SEAT_MAP_FALLBACK_OVER_CAPACITY) {
+            log.debug("BusinessException: code={}, message={}", errorCode.code(), errorCode.message());
+        } else {
+            log.warn("BusinessException: code={}, message={}", errorCode.code(), errorCode.message());
+        }
         return toResponse(errorCode);
     }
 
@@ -96,6 +107,12 @@ public class GlobalExceptionHandler {
                 )));
     }
 
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException e) {
+        log.debug("No handler found: method={}, resource={}", e.getHttpMethod(), e.getResourcePath());
+        return toResponse(CommonErrorCode.NOT_FOUND);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException e) {
         log.error("RuntimeException: ", e);
@@ -113,7 +130,13 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ApiResponse<Void>> toResponse(ErrorCode errorCode, String message) {
+        HttpHeaders headers = new HttpHeaders();
+        errorCode.retryAfterSeconds().ifPresent(seconds -> headers.set(
+                HttpHeaders.RETRY_AFTER,
+                Long.toString(seconds)
+        ));
         return ResponseEntity.status(errorCode.status())
+                .headers(headers)
                 .body(ApiResponse.fail(ErrorResponse.of(errorCode.code(), message)));
     }
 }

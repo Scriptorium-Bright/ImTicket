@@ -5,6 +5,8 @@ import lombok.RequiredArgsConstructor;
 import org.example.ticket.common.exception.ErrorCode;
 import org.springframework.http.HttpStatus;
 
+import java.util.OptionalLong;
+
 @Getter
 @RequiredArgsConstructor
 public enum ReservationErrorCode implements ErrorCode {
@@ -23,6 +25,16 @@ public enum ReservationErrorCode implements ErrorCode {
     SEAT_ALREADY_RESERVED(HttpStatus.CONFLICT, "SEAT_ALREADY_RESERVED", "이미 예약 완료된 좌석입니다."),
     SEAT_ADMISSION_REJECTED(HttpStatus.TOO_MANY_REQUESTS, "SEAT_ADMISSION_REJECTED", "좌석 예매 요청이 동시에 몰려 즉시 처리할 수 없습니다. 잠시 후 다시 시도해 주세요."),
     SEAT_LOCK_TIMEOUT(HttpStatus.TOO_MANY_REQUESTS, "SEAT_LOCK_TIMEOUT", "요청이 몰려 좌석 선점 대기 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요."),
+    SEAT_MAP_FALLBACK_OVER_CAPACITY(HttpStatus.SERVICE_UNAVAILABLE, "SEAT_MAP_FALLBACK_OVER_CAPACITY", "좌석 현황 조회가 일시적으로 몰려 처리할 수 없습니다. 잠시 후 다시 시도해 주세요.") {
+        /**
+         * fallback 과부하 응답의 재시도 가능 시점을 초 단위로 반환한다.
+         * 공통 예외 처리기가 Retry-After 응답 header를 생성할 때 사용한다.
+         */
+        @Override
+        public OptionalLong retryAfterSeconds() {
+            return OptionalLong.of(1L);
+        }
+    },
     RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "RESERVATION_NOT_FOUND", "예약을 찾을 수 없습니다."),
     RESERVATION_NOT_OWNER(HttpStatus.NOT_FOUND, "RESERVATION_NOT_OWNER", "예약을 찾을 수 없습니다."),
     RESERVATION_NOT_PENDING(HttpStatus.BAD_REQUEST, "RESERVATION_NOT_PENDING", "예약 대기 상태가 아닙니다."),
