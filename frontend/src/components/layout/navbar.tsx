@@ -12,7 +12,7 @@ import { SignUpModal } from "@/components/auth/SignUpModal"
 export function Navbar() {
     const [isOpen, setIsOpen] = React.useState(false)
     const [scrolled, setScrolled] = React.useState(false)
-    const { isLoggedIn, walletAddress, connectWallet, logout, isSignUpModalOpen, setSignUpModalOpen, setNickname } = useUserStore()
+    const { isLoggedIn, walletAddress, isConnecting, connectWallet, logout, isSignUpModalOpen, setSignUpModalOpen } = useUserStore()
 
     React.useEffect(() => {
         const handleScroll = () => {
@@ -71,9 +71,9 @@ export function Navbar() {
                                     </Button>
                                 </div>
                             ) : (
-                                <Button variant="gradient" size="sm" className="gap-2" onClick={connectWallet}>
+                                <Button variant="gradient" size="sm" className="gap-2" onClick={connectWallet} disabled={isConnecting}>
                                     <Wallet className="w-4 h-4" />
-                                    지갑 연결
+                                    {isConnecting ? "연결 중..." : "지갑 연결"}
                                 </Button>
                             )}
                         </div>
@@ -127,9 +127,9 @@ export function Navbar() {
                                     로그아웃
                                 </Button>
                             ) : (
-                                <Button variant="gradient" size="sm" className="w-full gap-2" onClick={() => { connectWallet(); setIsOpen(false); }}>
+                                <Button variant="gradient" size="sm" className="w-full gap-2" onClick={() => { connectWallet(); setIsOpen(false); }} disabled={isConnecting}>
                                     <Wallet className="w-4 h-4" />
-                                    지갑 연결
+                                    {isConnecting ? "연결 중..." : "지갑 연결"}
                                 </Button>
                             )}
                         </div>
@@ -141,14 +141,7 @@ export function Navbar() {
                 isOpen={isSignUpModalOpen}
                 onClose={() => setSignUpModalOpen(false)}
                 walletAddress={walletAddress || ""}
-                onSuccess={() => {
-                    // Refresh or set logged in
-                    // Ideally we fetch nickname again
-                    if (walletAddress) {
-                        // Simple optimistic update or fetch
-                        setNickname("New User") // Or fetch from API
-                    }
-                }}
+                onSuccess={() => undefined}
             />
         </>
     )
