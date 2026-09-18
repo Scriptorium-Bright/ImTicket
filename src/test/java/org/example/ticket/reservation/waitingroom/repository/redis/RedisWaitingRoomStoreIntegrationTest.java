@@ -1,7 +1,9 @@
 package org.example.ticket.reservation.waitingroom.repository.redis;
 
 import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
+import org.example.ticket.reservation.waitingroom.dto.WaitingRoomPromotionResult;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketSnapshot;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketTransition;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
@@ -17,13 +19,16 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -256,6 +261,103 @@ class RedisWaitingRoomStoreIntegrationTest {
                 Duration.ofSeconds(1),
                 retention
         ).admitted()).extracting(WaitingRoomTicketTransition::ticketId).containsExactly(second);
+    }
+
+    /**
+     * 서로 다른 application instance를 모사한 두 Store가 같은 admission window를 동시에 promote해도
+     * Redis Lua가 quota와 FIFO를 하나의 원자 경계로 지키는지 검증한다.
+     */
+    @Test
+    void coordinatesConcurrentPromotionAcrossStoreInstances() throws Exception {
+        Duration retention = Duration.ofHours(1);
+        List<UUID> tickets = List.of(
+                UUID.fromString("abababab-abab-abab-abab-ababababab01"),
+                UUID.fromString("abababab-abab-abab-abab-ababababab02"),
+                UUID.fromString("abababab-abab-abab-abab-ababababab03"),
+                UUID.fromString("abababab-abab-abab-abab-ababababab04"),
+                UUID.fromString("abababab-abab-abab-abab-ababababab05")
+        );
+        for (int index = 0; index < tickets.size(); index++) {
+            store.join(
+                    PERFORMANCE_TIME_ID,
+                    70L + index,
+                    tickets.get(index),
+                    NOW,
+                    NOW.plus(Duration.ofMinutes(30)),
+                    retention,
+                    10
+            );
+        }
+
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        store.configureMeterRegistry(meterRegistry);
+        store.usePipelinedPromotionMetadata(true);
+        RedisWaitingRoomStore secondStore = new RedisWaitingRoomStore(
+                redisTemplate,
+                new WaitingRoomKeyFactory()
+        );
+        secondStore.configureMeterRegistry(meterRegistry);
+        secondStore.usePipelinedPromotionMetadata(true);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<WaitingRoomPromotionResult> first = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return store.promote(
+                        PERFORMANCE_TIME_ID,
+                        NOW,
+                        Duration.ofMinutes(5),
+                        10,
+                        3,
+                        Duration.ofSeconds(1),
+                        retention
+                );
+            });
+            Future<WaitingRoomPromotionResult> second = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return secondStore.promote(
+                        PERFORMANCE_TIME_ID,
+                        NOW,
+                        Duration.ofMinutes(5),
+                        10,
+                        3,
+                        Duration.ofSeconds(1),
+                        retention
+                );
+            });
+
+            assertThat(ready.await(2, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            List<UUID> admitted = new ArrayList<>();
+            first.get(3, TimeUnit.SECONDS).admitted().stream()
+                    .map(WaitingRoomTicketTransition::ticketId)
+                    .forEach(admitted::add);
+            second.get(3, TimeUnit.SECONDS).admitted().stream()
+                    .map(WaitingRoomTicketTransition::ticketId)
+                    .forEach(admitted::add);
+
+            assertThat(admitted).hasSize(3);
+            assertThat(new HashSet<>(admitted)).hasSize(3);
+            assertThat(new HashSet<>(admitted))
+                    .containsExactlyInAnyOrderElementsOf(tickets.subList(0, 3));
+
+            WaitingRoomKeyFactory keys = new WaitingRoomKeyFactory();
+            assertThat(redisTemplate.opsForZSet().zCard(keys.active(PERFORMANCE_TIME_ID))).isEqualTo(3L);
+            assertThat(redisTemplate.opsForZSet().zCard(keys.waiting(PERFORMANCE_TIME_ID))).isEqualTo(2L);
+            assertThat(meterRegistry.timer(
+                    "imticket.waiting-room.promotion.phase.duration",
+                    "phase", "candidate_metadata",
+                    "metadata_mode", "pipeline"
+            ).count()).isGreaterThanOrEqualTo(2L);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
     }
 
     /** queue capacity 초과가 새 ticket을 만들지 않고 명시적 예외를 반환하는지 검증한다. */
