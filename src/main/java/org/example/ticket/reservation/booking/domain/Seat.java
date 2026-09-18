@@ -9,7 +9,7 @@ import org.example.ticket.util.constant.SeatStatus;
 
 @Entity
 @Table(indexes = {
-        @Index(name = "idx_seat_perf_status", columnList = "performance_time_id, seat_status")
+        @Index(name = "idx_seat_perf", columnList = "performance_time_id")
 }, uniqueConstraints = {
         @UniqueConstraint(
                 name = "uk_seat_performance_position",
