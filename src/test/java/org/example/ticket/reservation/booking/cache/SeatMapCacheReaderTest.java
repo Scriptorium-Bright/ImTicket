@@ -33,6 +33,7 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -159,6 +160,62 @@ class SeatMapCacheReaderTest {
         verify(databaseReader).readSplit(performanceTimeId);
         assertThat(counter("singleflight_owner")).isEqualTo(1.0);
         assertThat(counter("singleflight_joined")).isEqualTo(requestCount - 1.0);
+    }
+
+    /**
+     * single-flight map은 SeatMapCacheReader 인스턴스(JVM) 로컬 상태이므로
+     * 서로 다른 application instance를 모사한 두 Reader의 cold miss는 각각 DB rebuild를 시작한다.
+     * 이 테스트는 distributed single-flight가 현재 보장 범위 밖임을 의도적으로 증명한다.
+     */
+    @Test
+    void separateReaderInstancesCanEachOwnTheSameColdMiss() throws Exception {
+        long performanceTimeId = 7L;
+        SeatMapDatabaseSnapshot databaseSnapshot = databaseSnapshot(11L, SeatStatus.AVAILABLE);
+        CountDownLatch bothDatabaseReadsEntered = new CountDownLatch(2);
+        CountDownLatch releaseDatabase = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
+        when(cacheStore.get(performanceTimeId)).thenReturn(Optional.empty());
+        when(cacheStore.currentLayoutGeneration(performanceTimeId)).thenReturn(0L);
+        when(cacheStore.currentAvailabilityGeneration(performanceTimeId)).thenReturn(0L);
+        when(databaseReader.readSplit(performanceTimeId)).thenAnswer(invocation -> {
+            bothDatabaseReadsEntered.countDown();
+            assertThat(releaseDatabase.await(2, TimeUnit.SECONDS)).isTrue();
+            return databaseSnapshot;
+        });
+        when(cacheStore.putIfGenerationsMatch(anyLong(), anyLong(), anyLong(), anyList(), anyList(), any()))
+                .thenReturn(true);
+
+        SimpleMeterRegistry secondMeterRegistry = new SimpleMeterRegistry();
+        SeatMapCacheReader secondReader = new SeatMapCacheReader(
+                featurePolicy,
+                properties,
+                cacheStore,
+                databaseReader,
+                secondMeterRegistry
+        );
+
+        try {
+            Future<List<SeatResponse>> first = executor.submit(() -> reader.read(performanceTimeId));
+            Future<List<SeatResponse>> second = executor.submit(() -> secondReader.read(performanceTimeId));
+
+            assertThat(bothDatabaseReadsEntered.await(2, TimeUnit.SECONDS)).isTrue();
+            releaseDatabase.countDown();
+
+            assertThat(first.get(2, TimeUnit.SECONDS)).hasSize(1);
+            assertThat(second.get(2, TimeUnit.SECONDS)).hasSize(1);
+        } finally {
+            releaseDatabase.countDown();
+            executor.shutdownNow();
+        }
+
+        verify(databaseReader, times(2)).readSplit(performanceTimeId);
+        assertThat(counter("singleflight_owner")).isEqualTo(1.0);
+        assertThat(secondMeterRegistry.counter(
+                "imticket.seat-map-cache.events",
+                "event", "singleflight_owner"
+        ).count()).isEqualTo(1.0);
     }
 
     @Test
