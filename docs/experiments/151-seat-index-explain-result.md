@@ -4,7 +4,7 @@
 
 Branch: `experiment/waiting-room-cache-validation`
 
-GitHub Actions run: `35361449327`
+GitHub Actions run: `35362206738`
 
 Artifact: `seat-index-explain`
 
@@ -55,8 +55,8 @@ performance_time_id 조건 사용
 Sort: id
 
 actual:
-index lookup 0.480..53.6 ms
-sort 포함 root 65.6..69.8 ms
+index lookup 0.532..56.6 ms
+sort 포함 root 68.1..72.3 ms
 rows 60,000
 ```
 
@@ -69,7 +69,7 @@ idx_seat_perf
 별도 Sort 없음
 
 actual:
-0.412..51.5 ms
+0.417..51.0 ms
 rows 60,000
 ```
 
@@ -85,7 +85,7 @@ idx_seat_perf_status
 Sort: id
 
 actual:
-index lookup 0.314..39.5 ms
+index lookup 0.264..39.9 ms
 sort 포함 root 49.8..53.1 ms
 rows 60,000
 ```
@@ -99,7 +99,7 @@ idx_seat_perf
 별도 Sort 없음
 
 actual:
-0.278..38.0 ms
+0.235..37.8 ms
 rows 60,000
 ```
 
@@ -107,8 +107,8 @@ rows 60,000
 
 | Query | Current `(performance_time_id, seat_status)` | Candidate `(performance_time_id)` | 관측 |
 |---|---:|---:|---|
-| Layout root end | 69.8 ms | 51.5 ms | 약 26.2% 감소 |
-| Availability root end | 53.1 ms | 38.0 ms | 약 28.4% 감소 |
+| Layout root end | 72.3 ms | 51.0 ms | 약 29.5% 감소 |
+| Availability root end | 53.1 ms | 37.8 ms | 약 28.8% 감소 |
 | Layout filesort | 발생 | 없음 | Candidate 우세 |
 | Availability filesort | 발생 | 없음 | Candidate 우세 |
 | 실제 반환 rows | 60,000 | 60,000 | 동일 |
@@ -256,7 +256,7 @@ full-seat DB projection
 
 주의:
 
-- 69.8ms -> 51.5ms를 확정적인 26% 성능 개선으로 전면에 내세우지 않는다.
+- 72.3ms -> 51.0ms를 확정적인 29.5% 성능 개선으로 전면에 내세우지 않는다.
 - CI 1회 실행이므로 실행계획 차이의 보조 관측값으로만 사용한다.
 - 대표 정량 성과는 controlled Cache experiment의 `301 -> 1`을 사용한다.
 
