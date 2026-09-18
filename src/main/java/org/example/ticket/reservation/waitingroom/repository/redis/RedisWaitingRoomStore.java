@@ -1,5 +1,8 @@
 package org.example.ticket.reservation.waitingroom.repository.redis;
 
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import org.example.ticket.reservation.waitingroom.domain.WaitingRoomTicketStatus;
 import org.example.ticket.reservation.waitingroom.dto.WaitingRoomJoinResult;
@@ -9,7 +12,11 @@ import org.example.ticket.reservation.waitingroom.dto.WaitingRoomTicketTransitio
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomCapacityException;
 import org.example.ticket.reservation.waitingroom.exception.WaitingRoomStorageException;
 import org.example.ticket.reservation.waitingroom.repository.WaitingRoomStore;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -41,6 +48,35 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
 
     private final StringRedisTemplate redisTemplate;
     private final WaitingRoomKeyFactory keyFactory;
+
+    /*
+     * 실험 브랜치의 promotion 관측용 collaborator다.
+     * final field가 아니므로 기존 2-arg constructor와 integration fixture를 깨지 않는다.
+     */
+    private MeterRegistry meterRegistry;
+    private boolean promotionMetadataPipelineEnabled;
+
+    /** Spring runtime에서 promotion phase metric을 기록할 registry를 연결한다. */
+    @Autowired(required = false)
+    void configureMeterRegistry(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
+
+    /**
+     * 후보 ticket의 memberId를 개별 HGETALL로 읽을지 pipeline HGET으로 읽을지 선택한다.
+     * 기본값 false로 기존 경로를 유지해 같은 branch에서 Before/After를 재현할 수 있다.
+     */
+    @Autowired
+    void configurePromotionMetadataPipeline(
+            @Value("${reservation.waiting-room.promotion-metadata-pipeline-enabled:false}") boolean enabled
+    ) {
+        this.promotionMetadataPipelineEnabled = enabled;
+    }
+
+    /** integration test에서 A/B 경로를 명시적으로 선택하기 위한 package-private hook이다. */
+    void usePipelinedPromotionMetadata(boolean enabled) {
+        this.promotionMetadataPipelineEnabled = enabled;
+    }
 
     /** 회원·회차 ticket을 Lua 한 번으로 생성하거나 기존 mapping을 반환한다.
      * sequence, waiting index, deadline index, owner mapping을 함께 기록한다. */
@@ -153,21 +189,27 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
         requirePositiveDuration(storageRetention, "storageRetention");
         long windowId = Math.floorDiv(now.toEpochMilli(), promotionInterval.toMillis());
         List<WaitingRoomTicketTransition> promoted = new ArrayList<>();
-        List<WaitingRoomTicketTransition> expired = expireDue(
-                performanceTimeId,
-                now,
-                admitPerInterval,
-                storageRetention
+        List<WaitingRoomTicketTransition> expired = timed(
+                "expiry_total",
+                () -> expireDue(
+                        performanceTimeId,
+                        now,
+                        admitPerInterval,
+                        storageRetention
+                )
         ).stream()
                 .map(snapshot -> new WaitingRoomTicketTransition(snapshot.ticketId(), snapshot.status()))
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
 
-        Set<String> candidateSet = executeCommand(
-                "waiting candidate batch lookup",
-                () -> redisTemplate.opsForZSet().range(
-                        keyFactory.waiting(performanceTimeId),
-                        0,
-                        admitPerInterval - 1L
+        Set<String> candidateSet = timed(
+                "candidate_lookup",
+                () -> executeCommand(
+                        "waiting candidate batch lookup",
+                        () -> redisTemplate.opsForZSet().range(
+                                keyFactory.waiting(performanceTimeId),
+                                0,
+                                admitPerInterval - 1L
+                        )
                 )
         );
         if (candidateSet == null || candidateSet.isEmpty()) {
@@ -177,14 +219,19 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
         List<UUID> candidateIds = candidateSet.stream()
                 .map(this::parseTicketId)
                 .toList();
+        recordCandidateCount(candidateIds.size());
+        List<Long> ownerIds = timed(
+                "candidate_metadata",
+                () -> resolveCandidateOwnerIds(performanceTimeId, candidateIds)
+        );
         List<String> keys = new ArrayList<>(4 + candidateIds.size() * 2);
         keys.add(keyFactory.waiting(performanceTimeId));
         keys.add(keyFactory.active(performanceTimeId));
         keys.add(keyFactory.deadline(performanceTimeId));
         keys.add(keyFactory.admission(performanceTimeId));
-        for (UUID ticketId : candidateIds) {
-            WaitingRoomTicketSnapshot candidate = find(performanceTimeId, ticketId).orElse(null);
-            long ownerId = candidate == null ? 1L : candidate.memberId();
+        for (int index = 0; index < candidateIds.size(); index++) {
+            UUID ticketId = candidateIds.get(index);
+            long ownerId = ownerIds.get(index);
             keys.add(keyFactory.ticket(performanceTimeId, ticketId));
             keys.add(keyFactory.owner(performanceTimeId, ownerId));
         }
@@ -199,13 +246,89 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
         arguments.add(Integer.toString(candidateIds.size()));
         candidateIds.forEach(ticketId -> arguments.add(ticketId.toString()));
 
-        String result = execute(
-                PROMOTE_BATCH_SCRIPT,
-                keys,
-                arguments.toArray(String[]::new)
+        String result = timed(
+                "batch_transition",
+                () -> execute(
+                        PROMOTE_BATCH_SCRIPT,
+                        keys,
+                        arguments.toArray(String[]::new)
+                )
         );
         appendBatchResult(result, promoted, expired);
         return new WaitingRoomPromotionResult(promoted, expired);
+    }
+
+    /**
+     * promotion 후보 ticket의 owner ID를 현재 legacy 경로 또는 pipeline 경로로 조회한다.
+     * pipeline 경로는 ticket당 HGETALL network round trip을 하나의 pipeline flush로 합친다.
+     */
+    private List<Long> resolveCandidateOwnerIds(long performanceTimeId, List<UUID> candidateIds) {
+        if (!promotionMetadataPipelineEnabled) {
+            return candidateIds.stream()
+                    .map(ticketId -> find(performanceTimeId, ticketId)
+                            .map(WaitingRoomTicketSnapshot::memberId)
+                            .orElse(1L))
+                    .toList();
+        }
+
+        try {
+            List<Object> results = redisTemplate.executePipelined(new SessionCallback<Object>() {
+                @Override
+                @SuppressWarnings({"rawtypes", "unchecked"})
+                public <K, V> Object execute(RedisOperations<K, V> operations) {
+                    RedisOperations rawOperations = operations;
+                    for (UUID ticketId : candidateIds) {
+                        rawOperations.opsForHash().get(
+                                keyFactory.ticket(performanceTimeId, ticketId),
+                                "memberId"
+                        );
+                    }
+                    return null;
+                }
+            });
+            if (results.size() != candidateIds.size()) {
+                throw new WaitingRoomStorageException(
+                        "promotion metadata pipeline 결과 개수가 후보 수와 일치하지 않습니다."
+                );
+            }
+            List<Long> ownerIds = new ArrayList<>(results.size());
+            for (Object result : results) {
+                ownerIds.add(result == null ? 1L : Long.parseLong(result.toString()));
+            }
+            return ownerIds;
+        } catch (WaitingRoomStorageException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw storageFailure("promotion candidate metadata pipeline 조회에 실패했습니다.", exception);
+        }
+    }
+
+    /** promotion 단계별 시간을 low-cardinality phase/mode tag로 기록한다. */
+    private <T> T timed(String phase, Supplier<T> operation) {
+        if (meterRegistry == null) {
+            return operation.get();
+        }
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            return operation.get();
+        } finally {
+            sample.stop(meterRegistry.timer(
+                    "imticket.waiting-room.promotion.phase.duration",
+                    "phase", phase,
+                    "metadata_mode", promotionMetadataPipelineEnabled ? "pipeline" : "legacy"
+            ));
+        }
+    }
+
+    /** 한 promotion cycle에서 읽은 후보 수를 A/B 비교용 distribution으로 기록한다. */
+    private void recordCandidateCount(int candidateCount) {
+        if (meterRegistry == null) {
+            return;
+        }
+        DistributionSummary.builder("imticket.waiting-room.promotion.candidate.count")
+                .tag("metadata_mode", promotionMetadataPipelineEnabled ? "pipeline" : "legacy")
+                .register(meterRegistry)
+                .record(candidateCount);
     }
 
     /** batch Lua 결과를 전이 상태별 최소 lifecycle 정보로 복원한다.
@@ -279,16 +402,22 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
             int batchSize,
             Duration storageRetention
     ) {
-        Set<String> waitingDue = executeCommand(
-                "waiting deadline lookup",
-                () -> redisTemplate.opsForZSet().rangeByScore(
-                        keyFactory.deadline(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+        Set<String> waitingDue = timed(
+                "expiry_waiting_lookup",
+                () -> executeCommand(
+                        "waiting deadline lookup",
+                        () -> redisTemplate.opsForZSet().rangeByScore(
+                                keyFactory.deadline(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+                        )
                 )
         );
-        Set<String> activeDue = executeCommand(
-                "active lease lookup",
-                () -> redisTemplate.opsForZSet().rangeByScore(
-                        keyFactory.active(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+        Set<String> activeDue = timed(
+                "expiry_active_lookup",
+                () -> executeCommand(
+                        "active lease lookup",
+                        () -> redisTemplate.opsForZSet().rangeByScore(
+                                keyFactory.active(performanceTimeId), Double.NEGATIVE_INFINITY, now.toEpochMilli(), 0, batchSize
+                        )
                 )
         );
         List<String> due = new ArrayList<>();
@@ -299,19 +428,22 @@ public class RedisWaitingRoomStore implements WaitingRoomStore {
             due.addAll(activeDue);
         }
         List<WaitingRoomTicketSnapshot> expired = new ArrayList<>();
-        for (String ticket : due) {
-            UUID ticketId = UUID.fromString(ticket);
-            find(performanceTimeId, ticketId)
-                    .flatMap(snapshot -> transition(
-                            performanceTimeId,
-                            snapshot.memberId(),
-                            ticketId,
-                            "EXPIRE",
-                            now,
-                            storageRetention
-                    ))
-                    .ifPresent(expired::add);
-        }
+        timed("expiry_transition", () -> {
+            for (String ticket : due) {
+                UUID ticketId = UUID.fromString(ticket);
+                find(performanceTimeId, ticketId)
+                        .flatMap(snapshot -> transition(
+                                performanceTimeId,
+                                snapshot.memberId(),
+                                ticketId,
+                                "EXPIRE",
+                                now,
+                                storageRetention
+                        ))
+                        .ifPresent(expired::add);
+            }
+            return expired.size();
+        });
         return expired;
     }
 
