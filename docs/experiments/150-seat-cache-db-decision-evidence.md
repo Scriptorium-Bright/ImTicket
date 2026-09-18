@@ -76,6 +76,8 @@ LOCKED -> AVAILABLE
 
 ## 2. Index EXPLAIN 실험
 
+실행 결과: [151-seat-index-explain-result.md](151-seat-index-explain-result.md)
+
 실험 파일:
 
 ```text
@@ -310,8 +312,8 @@ Static Layout / Dynamic Availability split
 
 | Query | Current index | Candidate index | 판단 |
 |---|---|---|---|
-| layout | TBD | TBD | TBD |
-| availability | TBD | TBD | TBD |
+| layout | filesort 발생, root end 72.3ms | filesort 없음, root end 51.0ms | 후보 인덱스가 query ordering에 더 적합 |
+| availability | filesort 발생, root end 53.1ms | filesort 없음, root end 37.8ms | 후보 인덱스가 query ordering에 더 적합 |
 
 ### Cache effect
 
@@ -329,8 +331,8 @@ Static Layout / Dynamic Availability split
 
 다음을 만족하면 Seat Cache 사례는 종료한다.
 
-- [ ] 60,000-seat query의 current/candidate EXPLAIN을 보관
-- [ ] index 변경 여부를 결과 기준으로 결정
+- [x] 60,000-seat query의 current/candidate EXPLAIN을 보관
+- [x] index 변경 여부를 결과 기준으로 결정
 - [ ] Cache OFF/ON 대표 결과 하나를 최신 코드 기준으로 선택
 - [ ] Redis 선택 이유를 "느린 DB"가 아니라 "반복 projection 제거"로 설명
 - [x] same-JVM single-flight 보장 범위 테스트
