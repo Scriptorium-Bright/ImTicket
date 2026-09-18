@@ -8,6 +8,8 @@ on:
       - "scripts/test/seat_index_explain_experiment.sql"
       - "scripts/test/run_seat_index_explain_experiment.sh"
       - "scripts/test/summarize_seat_index_explain.py"
+      - "src/main/java/org/example/ticket/reservation/booking/domain/Seat.java"
+      - "scripts/db/migrations/V20260919_01__replace_seat_perf_status_index.sql"
       - ".github/workflows/experiment-seat-index-explain.yml"
   workflow_dispatch:
 
@@ -59,6 +61,31 @@ jobs:
           bash scripts/test/run_seat_index_explain_experiment.sh
           echo "===== RESULTS.md ====="
           cat build/db-results/seat-index-explain/RESULTS.md
+
+      - name: Validate Seat index migration candidate
+        env:
+          MYSQL_PWD: rootpass
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -u root imticket_index_test <<'SQL'
+          DROP TABLE IF EXISTS Seat;
+          CREATE TABLE Seat (
+            id BIGINT NOT NULL PRIMARY KEY,
+            performance_time_id BIGINT NOT NULL,
+            seat_status VARCHAR(32) NOT NULL,
+            KEY idx_seat_perf_status (performance_time_id, seat_status)
+          ) ENGINE=InnoDB;
+          SQL
+
+          mysql -h 127.0.0.1 -P 3306 -u root imticket_index_test \
+            < scripts/db/migrations/V20260919_01__replace_seat_perf_status_index.sql
+
+          new_count="$(mysql -h 127.0.0.1 -P 3306 -u root -N -B imticket_index_test -e \
+            "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='Seat' AND index_name='idx_seat_perf'")"
+          old_count="$(mysql -h 127.0.0.1 -P 3306 -u root -N -B imticket_index_test -e \
+            "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name='Seat' AND index_name='idx_seat_perf_status'")"
+
+          test "$new_count" -eq 1
+          test "$old_count" -eq 0
 
       - name: Upload evidence
         uses: actions/upload-artifact@v4
