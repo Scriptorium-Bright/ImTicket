@@ -55,8 +55,8 @@ performance_time_id 조건 사용
 Sort: id
 
 actual:
-index lookup 0.532..56.6 ms
-sort 포함 root 68.1..72.3 ms
+index lookup 0.695..55.8 ms
+sort 포함 root 68.4..72.3 ms
 rows 60,000
 ```
 
@@ -69,7 +69,7 @@ idx_seat_perf
 별도 Sort 없음
 
 actual:
-0.417..51.0 ms
+0.388..51.0 ms
 rows 60,000
 ```
 
@@ -85,7 +85,7 @@ idx_seat_perf_status
 Sort: id
 
 actual:
-index lookup 0.264..39.9 ms
+index lookup 0.313..39.7 ms
 sort 포함 root 49.8..53.1 ms
 rows 60,000
 ```
@@ -99,7 +99,7 @@ idx_seat_perf
 별도 Sort 없음
 
 actual:
-0.235..37.8 ms
+0.318..37.8 ms
 rows 60,000
 ```
 
