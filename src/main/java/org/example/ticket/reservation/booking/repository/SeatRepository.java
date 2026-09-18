@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.QueryHint;
+import java.util.Collection;
 import java.util.List;
 
 public interface SeatRepository extends JpaRepository<Seat, Long> {
@@ -84,6 +85,41 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
             "FROM Seat s " +
             "WHERE s.performanceTime.id = :performanceTimeId")
     List<SeatResponse> findSeatMapByPerformanceTimeId(@Param("performanceTimeId") Long performanceTimeId);
+
+    /** 공연 회차의 정적 배치 필드만 ID 순서로 조회한다.
+     * 전체 Seat entity를 영속성 컨텍스트에 올리지 않는다. */
+    @Query("SELECT new org.example.ticket.reservation.booking.cache.SeatLayoutCacheEntry(" +
+            "s.id, s.seatFloor, s.seatSection, s.seatRow, s.seatNumber, s.seatType, s.price, s.isReservation) " +
+            "FROM Seat s " +
+            "WHERE s.performanceTime.id = :performanceTimeId " +
+            "ORDER BY s.id")
+    List<org.example.ticket.reservation.booking.cache.SeatLayoutCacheEntry> findSeatLayoutByPerformanceTimeId(
+            @Param("performanceTimeId") Long performanceTimeId
+    );
+
+    /** 공연 회차의 동적 상태와 낙관적 잠금 version만 ID 순서로 조회한다.
+     * 부분 갱신과 전체 재구축에서 같은 projection을 재사용한다. */
+    @Query("SELECT new org.example.ticket.reservation.booking.cache.SeatAvailabilityCacheEntry(" +
+            "s.id, s.seatStatus, s.version) " +
+            "FROM Seat s " +
+            "WHERE s.performanceTime.id = :performanceTimeId " +
+            "ORDER BY s.id")
+    List<org.example.ticket.reservation.booking.cache.SeatAvailabilityCacheEntry> findSeatAvailabilityByPerformanceTimeId(
+            @Param("performanceTimeId") Long performanceTimeId
+    );
+
+    /** commit 이후 변경된 좌석의 동적 필드만 읽는다.
+     * AFTER_COMMIT listener가 Redis Hash 부분 갱신에 사용한다. */
+    @Query("SELECT new org.example.ticket.reservation.booking.cache.SeatAvailabilityCacheEntry(" +
+            "s.id, s.seatStatus, s.version) " +
+            "FROM Seat s " +
+            "WHERE s.performanceTime.id = :performanceTimeId " +
+            "AND s.id IN :seatIds " +
+            "ORDER BY s.id")
+    List<org.example.ticket.reservation.booking.cache.SeatAvailabilityCacheEntry> findSeatAvailabilityByPerformanceTimeIdAndIds(
+            @Param("performanceTimeId") Long performanceTimeId,
+            @Param("seatIds") Collection<Long> seatIds
+    );
 
     /**
      * 공연 회차의 모든 좌석 entity를 조회한다.

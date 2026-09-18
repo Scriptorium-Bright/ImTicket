@@ -83,7 +83,7 @@ public class SeatMapCacheReader {
             return readThroughSingleFlight(performanceTimeId, false);
         }
 
-        Optional<SeatMapCacheSnapshot> cached;
+        Optional<SeatMapCacheParts> cached;
         boolean cacheReadFailed = false;
         try {
             cached = cacheStore.get(performanceTimeId);
@@ -152,7 +152,7 @@ public class SeatMapCacheReader {
             return readDatabaseWithFallbackBudget(performanceTimeId);
         }
 
-        Optional<SeatMapCacheSnapshot> cached;
+        Optional<SeatMapCacheParts> cached;
         boolean cacheReadFailed = false;
         try {
             cached = cacheStore.get(performanceTimeId);
@@ -217,7 +217,7 @@ public class SeatMapCacheReader {
         boolean cacheWritable = !cacheReadFailed;
         if (cacheWritable) {
             try {
-                Optional<SeatMapCacheSnapshot> rechecked = cacheStore.get(performanceTimeId);
+                Optional<SeatMapCacheParts> rechecked = cacheStore.get(performanceTimeId);
                 if (rechecked.isPresent()) {
                     count("singleflight_recheck_hit");
                     return toResponses(rechecked.get());
@@ -233,10 +233,12 @@ public class SeatMapCacheReader {
             }
         }
 
-        long expectedVersion = 0L;
+        long expectedLayoutGeneration = 0L;
+        long expectedAvailabilityGeneration = 0L;
         if (cacheWritable) {
             try {
-                expectedVersion = cacheStore.currentVersion(performanceTimeId);
+                expectedLayoutGeneration = cacheStore.currentLayoutGeneration(performanceTimeId);
+                expectedAvailabilityGeneration = cacheStore.currentAvailabilityGeneration(performanceTimeId);
             } catch (SeatMapCacheException exception) {
                 cacheWritable = false;
                 count("version_read_failure");
@@ -248,16 +250,19 @@ public class SeatMapCacheReader {
             }
         }
 
-        List<SeatResponse> responses = readDatabaseWithFallbackBudget(performanceTimeId);
+        SeatMapDatabaseSnapshot databaseSnapshot = readDatabaseSnapshotWithFallbackBudget(performanceTimeId);
+        List<SeatResponse> responses = toResponses(databaseSnapshot);
         if (!cacheWritable) {
             return responses;
         }
 
         try {
-            boolean stored = cacheStore.putIfVersionMatches(
+            boolean stored = cacheStore.putIfGenerationsMatch(
                     performanceTimeId,
-                    expectedVersion,
-                    responses.stream().map(SeatMapCacheEntry::from).toList(),
+                    expectedLayoutGeneration,
+                    expectedAvailabilityGeneration,
+                    databaseSnapshot.layoutEntries(),
+                    databaseSnapshot.availabilityEntries(),
                     properties.getTtl()
             );
             count(stored ? "load" : "conditional_write_rejected");
@@ -276,9 +281,34 @@ public class SeatMapCacheReader {
      * Redis snapshot을 API 응답 DTO 목록으로 변환한다.
      * cache hit와 owner·joiner 결과의 응답 contract를 동일하게 유지한다.
      */
-    private List<SeatResponse> toResponses(SeatMapCacheSnapshot snapshot) {
-        return snapshot.entries().stream()
-                .map(SeatMapCacheEntry::toResponse)
+    private List<SeatResponse> toResponses(SeatMapCacheParts cacheParts) {
+        return cacheParts.layoutEntries().stream()
+                .map(layout -> {
+                    SeatAvailabilityCacheEntry availability = cacheParts.availabilityEntries().get(layout.id());
+                    if (availability == null) {
+                        throw new SeatMapCacheException(
+                                "Seat map cache read returned an incomplete seat set",
+                                new IllegalStateException("Missing availability for seatId=" + layout.id())
+                        );
+                    }
+                    return layout.toResponse(availability.seatStatus());
+                })
+                .toList();
+    }
+
+    /** DB projection 결과를 기존 좌석 응답 순서로 조합한다.
+     * 동적 상태가 없는 좌석은 불완전한 DB 결과로 보고 즉시 실패시킨다. */
+    private List<SeatResponse> toResponses(SeatMapDatabaseSnapshot databaseSnapshot) {
+        java.util.Map<Long, SeatAvailabilityCacheEntry> availabilityById = databaseSnapshot.availabilityEntries().stream()
+                .collect(java.util.stream.Collectors.toMap(SeatAvailabilityCacheEntry::seatId, entry -> entry));
+        return databaseSnapshot.layoutEntries().stream()
+                .map(layout -> {
+                    SeatAvailabilityCacheEntry availability = availabilityById.get(layout.id());
+                    if (availability == null) {
+                        throw new IllegalStateException("Missing database availability for seatId=" + layout.id());
+                    }
+                    return layout.toResponse(availability.seatStatus());
+                })
                 .toList();
     }
 
@@ -298,6 +328,25 @@ public class SeatMapCacheReader {
         try {
             count("database_projection");
             return databaseReader.read(performanceTimeId);
+        } finally {
+            permit.release();
+        }
+    }
+
+    /** split cache miss의 두 projection을 하나의 DB 읽기 예산으로 제한한다.
+     * 같은 회차의 cold burst가 Hikari 연결을 모두 점유하지 않게 한다. */
+    private SeatMapDatabaseSnapshot readDatabaseSnapshotWithFallbackBudget(long performanceTimeId) {
+        Semaphore permit = fallbackPermits.computeIfAbsent(
+                performanceTimeId,
+                ignored -> new Semaphore(properties.getFallbackMaxConcurrency(), true)
+        );
+        if (!permit.tryAcquire()) {
+            count("fallback_rejected");
+            throw new BusinessException(ReservationErrorCode.SEAT_MAP_FALLBACK_OVER_CAPACITY);
+        }
+        try {
+            count("database_projection");
+            return databaseReader.readSplit(performanceTimeId);
         } finally {
             permit.release();
         }

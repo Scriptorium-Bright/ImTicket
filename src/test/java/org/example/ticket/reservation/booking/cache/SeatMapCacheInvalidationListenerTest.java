@@ -19,11 +19,15 @@ class SeatMapCacheInvalidationListenerTest {
     @Mock
     private SeatMapCacheReader cacheReader;
 
+    @Mock
+    private SeatMapDatabaseReader databaseReader;
+
     @Test
     void evictsSnapshotAfterCommitEvent() {
         SeatMapCacheInvalidationListener listener = new SeatMapCacheInvalidationListener(
                 cacheStore,
                 cacheReader,
+                databaseReader,
                 new SimpleMeterRegistry()
         );
 
@@ -41,10 +45,35 @@ class SeatMapCacheInvalidationListenerTest {
         SeatMapCacheInvalidationListener listener = new SeatMapCacheInvalidationListener(
                 cacheStore,
                 cacheReader,
+                databaseReader,
                 new SimpleMeterRegistry()
         );
 
         assertThatCode(() -> listener.invalidate(new SeatMapInvalidationEvent(7L)))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void updatesOnlyChangedAvailabilityFieldsAfterCommit() {
+        SeatMapInvalidationEvent event = new SeatMapInvalidationEvent(7L, java.util.List.of(11L, 12L));
+        java.util.List<SeatAvailabilityCacheEntry> entries = java.util.List.of(
+                new SeatAvailabilityCacheEntry(11L, org.example.ticket.util.constant.SeatStatus.LOCKED, 8L),
+                new SeatAvailabilityCacheEntry(12L, org.example.ticket.util.constant.SeatStatus.AVAILABLE, 9L)
+        );
+        org.mockito.Mockito.when(databaseReader.readAvailability(7L, event.seatIds())).thenReturn(entries);
+        org.mockito.Mockito.when(cacheStore.updateAvailability(7L, entries)).thenReturn(true);
+        SeatMapCacheInvalidationListener listener = new SeatMapCacheInvalidationListener(
+                cacheStore,
+                cacheReader,
+                databaseReader,
+                new SimpleMeterRegistry()
+        );
+
+        listener.invalidate(event);
+
+        verify(databaseReader).readAvailability(7L, event.seatIds());
+        verify(cacheStore).updateAvailability(7L, entries);
+        org.mockito.Mockito.verify(cacheStore, org.mockito.Mockito.never()).evict(7L);
+        verify(cacheReader).resetReadGateAfterInvalidation(event);
     }
 }

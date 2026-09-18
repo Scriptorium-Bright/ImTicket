@@ -93,6 +93,34 @@ export const clearWaitingRoomEntryPass = (performanceTimeId: string) => {
     }
 };
 
+export type SeatStatus = 'AVAILABLE' | 'LOCKED' | 'UNAVAILABLE' | 'RESERVED';
+export type SeatInfo = 'VIP' | 'R' | 'S' | 'A' | 'B' | 'C';
+
+export interface SeatResponse {
+    id: number;
+    seatFloor: number;
+    seatSection: string;
+    seatRow: number;
+    seatNumber: number;
+    seatType: SeatInfo;
+    price: number;
+    isReservation: boolean;
+    seatStatus: SeatStatus;
+}
+
+export interface ReservationRequest {
+    performanceTimeId: number;
+    seatIds: number[];
+}
+
+export interface ReservationCreateResponse {
+    id: number;
+    totalPrice: number;
+    orderUid: string;
+    expiredTime: string;
+    responses: SeatResponse[];
+}
+
 const waitingRoomPassHeader = (performanceTimeId: string) => {
     if (typeof window === 'undefined') {
         return {};
@@ -102,11 +130,12 @@ const waitingRoomPassHeader = (performanceTimeId: string) => {
 };
 
 export const seatApi = {
-    getSeats: (performanceTimeId: string) => api.get(`/api/seats/${performanceTimeId}`, {
+    getSeats: (performanceTimeId: string, signal?: AbortSignal) => api.get<SeatResponse[]>(`/api/seats/${performanceTimeId}`, {
         headers: waitingRoomPassHeader(performanceTimeId),
+        signal,
     }),
-    preReserve: (data: any, idempotencyKey: string = createReservationIdempotencyKey()) =>
-        api.post('/api/reservation/pre-reserve', data, {
+    preReserve: (data: ReservationRequest, idempotencyKey: string = createReservationIdempotencyKey()) =>
+        api.post<ReservationCreateResponse>('/api/reservation/pre-reserve', data, {
             headers: {
                 'Idempotency-Key': idempotencyKey,
                 ...waitingRoomPassHeader(String(data.performanceTimeId)),

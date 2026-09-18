@@ -19,6 +19,10 @@ const nextConfig = {
                 destination: 'http://localhost:7001/api/ticket/:path*',
             },
             {
+                source: '/api/reservation/waiting-room/:path*',
+                destination: 'http://localhost:10082/api/reservation/waiting-room/:path*',
+            },
+            {
                 source: '/api/:path*',
                 destination: 'http://localhost:10080/api/:path*',
             },

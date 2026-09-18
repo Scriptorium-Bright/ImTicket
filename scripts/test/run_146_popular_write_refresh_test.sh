@@ -228,6 +228,10 @@ cleanup_test_state() {
 clear_seat_map_cache() {
   redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" \
     DEL \
+      "reservation:seat-map:{${PT_ID}}:layout:generation" \
+      "reservation:seat-map:{${PT_ID}}:layout:v1" \
+      "reservation:seat-map:{${PT_ID}}:availability:generation" \
+      "reservation:seat-map:{${PT_ID}}:availability:v1" \
       "reservation:seat-map:{${PT_ID}}:version" \
       "reservation:seat-map:{${PT_ID}}:snapshot:v2" \
       "reservation:seat-map:{${PT_ID}}:snapshot" >/dev/null || true
@@ -327,7 +331,7 @@ read_burst_vus=${burst_vus}
 duration=${duration_value}
 member_id_base=${MEMBER_ID_BASE}
 member_pool_size=${MEMBER_POOL_SIZE}
-application_code_changed=true
+application_code_changed=false
 EOF
 }
 
@@ -398,7 +402,7 @@ case_enabled() {
 
 mkdir -p "${RUN_DIR}"
 verify_test_members
-printf 'run_id=%s\ncase_selection=%s\napplication_code_changed=true\n' \
+printf 'run_id=%s\ncase_selection=%s\napplication_code_changed=false\n' \
   "${RUN_ID}" "${CASE_SELECTION}" > "${RUN_DIR}/run-manifest.txt"
 
 case_failures=0

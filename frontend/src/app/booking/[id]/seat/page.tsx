@@ -6,24 +6,55 @@ import { SeatMap } from "@/components/booking/seat-map"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Timer, CreditCard } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { nftApi, gatewayTicketApi } from "@/services/api"
-import { useUserStore } from "@/store/useUserStore"
-
-interface Seat {
-    id: string
-    row: string
-    col: number
-    status: "available" | "reserved" | "selected" | "vip"
-    price: number
-}
+import { useParams, useRouter } from "next/navigation"
+import { seatApi, type SeatResponse } from "@/services/api"
+import { toSeatView, type Seat } from "@/components/booking/seat-map"
 
 export default function SeatSelectionPage() {
     const router = useRouter()
-    const { walletAddress } = useUserStore()
+    const params = useParams<{ id: string }>()
+    const performanceTimeId = String(params.id)
     const [isBooking, setIsBooking] = React.useState(false)
     const [selectedSeats, setSelectedSeats] = React.useState<Seat[]>([])
-    const params = { id: "1" } // Mock params for now since we are not using real routing params yet
+    const [seats, setSeats] = React.useState<Seat[]>([])
+    const [isLoadingSeats, setIsLoadingSeats] = React.useState(true)
+    const [seatLoadError, setSeatLoadError] = React.useState<string | null>(null)
+
+    React.useEffect(() => {
+        let isActive = true
+        const controller = new AbortController()
+
+        const loadSeats = async () => {
+            setIsLoadingSeats(true)
+            setSeatLoadError(null)
+            setSelectedSeats([])
+            try {
+                const response = await seatApi.getSeats(performanceTimeId, controller.signal)
+                if (isActive) {
+                    setSeats((response.data as SeatResponse[]).map(toSeatView))
+                }
+            } catch (error) {
+                const isRequestCanceled = error instanceof Error
+                    && (error.name === "AbortError" || error.name === "CanceledError")
+                if (!isActive || isRequestCanceled) {
+                    return
+                }
+                console.error("좌석 정보를 불러오지 못했습니다.", error)
+                setSeats([])
+                setSeatLoadError("좌석 정보를 불러오지 못했습니다. 입장권과 공연 회차를 확인해주세요.")
+            } finally {
+                if (isActive) {
+                    setIsLoadingSeats(false)
+                }
+            }
+        }
+
+        void loadSeats()
+        return () => {
+            isActive = false
+            controller.abort()
+        }
+    }, [performanceTimeId])
 
     const handleSeatSelect = (seat: Seat) => {
         if (selectedSeats.find(s => s.id === seat.id)) {
@@ -42,40 +73,24 @@ export default function SeatSelectionPage() {
             alert("좌석을 선택해주세요.")
             return
         }
-        if (!walletAddress) {
-            alert("지갑을 연결해주세요.")
-            return
-        }
-
         setIsBooking(true)
         try {
-            // For the mockup, we'll mint a ticket for the first selected seat
-            // In a real app, we'd loop or batch mint
-            const seat = selectedSeats[0]
-            const details = {
-                performanceId: params.id,
-                seatId: seat,
-                price: 150000, // Mock price
-                date: new Date().toISOString()
-            }
+            const response = await seatApi.preReserve({
+                performanceTimeId: Number(performanceTimeId),
+                seatIds: selectedSeats.map((seat) => seat.backendId),
+            })
 
-            // Use Gateway API directly for full IPFS + Minting flow
-            // 'from' is the organizer (mocked for now), 'to' is the user
-            const organizerAddress = "0x409E0826FE9E332617B8c38C0580aa93cBfaB0c6" // Gateway Signer Address
-
-            await gatewayTicketApi.buy(organizerAddress, walletAddress, details)
-
-            alert("예매가 완료되었습니다! (NFT 티켓 발급 완료)")
-            router.push("/mypage")
+            alert(`좌석 선점이 완료되었습니다. 예약 ID: ${response.data.id}`)
         } catch (error) {
             console.error(error)
-            alert("예매 처리에 실패했습니다.")
+            alert("좌석 선점에 실패했습니다. 입장권과 좌석 상태를 확인해주세요.")
         } finally {
             setIsBooking(false)
         }
     }
 
     const totalPrice = selectedSeats.reduce((sum, seat) => sum + seat.price, 0)
+    const formatPrice = (price: number) => `${price.toLocaleString("ko-KR")}원`
 
     return (
         <main className="min-h-screen bg-background pb-20">
@@ -102,8 +117,11 @@ export default function SeatSelectionPage() {
                             </CardHeader>
                             <CardContent>
                                 <SeatMap
+                                    seats={seats}
                                     onSeatSelect={handleSeatSelect}
                                     selectedSeats={selectedSeats}
+                                    isLoading={isLoadingSeats}
+                                    error={seatLoadError}
                                 />
                             </CardContent>
                         </Card>
@@ -139,7 +157,7 @@ export default function SeatSelectionPage() {
                                             selectedSeats.map((seat) => (
                                                 <div key={seat.id} className="flex justify-between text-sm">
                                                     <span>좌석 {seat.row}-{seat.col}</span>
-                                                    <span>{seat.price} ETH</span>
+                                                    <span>{formatPrice(seat.price)}</span>
                                                 </div>
                                             ))
                                         )}
@@ -147,7 +165,7 @@ export default function SeatSelectionPage() {
 
                                     <div className="border-t border-white/10 pt-4 flex justify-between items-center font-bold text-lg">
                                         <span>총 결제 금액</span>
-                                        <span className="text-primary">{totalPrice.toFixed(2)} ETH</span>
+                                        <span className="text-primary">{formatPrice(totalPrice)}</span>
                                     </div>
                                 </CardContent>
                                 <CardFooter>

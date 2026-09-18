@@ -6,22 +6,22 @@ import org.example.ticket.util.constant.SeatStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
@@ -37,6 +37,9 @@ class RedisSeatMapCacheStoreTest {
     @Mock
     private ValueOperations<String, String> valueOperations;
 
+    @Mock
+    private HashOperations<String, Object, Object> hashOperations;
+
     private ObjectMapper objectMapper;
     private SeatMapCacheKeyFactory keyFactory;
     private RedisSeatMapCacheStore store;
@@ -47,84 +50,62 @@ class RedisSeatMapCacheStoreTest {
         keyFactory = new SeatMapCacheKeyFactory();
         store = new RedisSeatMapCacheStore(redisTemplate, objectMapper, keyFactory);
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(redisTemplate.opsForHash()).thenReturn(hashOperations);
     }
 
     @Test
-    void readsVersionedJsonSnapshotOnlyWhenVersionMatches() throws Exception {
+    void readsLayoutAndAvailabilityOnlyWhenBothGenerationsAndSeatSetMatch() throws Exception {
         long performanceTimeId = 7L;
-        List<SeatMapCacheEntry> entries = List.of(
-                new SeatMapCacheEntry(11L, 1, "A", 1, 1, SeatInfo.VIP, 10000, false, SeatStatus.AVAILABLE)
-        );
-        String payload = objectMapper.writeValueAsString(new SeatMapCacheSnapshot(3L, entries));
+        SeatLayoutCacheEntry layout = layout(11L);
+        String payload = objectMapper.writeValueAsString(new SeatLayoutCachePayload(3L, List.of(layout)));
         when(valueOperations.multiGet(List.of(
-                keyFactory.version(performanceTimeId),
-                keyFactory.snapshot(performanceTimeId),
-                keyFactory.legacySnapshot(performanceTimeId)
-        ))).thenReturn(Arrays.asList("3", payload, null));
-
-        Optional<SeatMapCacheSnapshot> result = store.get(performanceTimeId);
-
-        assertThat(result).contains(new SeatMapCacheSnapshot(3L, entries));
-    }
-
-    @Test
-    void versionMismatchReturnsEmptySnapshot() throws Exception {
-        long performanceTimeId = 7L;
-        List<SeatMapCacheEntry> entries = List.of(
-                new SeatMapCacheEntry(11L, 1, "A", 1, 1, SeatInfo.VIP, 10000, false, SeatStatus.AVAILABLE)
-        );
-        String payload = objectMapper.writeValueAsString(new SeatMapCacheSnapshot(2L, entries));
-        when(valueOperations.multiGet(List.of(
-                keyFactory.version(performanceTimeId),
-                keyFactory.snapshot(performanceTimeId),
-                keyFactory.legacySnapshot(performanceTimeId)
-        ))).thenReturn(Arrays.asList("3", payload, null));
-
-        assertThat(store.get(performanceTimeId)).isEmpty();
-    }
-
-    @Test
-    void missingSnapshotReturnsEmptyOptionalAndMissingVersionMeansZero() {
-        when(valueOperations.multiGet(anyList())).thenReturn(Arrays.asList(null, null, null));
-
-        assertThat(store.get(7L)).isEmpty();
-        assertThat(store.currentVersion(7L)).isZero();
-    }
-
-    @Test
-    void legacyRawListSnapshotIsReadableDuringMigration() throws Exception {
-        long performanceTimeId = 7L;
-        List<SeatMapCacheEntry> entries = List.of(
-                new SeatMapCacheEntry(11L, 1, "A", 1, 1, SeatInfo.VIP, 10000, false, SeatStatus.AVAILABLE)
-        );
-        String payload = objectMapper.writeValueAsString(entries);
-        when(valueOperations.multiGet(List.of(
-                keyFactory.version(performanceTimeId),
-                keyFactory.snapshot(performanceTimeId),
-                keyFactory.legacySnapshot(performanceTimeId)
-        ))).thenReturn(Arrays.asList("0", null, payload));
-
-        assertThat(store.get(performanceTimeId))
-                .contains(new SeatMapCacheSnapshot(0L, entries));
-    }
-
-    @Test
-    void legacyRawListIsMissAfterVersionWasIncremented() throws Exception {
-        String payload = objectMapper.writeValueAsString(List.of(
-                new SeatMapCacheEntry(11L, 1, "A", 1, 1, SeatInfo.VIP, 10000, false, SeatStatus.AVAILABLE)
+                keyFactory.layoutGeneration(performanceTimeId),
+                keyFactory.layout(performanceTimeId),
+                keyFactory.availabilityGeneration(performanceTimeId)
+        ))).thenReturn(Arrays.asList("3", payload, "5"));
+        when(hashOperations.entries(keyFactory.availability(performanceTimeId))).thenReturn(Map.of(
+                "__generation", "5",
+                "__seat_count", "1",
+                "11", "AVAILABLE|7"
         ));
-        when(valueOperations.multiGet(List.of(
-                keyFactory.version(7L),
-                keyFactory.snapshot(7L),
-                keyFactory.legacySnapshot(7L)
-        ))).thenReturn(Arrays.asList("1", null, payload));
+
+        assertThat(store.get(performanceTimeId)).contains(
+                new SeatMapCacheParts(
+                        3L,
+                        List.of(layout),
+                        5L,
+                        Map.of(11L, new SeatAvailabilityCacheEntry(11L, SeatStatus.AVAILABLE, 7L))
+                )
+        );
+    }
+
+    @Test
+    void generationMismatchReturnsEmpty() throws Exception {
+        String payload = objectMapper.writeValueAsString(new SeatLayoutCachePayload(2L, List.of(layout(11L))));
+        when(valueOperations.multiGet(anyList())).thenReturn(Arrays.asList("3", payload, "5"));
+        when(hashOperations.entries(keyFactory.availability(7L))).thenReturn(Map.of(
+                "__generation", "5", "__seat_count", "1", "11", "AVAILABLE|7"
+        ));
 
         assertThat(store.get(7L)).isEmpty();
     }
 
     @Test
-    void malformedSnapshotIsReportedAsCacheException() {
-        when(valueOperations.multiGet(anyList())).thenReturn(Arrays.asList("0", "not-json", null));
+    void missingAvailabilityReturnsEmpty() throws Exception {
+        String payload = objectMapper.writeValueAsString(new SeatLayoutCachePayload(0L, List.of(layout(11L))));
+        when(valueOperations.multiGet(anyList())).thenReturn(Arrays.asList("0", payload, "0"));
+        when(hashOperations.entries(keyFactory.availability(7L))).thenReturn(Map.of());
+
+        assertThat(store.get(7L)).isEmpty();
+    }
+
+    @Test
+    void malformedAvailabilityIsReportedAsCacheException() throws Exception {
+        String payload = objectMapper.writeValueAsString(new SeatLayoutCachePayload(0L, List.of(layout(11L))));
+        when(valueOperations.multiGet(anyList())).thenReturn(Arrays.asList("0", payload, "0"));
+        when(hashOperations.entries(keyFactory.availability(7L))).thenReturn(Map.of(
+                "__generation", "0", "__seat_count", "1", "11", "broken"
+        ));
 
         assertThatThrownBy(() -> store.get(7L))
                 .isInstanceOf(SeatMapCacheException.class)
@@ -132,54 +113,79 @@ class RedisSeatMapCacheStoreTest {
     }
 
     @Test
-    void conditionalWriteSerializesVersionAndDelegatesToRedisScript() {
+    void missingGenerationMeansZero() {
+        when(valueOperations.get(keyFactory.layoutGeneration(7L))).thenReturn(null);
+        when(valueOperations.get(keyFactory.availabilityGeneration(7L))).thenReturn(null);
+
+        assertThat(store.currentLayoutGeneration(7L)).isZero();
+        assertThat(store.currentAvailabilityGeneration(7L)).isZero();
+    }
+
+    @Test
+    void fullWriteUsesBothGenerationKeysAndAvailabilityPairs() {
         doReturn(1L).when(redisTemplate).execute(
-                any(RedisScript.class),
-                anyList(),
-                any(Object[].class)
-        );
-        List<SeatMapCacheEntry> entries = List.of(
-                new SeatMapCacheEntry(11L, 1, "A", 1, 1, SeatInfo.VIP, 10000, false, SeatStatus.AVAILABLE)
+                any(RedisScript.class), anyList(), any(Object[].class)
         );
 
-        assertThat(store.putIfVersionMatches(7L, 3L, entries, Duration.ofMinutes(5))).isTrue();
+        assertThat(store.putIfGenerationsMatch(
+                7L,
+                3L,
+                5L,
+                List.of(layout(11L)),
+                List.of(new SeatAvailabilityCacheEntry(11L, SeatStatus.AVAILABLE, 7L)),
+                Duration.ofMinutes(5)
+        )).isTrue();
 
         verify(redisTemplate).execute(
                 any(RedisScript.class),
-                eq(List.of(keyFactory.version(7L), keyFactory.snapshot(7L))),
-                eq("3"),
-                anyString(),
-                eq("300000")
-        );
-    }
-
-    @Test
-    void conditionalWriteReturnsFalseWhenRedisRejectsVersion() {
-        doReturn(0L).when(redisTemplate).execute(
-                any(RedisScript.class),
-                anyList(),
+                eq(List.of(
+                        keyFactory.layoutGeneration(7L),
+                        keyFactory.availabilityGeneration(7L),
+                        keyFactory.layout(7L),
+                        keyFactory.availability(7L)
+                )),
                 any(Object[].class)
         );
-
-        assertThat(store.putIfVersionMatches(7L, 3L, List.of(), Duration.ofMinutes(5))).isFalse();
     }
 
     @Test
-    void evictDelegatesVersionIncrementAndSnapshotDeletionToRedisScript() {
-        doReturn(4L).when(redisTemplate).execute(
-                any(RedisScript.class),
-                anyList()
+    void availabilityUpdateUsesSeatIdStatusAndVersionTriples() {
+        doReturn(1L).when(redisTemplate).execute(
+                any(RedisScript.class), anyList(), any(Object[].class)
         );
+
+        assertThat(store.updateAvailability(
+                7L,
+                List.of(new SeatAvailabilityCacheEntry(11L, SeatStatus.LOCKED, 8L))
+        )).isTrue();
+
+        verify(redisTemplate).execute(
+                any(RedisScript.class),
+                eq(List.of(keyFactory.availabilityGeneration(7L), keyFactory.availability(7L))),
+                any(Object[].class)
+        );
+    }
+
+    @Test
+    void evictIncrementsBothGenerationsAndDeletesSplitAndLegacyKeys() {
+        doReturn(4L).when(redisTemplate).execute(any(RedisScript.class), anyList());
 
         store.evict(7L);
 
         verify(redisTemplate).execute(
                 any(RedisScript.class),
                 eq(List.of(
-                        keyFactory.version(7L),
-                        keyFactory.snapshot(7L),
-                        keyFactory.legacySnapshot(7L)
+                        keyFactory.layoutGeneration(7L),
+                        keyFactory.availabilityGeneration(7L),
+                        keyFactory.layout(7L),
+                        keyFactory.availability(7L),
+                        keyFactory.legacySnapshot(7L),
+                        keyFactory.legacyRawSnapshot(7L)
                 ))
         );
+    }
+
+    private static SeatLayoutCacheEntry layout(Long id) {
+        return new SeatLayoutCacheEntry(id, 1, "A", 1, 1, SeatInfo.VIP, 10000, false);
     }
 }

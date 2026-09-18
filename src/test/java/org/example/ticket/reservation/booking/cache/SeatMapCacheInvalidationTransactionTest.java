@@ -93,6 +93,11 @@ class SeatMapCacheInvalidationTransactionTest {
         }
 
         @Bean
+        SeatMapDatabaseReader seatMapDatabaseReader() {
+            return mock(SeatMapDatabaseReader.class);
+        }
+
+        @Bean
         SimpleMeterRegistry meterRegistry() {
             return new SimpleMeterRegistry();
         }

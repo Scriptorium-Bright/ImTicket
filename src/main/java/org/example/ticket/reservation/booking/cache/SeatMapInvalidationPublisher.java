@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /** 좌석 상태 변경 지점이 cache 구현을 직접 알지 않도록 invalidation event 발행을 감싼다. */
 @Component
@@ -31,11 +32,17 @@ public class SeatMapInvalidationPublisher {
      */
     public void publishForSeats(Collection<Seat> seats) {
         seats.stream()
-                .map(Seat::getPerformanceTime)
                 .filter(Objects::nonNull)
-                .map(performanceTime -> performanceTime.getId())
-                .filter(Objects::nonNull)
-                .distinct()
-                .forEach(this::publishForPerformanceTime);
+                .filter(seat -> seat.getId() != null)
+                .filter(seat -> seat.getPerformanceTime() != null)
+                .map(seat -> java.util.Map.entry(seat.getPerformanceTime(), seat.getId()))
+                .filter(entry -> entry.getKey().getId() != null)
+                .collect(Collectors.groupingBy(
+                        entry -> entry.getKey().getId(),
+                        Collectors.mapping(java.util.Map.Entry::getValue, Collectors.toList())
+                ))
+                .forEach((performanceTimeId, seatIds) -> eventPublisher.publishEvent(
+                        new SeatMapInvalidationEvent(performanceTimeId, seatIds)
+                ));
     }
 }

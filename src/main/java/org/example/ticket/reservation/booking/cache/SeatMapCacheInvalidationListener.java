@@ -15,6 +15,7 @@ public class SeatMapCacheInvalidationListener {
 
     private final SeatMapCacheStore cacheStore;
     private final SeatMapCacheReader cacheReader;
+    private final SeatMapDatabaseReader databaseReader;
     private final MeterRegistry meterRegistry;
 
     /**
@@ -24,13 +25,21 @@ public class SeatMapCacheInvalidationListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void invalidate(SeatMapInvalidationEvent event) {
         try {
-            cacheStore.evict(event.performanceTimeId());
+            if (event.requiresFullRebuild()) {
+                cacheStore.evict(event.performanceTimeId());
+                count("invalidation");
+            } else {
+                boolean updated = cacheStore.updateAvailability(
+                        event.performanceTimeId(),
+                        databaseReader.readAvailability(event.performanceTimeId(), event.seatIds())
+                );
+                count(updated ? "availability_update" : "availability_update_skipped");
+            }
             cacheReader.resetReadGateAfterInvalidation(event);
-            count("invalidation");
-        } catch (SeatMapCacheException exception) {
+        } catch (RuntimeException exception) {
             count("invalidation_failure");
             log.warn(
-                    "Seat map cache invalidation failed; TTL remains the stale snapshot safeguard. performanceTimeId={}, reason={}",
+                    "Seat map cache update failed; TTL remains the stale snapshot safeguard. performanceTimeId={}, reason={}",
                     event.performanceTimeId(),
                     exception.getMessage()
             );

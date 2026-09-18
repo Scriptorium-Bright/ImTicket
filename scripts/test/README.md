@@ -2,7 +2,7 @@
 
 이 디렉터리는 예매 경로를 검증하는 k6 시나리오, 셸 실행기, SQL fixture와 재현·관측 스크립트를 한곳에 둔다. 실행 결과 로그와 summary는 소스와 섞지 않고 `build/k6-results/`에 저장한다.
 
-인기 공연 좌석 캐시 활성·비활성 비교와 OCI 재현 명령은 [POPULAR_CACHE_TEST_COMMANDS.md](POPULAR_CACHE_TEST_COMMANDS.md)에 모아 두었다. 각 테스트의 가설·관측·설계 판단은 [인기 공연 캐시 활성·비활성 실험의 의미](../../docs/implements/seat-availability/146.6.3-popular-cache-toggle-test-meaning.md)에서 읽는다.
+인기 공연 좌석 캐시 활성·비활성 비교와 OCI 재현 명령은 [POPULAR_CACHE_TEST_COMMANDS.md](POPULAR_CACHE_TEST_COMMANDS.md)에 모아 두었다. 각 테스트의 가설·관측·설계 판단은 [인기 공연 캐시 활성·비활성 실험의 의미](../../docs/2026-09/implements/seat-availability/146.6.3-popular-cache-toggle-test-meaning.md)에서 읽는다.
 
 ### 로컬 `.env` 자동 로드
 
@@ -282,7 +282,7 @@ JFR_ENABLED=true \
 scripts/test/run_multi_hot_seat_matrix.sh multi-hot-seat
 ```
 
-30-seat fixture는 `seed_multi_hot_seat_fixture.sh`가 매 run 새로 만들며, 결과는 `build/k6-results/multi-hot-seat-matrix/`에 저장한다. 자세한 Grafana·JFR 판정 순서는 [132 문서](../../docs/132-2000vu-lock-overhead-jfr-matrix.md)를 따른다.
+30-seat fixture는 `seed_multi_hot_seat_fixture.sh`가 매 run 새로 만들며, 결과는 `build/k6-results/multi-hot-seat-matrix/`에 저장한다. 자세한 Grafana·JFR 판정 순서는 [132 문서](../../docs/2026-07/132-2000vu-lock-overhead-jfr-matrix.md)를 따른다.
 
 ### 여러 좌석으로 분산되는 자연 경합
 
@@ -370,7 +370,7 @@ scripts/test/run_mysql_pessimistic_lock_semantics_test.sh
 
 ## 인기 공연 쓰기·좌석 조회 갱신 부하
 
-`146-popular-write-refresh-load.js`는 인기 공연 한 회차의 좌석 상태 변경과 좌석 현황 조회를 별도 시나리오로 발생시킨다. `run_146_popular_write_refresh_test.sh`는 실행 전 snapshot warm-up, MySQL·Redis·Prometheus·컨테이너·macOS 관측, 실행 후 테스트 데이터 복구를 담당한다. 애플리케이션 코드는 부하 발생기 실행 중 변경하지 않는다.
+`146-popular-write-refresh-load.js`는 인기 공연 한 회차의 좌석 상태 변경과 좌석 현황 조회를 별도 시나리오로 발생시킨다. `run_146_popular_write_refresh_test.sh`는 실행 전 split 읽기 모델 warm-up, MySQL·Redis·Prometheus·컨테이너·macOS 관측, 실행 후 테스트 데이터 복구를 담당한다. 애플리케이션 코드는 부하 발생기 실행 중 변경하지 않는다.
 
 기본 실행은 다음 네 케이스를 순서대로 수행한다.
 
@@ -378,7 +378,7 @@ scripts/test/run_mysql_pessimistic_lock_semantics_test.sh
 | --- | --- | --- |
 | `write-10` | 상태 변경 10/s, 20초 | 인기 공연 쓰기 기준선 |
 | `write-50` | 상태 변경 50/s, 20초 | 높은 상태 변경률의 p95·redo·flush 관찰 |
-| `mixed-50-100` | 쓰기 50/s + 조회 100/s, 20초 | 상태 변경과 snapshot 재구축의 결합 비용 |
+| `mixed-50-100` | 쓰기 50/s + 조회 100/s, 20초 | 상태 변경과 split 읽기 모델 재구축의 결합 비용 |
 | `invalidation-burst` | invalidation 직후 조회 2,000건 | cold burst의 fallback·tail latency와 사용자 응답 |
 
 ```bash
@@ -404,7 +404,7 @@ MySQL status counter는 실행 구간의 누적 증분이다. `Innodb_data_write
 
 ## 커밋 이후 캐시 무효화 유실 재현
 
-`run_148_after_commit_process_crash_test.sh`는 Redis `CLIENT PAUSE ALL`로 `AFTER_COMMIT` 무효화 호출을 대기시킨 뒤 MySQL에서 `LOCKED` commit을 관측하고 `imticket-app` 컨테이너를 종료한다. 재기동 직후 Redis의 이전 `AVAILABLE` snapshot과 좌석 API 응답을 확인하고, TTL 만료 뒤 MySQL 기반 `LOCKED` snapshot 재구축까지 기록한다. 전용 k6 시나리오는 pre-reserve 1회 요청과 프로세스 종료에 따른 전송 실패를 기록한다.
+`run_148_after_commit_process_crash_test.sh`는 Redis `CLIENT PAUSE ALL`로 `AFTER_COMMIT` 갱신 호출을 대기시킨 뒤 MySQL에서 `LOCKED` commit을 관측하고 `imticket-app` 컨테이너를 종료한다. 재기동 직후 Redis의 이전 `AVAILABLE` 읽기 모델과 좌석 API 응답을 확인하고, TTL 만료 뒤 MySQL 기반 `LOCKED` split 모델 재구축까지 기록한다. 전용 k6 시나리오는 pre-reserve 1회 요청과 프로세스 종료에 따른 전송 실패를 기록한다.
 
 ```bash
 RESULT_ROOT=build/k6-results/148.3-after-commit-process-crash \
@@ -413,7 +413,7 @@ REDIS_PAUSE_MS=30000 \
 bash scripts/test/run_148_after_commit_process_crash_test.sh
 ```
 
-실행 결과의 `timeline.tsv`, `k6-summary.json`, `result.txt`를 [인기 공연 캐시 실행 명령](POPULAR_CACHE_TEST_COMMANDS.md)과 [148.3 결과 문서](../../docs/implements/seat-availability/148.3-after-commit-cache-invalidation-failure-test.md)에서 확인한다.
+실행 결과의 `timeline.tsv`, `k6-summary.json`, `result.txt`를 [인기 공연 캐시 실행 명령](POPULAR_CACHE_TEST_COMMANDS.md)과 [148.3 결과 문서](../../docs/2026-09/implements/seat-availability/148.3-after-commit-cache-invalidation-failure-test.md)에서 확인한다.
 
 ## fixture·진단 파일
 

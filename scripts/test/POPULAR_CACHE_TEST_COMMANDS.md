@@ -2,7 +2,7 @@
 
 이 문서는 인기 공연 한 회차의 좌석 현황 조회를 대상으로 캐시 활성·비활성 조건과 커밋 이후 캐시 무효화 유실 조건을 검증하는 실행 순서를 정리한다. 애플리케이션, MySQL, Redis, k6를 같은 실행 구간에 두고 결과를 build/k6-results/에 저장한다.
 
-각 케이스가 검증한 가설과 설계 판단은 [인기 공연 캐시 활성·비활성 실험의 의미](../../docs/implements/seat-availability/146.6.3-popular-cache-toggle-test-meaning.md)에서 확인한다.
+각 케이스가 검증한 가설과 설계 판단은 [인기 공연 캐시 활성·비활성 실험의 의미](../../docs/2026-09/implements/seat-availability/146.6.3-popular-cache-toggle-test-meaning.md)에서 확인한다.
 
 | 스크립트 | 역할 |
 | --- | --- |
@@ -16,7 +16,7 @@
 
 ## 1. 측정 범위
 
-좌석 현황 조회 API는 GET /api/seats/{performanceTimeId}이다. 캐시 비활성 경로는 MySQL projection을 매 요청 수행한다. 캐시 활성 경로는 Redis snapshot을 조회하고, miss가 발생하면 MySQL 결과로 snapshot을 재구축한다. 좌석 상태 변경이 commit되면 대상 회차의 snapshot을 무효화한다.
+좌석 현황 조회 API는 GET /api/seats/{performanceTimeId}이다. 캐시 비활성 경로는 MySQL projection을 매 요청 수행한다. 현재 캐시 활성 경로는 Redis `layout` String과 `availability` Hash를 읽고, miss가 발생하면 두 projection으로 읽기 모델을 재구축한다. 좌석 상태 변경이 commit되면 대상 회차의 availability만 부분 갱신하며, 좌석 구조 변경은 두 모델을 함께 무효화한다. 구현·비교 수치는 [A1 구현 결과](../../docs/2026-09/implements/seat-availability/146.6.8-static-dynamic-seat-map-separation-result.md)에 기록했다.
 
 이번 비교는 대기실을 우회한 애플리케이션 경계 측정이다. 대기실 입장·승격 지연은 별도 시나리오로 측정한다.
 
@@ -24,9 +24,9 @@
 | --- | --- | --- |
 | write-10 | 좌석 상태 변경 10/s, 20초 | 쓰기 기준선과 캐시 무효화 발행 비용 |
 | write-50 | 좌석 상태 변경 50/s, 20초 | 높은 상태 변경률에서의 쓰기 지연 |
-| mixed-50-100 | 쓰기 50/s + 조회 100/s, 20초 | 상태 변경과 snapshot 재구축의 결합 비용 |
+| mixed-50-100 | 쓰기 50/s + 조회 100/s, 20초 | 상태 변경과 split 읽기 모델 재구축의 결합 비용 |
 | invalidation-burst | 무효화 직후 조회 2,000건 | cold miss, single-flight, 응답 직렬화 비용 |
-| warm-hit 직접 조회 | snapshot warm-up 후 조회 1,000건 | 캐시 hit 경로와 MySQL 직접 조회 경로 비교 |
+| warm-hit 직접 조회 | split 모델 warm-up 후 조회 1,000건 | 캐시 hit 경로와 MySQL 직접 조회 경로 비교 |
 
 기본 대상 회차는 PT_ID=900000001이며 2,000개 좌석을 사용한다. OCI에서 대상 회차가 다르면 PT_ID와 SEAT_COUNT_LIMIT을 함께 바꾼다.
 
@@ -115,7 +115,7 @@ bash scripts/test/run_146_popular_write_refresh_test.sh
 
 RUN_ID에 날짜를 붙여 실행한 경우 결과 확인 명령의 20260903T-cache-off 부분을 실제 RUN_ID로 바꾼다. 같은 RUN_ID를 재사용하면 기존 결과가 덮어써질 수 있다.
 
-## 4. 캐시 활성 비교 실행
+## 4. split 캐시 활성 비교 실행
 
 대상 회차만 캐시를 사용하도록 설정한다. 전역 활성화와 대상 회차 목록이 모두 필요하다.
 
@@ -151,12 +151,15 @@ bash scripts/test/run_146_popular_write_refresh_test.sh
 
 run_waiting_room_load.sh는 직접 좌석 현황 조회를 지원한다. 이 실행은 대기실 API를 호출하지 않는다. load_env_defaults.sh가 Bash 문법을 사용하므로 zsh에서 직접 source하지 않고 Bash로 호출한다.
 
-캐시 활성 상태에서 snapshot을 초기화하고 한 번 재구축한다.
+캐시 활성 상태에서 split 모델을 초기화하고 한 번 재구축한다.
 
 ~~~bash
 redis-cli -h 127.0.0.1 -p 16380 \
   DEL \
-  'reservation:seat-map:{900000001}:version' \
+  'reservation:seat-map:{900000001}:layout:generation' \
+  'reservation:seat-map:{900000001}:layout:v1' \
+  'reservation:seat-map:{900000001}:availability:generation' \
+  'reservation:seat-map:{900000001}:availability:v1' \
   'reservation:seat-map:{900000001}:snapshot:v2' \
   'reservation:seat-map:{900000001}:snapshot'
 curl -fsS --connect-timeout 2 --max-time 20 \
@@ -246,7 +249,7 @@ awk -F '\t' '$1 ~ /Innodb_(data_writes|data_written|log_write_requests|log_write
 
 ## 8. AFTER_COMMIT 무효화 유실 재현
 
-`AFTER_COMMIT`은 MySQL commit 이후 애플리케이션 프로세스 안에서 실행된다. Redis 명령 대기 중 애플리케이션을 종료하면 MySQL 상태와 Redis 조회 snapshot의 반영 시점을 분리해 확인할 수 있다. 애플리케이션 소스는 변경하지 않으며, 전용 k6 시나리오와 외부 실행기가 실행 환경을 제어한다.
+`AFTER_COMMIT`은 MySQL commit 이후 애플리케이션 프로세스 안에서 실행된다. Redis 명령 대기 중 애플리케이션을 종료하면 MySQL 상태와 Redis 읽기 모델의 반영 시점을 분리해 확인할 수 있다. 애플리케이션 소스는 변경하지 않으며, 전용 k6 시나리오와 외부 실행기가 실행 환경을 제어한다.
 
 기본값은 `PT_ID=900000001`, `SEAT_ID=900000001`, 테스트 TTL `60s`, Redis pause `30s`다. 실행기는 대상 fixture를 정리하고 테스트용 캐시 설정으로 애플리케이션을 기동한 뒤, 종료 후 DB fixture·Redis pause·애플리케이션 설정을 원복한다.
 
@@ -279,7 +282,7 @@ jq '.metrics.crash_write_transport_failure, .metrics.crash_write_duration' \
 
 ## 9. 이번 로컬 실행 결과
 
-2026-09-03 로컬 Docker 환경에서 같은 애플리케이션 이미지, Hikari 최대 30, 대기실 비활성, PT_ID=900000001 조건으로 1회씩 실행했다.
+2026-09-03 로컬 Docker 환경에서 같은 애플리케이션 이미지, Hikari 최대 30, 대기실 비활성, PT_ID=900000001 조건으로 기존 full snapshot 경로를 1회씩 실행했다. 아래 값은 A1 split cache 결과와 분리한 과거 기준선이다.
 
 | 케이스 | 캐시 비활성 | 캐시 활성 |
 | --- | ---: | ---: |
@@ -293,11 +296,11 @@ jq '.metrics.crash_write_transport_failure, .metrics.crash_write_duration' \
 | warm-hit 직접 조회 1,000건 p95 | 15,038 ms | 10,067 ms |
 | warm-hit 직접 조회 성공 | 397회 | 1,000회 |
 
-혼합 부하에서는 캐시 활성으로 MySQL projection 횟수와 요청 지연이 함께 감소했다. 쓰기가 계속 snapshot을 무효화하는 조건에서도 single-flight 참여 요청이 발생했다.
+혼합 부하에서는 기존 full snapshot 캐시 활성으로 MySQL projection 횟수와 요청 지연이 함께 감소했다. 쓰기가 계속 snapshot을 무효화하는 조건에서도 single-flight 참여 요청이 발생했다.
 
 write-10과 write-50은 좌석 조회를 발생시키지 않으므로 캐시 활성·비활성의 우열 판단에는 사용하지 않는다. 이 케이스는 쓰기와 무효화 발행의 기준선으로 사용한다.
 
-무효화 직후 2,000건 burst에서는 캐시 활성 조건의 MySQL projection이 4회까지 줄었다. 응답 성공률은 101/2,000으로 낮아졌고 single-flight timeout 35회가 기록됐다. 현재 구현에서는 Redis snapshot 조회·역직렬화·대형 응답 전송이 burst 경로의 별도 병목으로 관찰된다. 이 케이스는 캐시 활성의 일반적인 hit 성능 판단에 warm-hit 결과와 함께 사용한다.
+무효화 직후 2,000건 burst에서는 기존 full snapshot 캐시 활성 조건의 MySQL projection이 4회까지 줄었다. 응답 성공률은 101/2,000으로 낮아졌고 single-flight timeout 35회가 기록됐다. 이 값은 A1 구현 전 기준선이며, 현재 split cache의 300건 cold·warm 결과는 [구현 결과 문서](../../docs/2026-09/implements/seat-availability/146.6.8-static-dynamic-seat-map-separation-result.md)에서 별도로 확인한다.
 
 각 결과는 다음 디렉터리에 있다.
 

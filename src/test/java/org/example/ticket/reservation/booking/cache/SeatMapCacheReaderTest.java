@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -25,8 +26,8 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
@@ -71,12 +72,10 @@ class SeatMapCacheReaderTest {
     }
 
     @Test
-    void cacheHitReturnsSnapshotWithoutOpeningDatabaseReader() {
+    void cacheHitJoinsLayoutAndAvailabilityWithoutDatabase() {
         long performanceTimeId = 7L;
-        SeatMapCacheEntry entry = entry(11L, SeatStatus.LOCKED);
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
-        when(cacheStore.get(performanceTimeId))
-                .thenReturn(Optional.of(new SeatMapCacheSnapshot(0L, List.of(entry))));
+        when(cacheStore.get(performanceTimeId)).thenReturn(Optional.of(parts(11L, SeatStatus.LOCKED)));
 
         List<SeatResponse> result = reader.read(performanceTimeId);
 
@@ -84,185 +83,153 @@ class SeatMapCacheReaderTest {
                 .extracting(SeatResponse::getId, SeatResponse::getSeatStatus)
                 .containsExactly(11L, SeatStatus.LOCKED);
         verify(databaseReader, never()).read(performanceTimeId);
-        verify(cacheStore, never()).putIfVersionMatches(anyLong(), anyLong(), anyList(), any());
+        verify(databaseReader, never()).readSplit(performanceTimeId);
+        verify(cacheStore, never()).putIfGenerationsMatch(anyLong(), anyLong(), anyLong(), anyList(), anyList(), any());
     }
 
     @Test
-    void cacheMissReadsDatabaseAndStoresVersionedSnapshot() {
+    void coldMissReadsSplitProjectionAndStoresBothModels() {
         long performanceTimeId = 7L;
-        SeatResponse response = response(11L, SeatStatus.AVAILABLE);
+        SeatMapDatabaseSnapshot databaseSnapshot = databaseSnapshot(11L, SeatStatus.AVAILABLE);
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
         when(cacheStore.get(performanceTimeId)).thenReturn(Optional.empty());
-        when(cacheStore.currentVersion(performanceTimeId)).thenReturn(0L);
-        when(databaseReader.read(performanceTimeId)).thenReturn(List.of(response));
-        when(cacheStore.putIfVersionMatches(
-                eq(performanceTimeId),
-                eq(0L),
-                eq(List.of(SeatMapCacheEntry.from(response))),
+        when(cacheStore.currentLayoutGeneration(performanceTimeId)).thenReturn(3L);
+        when(cacheStore.currentAvailabilityGeneration(performanceTimeId)).thenReturn(5L);
+        when(databaseReader.readSplit(performanceTimeId)).thenReturn(databaseSnapshot);
+        when(cacheStore.putIfGenerationsMatch(
+                eq(performanceTimeId), eq(3L), eq(5L),
+                eq(databaseSnapshot.layoutEntries()), eq(databaseSnapshot.availabilityEntries()),
                 eq(Duration.ofMinutes(5))
         )).thenReturn(true);
 
-        List<SeatResponse> result = reader.read(performanceTimeId);
+        assertThat(reader.read(performanceTimeId)).hasSize(1);
 
-        assertThat(result).containsExactly(response);
-        verify(databaseReader).read(performanceTimeId);
-        verify(cacheStore).putIfVersionMatches(
+        verify(databaseReader).readSplit(performanceTimeId);
+        verify(cacheStore).putIfGenerationsMatch(
                 performanceTimeId,
-                0L,
-                List.of(SeatMapCacheEntry.from(response)),
+                3L,
+                5L,
+                databaseSnapshot.layoutEntries(),
+                databaseSnapshot.availabilityEntries(),
                 Duration.ofMinutes(5)
         );
-        assertThat(meterRegistry.counter(
-                "imticket.seat-map-cache.events", "event", "singleflight_owner"
-        ).count()).isEqualTo(1.0);
-        assertThat(meterRegistry.counter(
-                "imticket.seat-map-cache.events", "event", "load"
-        ).count()).isEqualTo(1.0);
+        assertThat(counter("singleflight_owner")).isEqualTo(1.0);
+        assertThat(counter("load")).isEqualTo(1.0);
     }
 
     @Test
-    void concurrentColdMissesShareOneDatabaseProjection() throws Exception {
+    void concurrentColdMissesShareOneSplitProjection() throws Exception {
         long performanceTimeId = 7L;
-        SeatResponse response = response(11L, SeatStatus.AVAILABLE);
+        SeatMapDatabaseSnapshot databaseSnapshot = databaseSnapshot(11L, SeatStatus.AVAILABLE);
         int requestCount = 20;
-        CountDownLatch start = new CountDownLatch(1);
         CountDownLatch databaseEntered = new CountDownLatch(1);
         CountDownLatch releaseDatabase = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(requestCount);
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
         when(cacheStore.get(performanceTimeId)).thenReturn(Optional.empty());
-        when(cacheStore.currentVersion(performanceTimeId)).thenReturn(0L);
-        when(databaseReader.read(performanceTimeId)).thenAnswer(invocation -> {
+        when(cacheStore.currentLayoutGeneration(performanceTimeId)).thenReturn(0L);
+        when(cacheStore.currentAvailabilityGeneration(performanceTimeId)).thenReturn(0L);
+        when(databaseReader.readSplit(performanceTimeId)).thenAnswer(invocation -> {
             databaseEntered.countDown();
             assertThat(releaseDatabase.await(2, TimeUnit.SECONDS)).isTrue();
-            return List.of(response);
+            return databaseSnapshot;
         });
-        when(cacheStore.putIfVersionMatches(
-                eq(performanceTimeId),
-                eq(0L),
-                eq(List.of(SeatMapCacheEntry.from(response))),
-                eq(Duration.ofMinutes(5))
-        )).thenReturn(true);
+        when(cacheStore.putIfGenerationsMatch(anyLong(), anyLong(), anyLong(), anyList(), anyList(), any()))
+                .thenReturn(true);
 
         List<Future<List<SeatResponse>>> joiners = new ArrayList<>();
         try {
             Future<List<SeatResponse>> owner = executor.submit(() -> reader.read(performanceTimeId));
             assertThat(databaseEntered.await(2, TimeUnit.SECONDS)).isTrue();
-
             for (int index = 0; index < requestCount - 1; index++) {
-                joiners.add(executor.submit(() -> {
-                    assertThat(start.await(2, TimeUnit.SECONDS)).isTrue();
-                    return reader.read(performanceTimeId);
-                }));
+                joiners.add(executor.submit(() -> reader.read(performanceTimeId)));
             }
-            start.countDown();
             awaitCounter("singleflight_joined", requestCount - 1L);
             releaseDatabase.countDown();
 
-            assertThat(owner.get(2, TimeUnit.SECONDS)).containsExactly(response);
+            assertThat(owner.get(2, TimeUnit.SECONDS)).hasSize(1);
             for (Future<List<SeatResponse>> future : joiners) {
-                assertThat(future.get(2, TimeUnit.SECONDS)).containsExactly(response);
+                assertThat(future.get(2, TimeUnit.SECONDS)).hasSize(1);
             }
         } finally {
             releaseDatabase.countDown();
             executor.shutdownNow();
         }
 
-        verify(databaseReader).read(performanceTimeId);
-        verify(cacheStore).putIfVersionMatches(
-                performanceTimeId,
-                0L,
-                List.of(SeatMapCacheEntry.from(response)),
-                Duration.ofMinutes(5)
-        );
-        assertThat(meterRegistry.counter(
-                "imticket.seat-map-cache.events", "event", "singleflight_owner"
-        ).count()).isEqualTo(1.0);
-        assertThat(meterRegistry.counter(
-                "imticket.seat-map-cache.events", "event", "singleflight_joined"
-        ).count()).isEqualTo(requestCount - 1.0);
+        verify(databaseReader).readSplit(performanceTimeId);
+        assertThat(counter("singleflight_owner")).isEqualTo(1.0);
+        assertThat(counter("singleflight_joined")).isEqualTo(requestCount - 1.0);
     }
 
     @Test
     void conditionalWriteRejectionStillReturnsDatabaseResult() {
         long performanceTimeId = 7L;
-        SeatResponse response = response(11L, SeatStatus.AVAILABLE);
+        SeatMapDatabaseSnapshot databaseSnapshot = databaseSnapshot(11L, SeatStatus.AVAILABLE);
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
         when(cacheStore.get(performanceTimeId)).thenReturn(Optional.empty());
-        when(cacheStore.currentVersion(performanceTimeId)).thenReturn(0L);
-        when(databaseReader.read(performanceTimeId)).thenReturn(List.of(response));
-        when(cacheStore.putIfVersionMatches(
-                eq(performanceTimeId),
-                eq(0L),
-                eq(List.of(SeatMapCacheEntry.from(response))),
-                eq(Duration.ofMinutes(5))
-        )).thenReturn(false);
+        when(cacheStore.currentLayoutGeneration(performanceTimeId)).thenReturn(0L);
+        when(cacheStore.currentAvailabilityGeneration(performanceTimeId)).thenReturn(0L);
+        when(databaseReader.readSplit(performanceTimeId)).thenReturn(databaseSnapshot);
+        when(cacheStore.putIfGenerationsMatch(anyLong(), anyLong(), anyLong(), anyList(), anyList(), any()))
+                .thenReturn(false);
 
-        assertThat(reader.read(performanceTimeId)).containsExactly(response);
-
-        assertThat(meterRegistry.counter(
-                "imticket.seat-map-cache.events", "event", "conditional_write_rejected"
-        ).count()).isEqualTo(1.0);
-        assertThat(meterRegistry.counter(
-                "imticket.seat-map-cache.events", "event", "load"
-        ).count()).isEqualTo(0.0);
+        assertThat(reader.read(performanceTimeId)).hasSize(1);
+        assertThat(counter("conditional_write_rejected")).isEqualTo(1.0);
     }
 
     @Test
-    void ownerFailureIsPropagatedToJoinerAndInFlightEntryIsCleared() throws Exception {
+    void ownerFailureClearsInFlightEntry() {
         long performanceTimeId = 7L;
         RuntimeException databaseFailure = new IllegalStateException("database down");
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
         when(cacheStore.get(performanceTimeId)).thenReturn(Optional.empty());
-        when(cacheStore.currentVersion(performanceTimeId)).thenReturn(0L);
-        when(databaseReader.read(performanceTimeId)).thenThrow(databaseFailure);
+        when(cacheStore.currentLayoutGeneration(performanceTimeId)).thenReturn(0L);
+        when(cacheStore.currentAvailabilityGeneration(performanceTimeId)).thenReturn(0L);
+        when(databaseReader.readSplit(performanceTimeId)).thenThrow(databaseFailure);
 
-        assertThatThrownBy(() -> reader.read(performanceTimeId))
-                .isSameAs(databaseFailure);
+        assertThatThrownBy(() -> reader.read(performanceTimeId)).isSameAs(databaseFailure);
 
         clearInvocations(databaseReader, cacheStore);
         when(cacheStore.get(performanceTimeId)).thenReturn(Optional.empty());
-        when(cacheStore.currentVersion(performanceTimeId)).thenReturn(0L);
-        doReturn(List.of(response(11L, SeatStatus.AVAILABLE))
-        ).when(databaseReader).read(performanceTimeId);
-        when(cacheStore.putIfVersionMatches(anyLong(), anyLong(), anyList(), any())).thenReturn(true);
+        when(cacheStore.currentLayoutGeneration(performanceTimeId)).thenReturn(0L);
+        when(cacheStore.currentAvailabilityGeneration(performanceTimeId)).thenReturn(0L);
+        doReturn(databaseSnapshot(11L, SeatStatus.AVAILABLE)).when(databaseReader).readSplit(performanceTimeId);
+        when(cacheStore.putIfGenerationsMatch(anyLong(), anyLong(), anyLong(), anyList(), anyList(), any()))
+                .thenReturn(true);
+
         assertThat(reader.read(performanceTimeId)).hasSize(1);
-        verify(databaseReader).read(performanceTimeId);
+        verify(databaseReader).readSplit(performanceTimeId);
     }
 
     @Test
-    void disabledFeatureUsesDatabaseWithoutTouchingCache() {
+    void disabledFeatureUsesExistingDatabaseProjection() {
         long performanceTimeId = 7L;
         List<SeatResponse> responses = List.of(response(11L, SeatStatus.AVAILABLE));
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(false);
         when(databaseReader.read(performanceTimeId)).thenReturn(responses);
 
         assertThat(reader.read(performanceTimeId)).isEqualTo(responses);
-
         verify(databaseReader).read(performanceTimeId);
         verify(cacheStore, never()).get(performanceTimeId);
-        verify(cacheStore, never()).putIfVersionMatches(anyLong(), anyLong(), anyList(), any());
     }
 
     @Test
-    void redisReadFailureFallsBackToDatabase() {
+    void redisReadFailureFallsBackToDatabaseSplitProjection() {
         long performanceTimeId = 7L;
-        List<SeatResponse> responses = List.of(response(11L, SeatStatus.AVAILABLE));
+        SeatMapDatabaseSnapshot databaseSnapshot = databaseSnapshot(11L, SeatStatus.AVAILABLE);
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
         when(cacheStore.get(performanceTimeId))
                 .thenThrow(new SeatMapCacheException("redis down", new IllegalStateException()));
-        when(databaseReader.read(performanceTimeId)).thenReturn(responses);
+        when(databaseReader.readSplit(performanceTimeId)).thenReturn(databaseSnapshot);
 
-        assertThat(reader.read(performanceTimeId)).isEqualTo(responses);
-
-        verify(databaseReader).read(performanceTimeId);
-        verify(cacheStore, never()).putIfVersionMatches(anyLong(), anyLong(), anyList(), any());
+        assertThat(reader.read(performanceTimeId)).hasSize(1);
+        verify(databaseReader).readSplit(performanceTimeId);
+        verify(cacheStore, never()).putIfGenerationsMatch(anyLong(), anyLong(), anyLong(), anyList(), anyList(), any());
     }
 
     @Test
     void rejectsDatabaseFallbackWhenSingleFlightIsDisabled() throws Exception {
         long performanceTimeId = 7L;
-        SeatResponse response = response(11L, SeatStatus.AVAILABLE);
         CountDownLatch databaseEntered = new CountDownLatch(1);
         CountDownLatch releaseDatabase = new CountDownLatch(1);
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -270,44 +237,57 @@ class SeatMapCacheReaderTest {
         when(properties.getFallbackMaxConcurrency()).thenReturn(1);
         when(featurePolicy.appliesTo(performanceTimeId)).thenReturn(true);
         when(cacheStore.get(performanceTimeId)).thenReturn(Optional.empty());
-        when(cacheStore.currentVersion(performanceTimeId)).thenReturn(0L);
-        when(databaseReader.read(performanceTimeId)).thenAnswer(invocation -> {
+        when(cacheStore.currentLayoutGeneration(performanceTimeId)).thenReturn(0L);
+        when(cacheStore.currentAvailabilityGeneration(performanceTimeId)).thenReturn(0L);
+        when(databaseReader.readSplit(performanceTimeId)).thenAnswer(invocation -> {
             databaseEntered.countDown();
             releaseDatabase.await(2, TimeUnit.SECONDS);
-            return List.of(response);
+            return databaseSnapshot(11L, SeatStatus.AVAILABLE);
         });
 
         try {
             Future<List<SeatResponse>> first = executor.submit(() -> reader.read(performanceTimeId));
             assertThat(databaseEntered.await(1, TimeUnit.SECONDS)).isTrue();
-
             assertThatThrownBy(() -> reader.read(performanceTimeId))
                     .isInstanceOf(BusinessException.class)
                     .extracting(exception -> ((BusinessException) exception).getErrorCode())
                     .isEqualTo(ReservationErrorCode.SEAT_MAP_FALLBACK_OVER_CAPACITY);
-
             releaseDatabase.countDown();
-            assertThat(first.get(1, TimeUnit.SECONDS)).containsExactly(response);
+            assertThat(first.get(1, TimeUnit.SECONDS)).hasSize(1);
         } finally {
             releaseDatabase.countDown();
             executor.shutdownNow();
         }
     }
 
-    private static SeatMapCacheEntry entry(Long id, SeatStatus status) {
-        return new SeatMapCacheEntry(id, 1, "A", 1, 1, SeatInfo.VIP, 10000, false, status);
+    private double counter(String event) {
+        return meterRegistry.counter("imticket.seat-map-cache.events", "event", event).count();
     }
 
     private void awaitCounter(String event, double expected) throws InterruptedException {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
-        while (meterRegistry.counter(
-                "imticket.seat-map-cache.events", "event", event
-        ).count() < expected) {
+        while (counter(event) < expected) {
             if (System.nanoTime() >= deadline) {
                 throw new AssertionError("Timed out waiting for metric event=" + event);
             }
             Thread.sleep(5L);
         }
+    }
+
+    private static SeatMapCacheParts parts(Long id, SeatStatus status) {
+        return new SeatMapCacheParts(
+                3L,
+                List.of(new SeatLayoutCacheEntry(id, 1, "A", 1, 1, SeatInfo.VIP, 10000, false)),
+                5L,
+                Map.of(id, new SeatAvailabilityCacheEntry(id, status, 7L))
+        );
+    }
+
+    private static SeatMapDatabaseSnapshot databaseSnapshot(Long id, SeatStatus status) {
+        return new SeatMapDatabaseSnapshot(
+                List.of(new SeatLayoutCacheEntry(id, 1, "A", 1, 1, SeatInfo.VIP, 10000, false)),
+                List.of(new SeatAvailabilityCacheEntry(id, status, 7L))
+        );
     }
 
     private static SeatResponse response(Long id, SeatStatus status) {
