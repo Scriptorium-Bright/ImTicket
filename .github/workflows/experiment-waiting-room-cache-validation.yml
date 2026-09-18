@@ -1,0 +1,50 @@
+name: Experiment - Waiting Room Cache Validation
+
+on:
+  push:
+    branches:
+      - experiment/waiting-room-cache-validation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  targeted-tests:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+
+    env:
+      WAITING_ROOM_REDIS_TEST_ENABLED: "true"
+      WAITING_ROOM_REDIS_HOST: 127.0.0.1
+      WAITING_ROOM_REDIS_PORT: "6379"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Run cache boundary and Redis concurrency tests
+        run: |
+          ./gradlew test \
+            --tests org.example.ticket.reservation.booking.cache.SeatMapCacheReaderTest \
+            --tests org.example.ticket.reservation.waitingroom.repository.redis.RedisWaitingRoomStoreIntegrationTest
