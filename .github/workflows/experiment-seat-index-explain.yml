@@ -1,0 +1,67 @@
+name: Experiment - Seat Index Explain
+
+on:
+  push:
+    branches:
+      - experiment/waiting-room-cache-validation
+    paths:
+      - "scripts/test/seat_index_explain_experiment.sql"
+      - "scripts/test/run_seat_index_explain_experiment.sh"
+      - "scripts/test/summarize_seat_index_explain.py"
+      - ".github/workflows/experiment-seat-index-explain.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  explain:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: imticket_index_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -prootpass"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MySQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y default-mysql-client
+
+      - name: Validate scripts
+        run: |
+          bash -n scripts/test/run_seat_index_explain_experiment.sh
+          python3 -m py_compile scripts/test/summarize_seat_index_explain.py
+
+      - name: Run 60k Seat index experiment
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: "3306"
+          MYSQL_USER: root
+          MYSQL_PASSWORD: rootpass
+          MYSQL_DATABASE: imticket_index_test
+          SEAT_COUNT: "60000"
+          PERFORMANCE_TIME_ID: "900000001"
+          OUTPUT_DIR: build/db-results/seat-index-explain
+        run: |
+          bash scripts/test/run_seat_index_explain_experiment.sh
+          echo "===== RESULTS.md ====="
+          cat build/db-results/seat-index-explain/RESULTS.md
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: seat-index-explain
+          path: build/db-results/seat-index-explain/
