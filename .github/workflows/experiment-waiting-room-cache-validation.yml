@@ -43,6 +43,12 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
+      - name: Validate experiment scripts
+        run: |
+          bash -n scripts/test/run_waiting_room_promotion_metadata_ab.sh
+          bash -n scripts/test/run_waiting_room_final_performance_closure.sh
+          python3 -m py_compile scripts/test/summarize_waiting_room_promotion_ab.py
+
       - name: Run cache boundary and Redis concurrency tests
         run: |
           ./gradlew test \
