@@ -17,7 +17,7 @@ SECTION_NAMES = {
     "candidate-availability-analyze",
 }
 
-ACTUAL_RE = re.compile(r"actual time=([0-9.]+)\\.\\.([0-9.]+) rows=([0-9.]+) loops=([0-9.]+)")
+ACTUAL_RE = re.compile(r"actual time=([0-9.]+)\.\.([0-9.]+) rows=([0-9.]+) loops=([0-9.]+)")
 
 
 def parse_args():
