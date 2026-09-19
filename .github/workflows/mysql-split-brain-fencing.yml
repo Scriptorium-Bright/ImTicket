@@ -1,0 +1,40 @@
+name: MySQL Split Brain Fencing Experiment
+
+on:
+  push:
+    branches:
+      - experiment/mysql-split-brain-fencing
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - scripts/test/mysql_split_brain_fencing_rehearsal.sh
+      - .github/workflows/mysql-split-brain-fencing.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  split-brain-fencing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run split-brain fencing rehearsal
+        env:
+          RUN_ROOT: ${{ github.workspace }}/build/mysql-split-brain-results
+        run: |
+          chmod +x scripts/test/mysql_split_brain_fencing_rehearsal.sh
+          bash scripts/test/mysql_split_brain_fencing_rehearsal.sh
+
+      - name: Upload experiment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-split-brain-fencing-${{ github.run_id }}
+          path: build/mysql-split-brain-results/
+          if-no-files-found: warn
+          retention-days: 14
