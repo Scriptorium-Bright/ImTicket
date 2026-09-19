@@ -19,6 +19,11 @@ PIPELINE_DIR="${RESULT_ROOT}/${PIPELINE_GROUP}"
 
 mkdir -p "${RESULT_ROOT}"
 
+echo "== build A/B experiment images once =="
+env \
+  SPRING_JWT_SECRET="${JWT_SECRET:-${SPRING_JWT_SECRET:-}}" \
+  docker compose --profile waiting-room-ingress-experiment build app waiting-room-service
+
 run_variant() {
   local label="$1"
   local enabled="$2"
@@ -32,6 +37,7 @@ run_variant() {
   RUN_GROUP="${group}" \
   PROMOTION_METADATA_PIPELINE_ENABLED="${enabled}" \
   RECONFIGURE_SERVICES=true \
+  BUILD_IMAGES=false \
   STOP_ON_SLO_FAILURE=false \
     bash "${SCRIPT_DIR}/run_waiting_room_final_performance_closure.sh"
   local closure_status=$?
