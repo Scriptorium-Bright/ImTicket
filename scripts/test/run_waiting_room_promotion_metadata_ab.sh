@@ -12,6 +12,7 @@ RESULT_ROOT="${RESULT_ROOT:-${ROOT_DIR}/build/k6-results/149-promotion-metadata-
 RUN_GROUP="${RUN_GROUP:-$(date -u +%Y%m%dT%H%M%SZ)}"
 WAITING_ROOM_MANAGEMENT_BASE_URL="${WAITING_ROOM_MANAGEMENT_BASE_URL:-http://127.0.0.1:10084}"
 AB_ORDER="${AB_ORDER:-legacy-first}"
+BUILD_EXPERIMENT_IMAGES="${BUILD_EXPERIMENT_IMAGES:-true}"
 
 LEGACY_GROUP="${RUN_GROUP}-legacy"
 PIPELINE_GROUP="${RUN_GROUP}-pipeline"
@@ -20,10 +21,14 @@ PIPELINE_DIR="${RESULT_ROOT}/${PIPELINE_GROUP}"
 
 mkdir -p "${RESULT_ROOT}"
 
-echo "== build A/B experiment images once =="
-env \
-  SPRING_JWT_SECRET="${JWT_SECRET:-${SPRING_JWT_SECRET:-}}" \
-  docker compose --profile waiting-room-ingress-experiment build app waiting-room-service
+if [[ "${BUILD_EXPERIMENT_IMAGES}" == "true" ]]; then
+  echo "== build A/B experiment images once =="
+  env \
+    SPRING_JWT_SECRET="${JWT_SECRET:-${SPRING_JWT_SECRET:-}}" \
+    docker compose --profile waiting-room-ingress-experiment build app waiting-room-service
+else
+  echo "== reuse existing A/B experiment images =="
+fi
 
 run_variant() {
   local label="$1"
