@@ -60,6 +60,7 @@ jobs:
         run: |
           bash -n scripts/test/run_waiting_room_promotion_metadata_ab.sh
           bash -n scripts/test/run_waiting_room_final_performance_closure.sh
+          bash -n scripts/test/reset_waiting_room_fixture.sh
           python3 -m py_compile scripts/test/summarize_waiting_room_promotion_ab.py
 
       - name: Run cache boundary and Redis concurrency tests
