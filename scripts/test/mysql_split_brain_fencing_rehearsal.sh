@@ -231,6 +231,11 @@ app_mysql "${PRIMARY}" "${MYSQL_DATABASE}" -e   "INSERT INTO fencing_probe(label
 old_write_after_fence_exit=$?
 set -e
 
+old_fence_read_only_error=false
+if grep -Eiq 'read[- ]only|ERROR 1290' "${OLD_FENCE_ERROR}"; then
+  old_fence_read_only_error=true
+fi
+
 old_after_fence_count="$(root_mysql "${PRIMARY}" --skip-column-names "${MYSQL_DATABASE}" -e   "SELECT COUNT(*) FROM fencing_probe WHERE label='OLD_AFTER_FENCE';" | tail -n 1 | tr -d '\r')"
 
 echo "== Promote replica only after fencing completed =="
@@ -254,6 +259,11 @@ set +e
 app_mysql "${PRIMARY}" "${MYSQL_DATABASE}" -e   "INSERT INTO fencing_probe(label) VALUES ('OLD_AFTER_PROMOTION');"   >"${RUN_DIR}/old-primary-post-promotion-write.stdout" 2>"${OLD_POST_PROMOTION_ERROR}"
 old_write_after_promotion_exit=$?
 set -e
+
+old_post_promotion_read_only_error=false
+if grep -Eiq 'read[- ]only|ERROR 1290' "${OLD_POST_PROMOTION_ERROR}"; then
+  old_post_promotion_read_only_error=true
+fi
 
 old_after_promotion_count="$(root_mysql "${PRIMARY}" --skip-column-names "${MYSQL_DATABASE}" -e   "SELECT COUNT(*) FROM fencing_probe WHERE label='OLD_AFTER_PROMOTION';" | tail -n 1 | tr -d '\r')"
 
@@ -306,7 +316,7 @@ if (( fence_completed_ms <= promotion_started_ms )); then
 fi
 
 status="OK"
-if [[ "${old_read_only_before_fence}" != "0"       || "${old_super_read_only_before_fence}" != "0"       || "${pre_fence_rollback_write_exit}" != "0"       || "${rollback_probe_count}" != "0"       || "${old_read_only_after_fence}" != "1"       || "${old_super_read_only_after_fence}" != "1"       || "${old_write_after_fence_exit}" == "0"       || "${old_after_fence_count}" != "0"       || "${fence_completed_before_promotion}" != "true"       || "${new_read_only}" != "0"       || "${new_super_read_only}" != "0"       || "${promoted_write_count}" != "1"       || "${old_write_after_promotion_exit}" == "0"       || "${old_after_promotion_count}" != "0"       || "${old_read_only_after_rejoin}" != "1"       || "${old_super_read_only_after_rejoin}" != "1"       || "${old_rejoin_io}" != "Yes"       || "${old_rejoin_sql}" != "Yes"       || "${old_subset_new}" != "1"       || "${new_subset_old}" != "1"       || "${old_probe_count}" != "${new_probe_count}" ]]; then
+if [[ "${partition_data_plane_probe_exit}" == "0"       || "${old_read_only_before_fence}" != "0"       || "${old_super_read_only_before_fence}" != "0"       || "${pre_fence_rollback_write_exit}" != "0"       || "${rollback_probe_count}" != "0"       || "${old_read_only_after_fence}" != "1"       || "${old_super_read_only_after_fence}" != "1"       || "${old_write_after_fence_exit}" == "0"       || "${old_fence_read_only_error}" != "true"       || "${old_after_fence_count}" != "0"       || "${fence_completed_before_promotion}" != "true"       || "${new_read_only}" != "0"       || "${new_super_read_only}" != "0"       || "${promoted_write_count}" != "1"       || "${old_write_after_promotion_exit}" == "0"       || "${old_post_promotion_read_only_error}" != "true"       || "${old_after_promotion_count}" != "0"       || "${old_read_only_after_rejoin}" != "1"       || "${old_super_read_only_after_rejoin}" != "1"       || "${old_rejoin_io}" != "Yes"       || "${old_rejoin_sql}" != "Yes"       || "${old_subset_new}" != "1"       || "${new_subset_old}" != "1"       || "${old_probe_count}" != "${new_probe_count}" ]]; then
   status="MISMATCH"
 fi
 
@@ -314,6 +324,7 @@ cat >"${RESULT_FILE}" <<EOF
 status=${status}
 run_id=${RUN_ID}
 scenario=network_partition_fence_promote_safe_rejoin
+partition_data_plane_probe_exit=${partition_data_plane_probe_exit}
 partition_replica_io=${partition_replica_io}
 partition_replica_last_io_error=${partition_replica_last_io_error}
 old_read_only_before_fence=${old_read_only_before_fence}
@@ -324,6 +335,7 @@ fence_millis=${fence_millis}
 old_read_only_after_fence=${old_read_only_after_fence}
 old_super_read_only_after_fence=${old_super_read_only_after_fence}
 old_write_after_fence_exit=${old_write_after_fence_exit}
+old_fence_read_only_error=${old_fence_read_only_error}
 old_after_fence_count=${old_after_fence_count}
 fence_completed_before_promotion=${fence_completed_before_promotion}
 promotion_millis=${promotion_millis}
@@ -331,6 +343,7 @@ new_read_only=${new_read_only}
 new_super_read_only=${new_super_read_only}
 promoted_write_count=${promoted_write_count}
 old_write_after_promotion_exit=${old_write_after_promotion_exit}
+old_post_promotion_read_only_error=${old_post_promotion_read_only_error}
 old_after_promotion_count=${old_after_promotion_count}
 rejoin_millis=${rejoin_millis}
 old_read_only_after_rejoin=${old_read_only_after_rejoin}
