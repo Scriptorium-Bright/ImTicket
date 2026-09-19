@@ -129,8 +129,8 @@ bash scripts/test/run_waiting_room_promotion_metadata_ab.sh
 
 1. legacy mode로 2,000 × 3회
 2. pipeline mode로 2,000 × 3회
-3. 각 mode의 최종 Prometheus snapshot 저장
-4. 3회 closure matrix와 phase timer를 자동 집계
+3. 각 run 시작/종료 Prometheus snapshot 저장
+4. 각 run의 phase count/sum delta와 3회 closure matrix를 자동 집계
 
 한다.
 
@@ -140,6 +140,10 @@ bash scripts/test/run_waiting_room_promotion_metadata_ab.sh
 build/k6-results/149-promotion-metadata-ab/
   <timestamp>-legacy/
     closure-matrix.tsv
+    d-final-...-r1/
+      waiting-room-prometheus-before.txt
+      waiting-room-prometheus-after.txt
+    ...
     waiting-room-prometheus-final.txt
     ...
   <timestamp>-pipeline/
@@ -159,7 +163,7 @@ build/k6-results/149-promotion-metadata-ab/
 - join p95
 - Tomcat busy max
 - Hikari pending max
-- 각 promotion phase average/max duration
+- 각 promotion phase의 run별 count/sum delta 기반 average duration
 
 ### 이전 실험값의 취급
 
@@ -176,7 +180,7 @@ build/k6-results/149-promotion-metadata-ab/
 
 다음을 함께 본다.
 
-1. `candidate_metadata` avg/max가 legacy 대비 감소한다.
+1. `candidate_metadata`의 run별 delta 기반 평균 시간이 legacy 대비 감소한다.
 2. admission quota/FIFO integration test가 그대로 통과한다.
 3. end-to-end에서 regression이 없다.
 4. admission rate 또는 scheduler duration/queue wait에서 실제 효과가 있는지 확인한다.
@@ -360,8 +364,8 @@ A/B 실행 후 자동 생성된 `RESULTS.md` 값을 이 표에 옮긴다.
 | Metric | Legacy | Pipeline | 판단 |
 |---|---:|---:|---|
 | candidate metadata avg | TBD | TBD | |
-| candidate metadata max | TBD | TBD | |
-| batch transition avg | TBD | TBD | |
+| candidate metadata run-delta avg | TBD | TBD | |
+| batch transition run-delta avg | TBD | TBD | |
 | scheduler max | TBD | TBD | |
 | admission rate median | TBD | TBD | |
 | queue wait p95 median | TBD | TBD | |
@@ -379,3 +383,24 @@ A/B 실행 후 자동 생성된 `RESULTS.md` 값을 이 표에 옮긴다.
 - Frontend/SSE E2E 추가
 
 이 branch의 목적은 **현재 backend 설계의 병목과 보장 범위를 측정 가능한 형태로 닫는 것**이다.
+
+---
+
+## 11. A/B evidence completeness와 fixture reset 안정화
+
+A/B summarizer는 legacy와 pipeline 모두 정확히 3개의 closure row와 3개의 run별 Prometheus before/after snapshot을 요구한다.
+
+하나라도 누락되면 `RESULTS.md`에 `EXPERIMENT INCOMPLETE`를 기록하고 변화율을 계산하지 않는다. 따라서 3회 미만 결과를 "3-run median"으로 잘못 표시하지 않는다.
+
+phase timer는 variant 종료 시점의 cumulative `max`를 A/B 판단에 사용하지 않는다. Micrometer Timer max는 time-window reset 영향을 받을 수 있으므로 각 run 시작/종료의 `_count`, `_sum` 차이로 run별 평균 시간을 계산하고, 그 3회 median을 비교한다.
+
+`waiting_admission_rate`는 metrics collector 전체 실행 시간이 아니라 promotion counter가 실제 증가한 첫 interval부터 마지막 증가 interval까지의 active window를 사용한다. queue drain 이후의 idle tail이 처리율을 희석하지 않게 하기 위함이다.
+
+fixture reset의 MySQL transaction에서 `ERROR 1205`가 발생하면 기본 3회까지 재시도한다. lock timeout 시 다음 파일을 run별 `fixture-reset-diagnostics/`에 남긴다.
+
+- processlist
+- `performance_schema.data_lock_waits`
+- `performance_schema.data_locks`
+- `SHOW ENGINE INNODB STATUS`
+
+권한 때문에 일부 진단 조회가 실패해도 해당 오류를 파일에 보존하고 retry 자체는 계속 진행한다.
