@@ -11,6 +11,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RESULT_ROOT="${RESULT_ROOT:-${ROOT_DIR}/build/k6-results/149-promotion-metadata-ab}"
 RUN_GROUP="${RUN_GROUP:-$(date -u +%Y%m%dT%H%M%SZ)}"
 WAITING_ROOM_MANAGEMENT_BASE_URL="${WAITING_ROOM_MANAGEMENT_BASE_URL:-http://127.0.0.1:10084}"
+AB_ORDER="${AB_ORDER:-legacy-first}"
 
 LEGACY_GROUP="${RUN_GROUP}-legacy"
 PIPELINE_GROUP="${RUN_GROUP}-pipeline"
@@ -53,8 +54,20 @@ run_variant() {
   echo "variant=${label} closure_exit=${closure_status} dir=${group_dir}"
 }
 
-run_variant legacy false "${LEGACY_GROUP}"
-run_variant pipeline true "${PIPELINE_GROUP}"
+case "${AB_ORDER}" in
+  legacy-first)
+    run_variant legacy false "${LEGACY_GROUP}"
+    run_variant pipeline true "${PIPELINE_GROUP}"
+    ;;
+  pipeline-first)
+    run_variant pipeline true "${PIPELINE_GROUP}"
+    run_variant legacy false "${LEGACY_GROUP}"
+    ;;
+  *)
+    echo "AB_ORDER는 legacy-first 또는 pipeline-first여야 합니다: ${AB_ORDER}" >&2
+    exit 1
+    ;;
+esac
 
 python3 "${SCRIPT_DIR}/summarize_waiting_room_promotion_ab.py" \
   --legacy-dir "${LEGACY_DIR}" \
