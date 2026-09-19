@@ -1,0 +1,38 @@
+name: MySQL Ambiguous Commit Failover Experiment
+
+on:
+  push:
+    branches:
+      - experiment/mysql-failover-ambiguous-commit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ambiguous-commit-failover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build application image
+        run: docker build -t imticket-app:ambiguous-commit .
+
+      - name: Run ambiguous commit failover rehearsal
+        env:
+          APP_IMAGE: imticket-app:ambiguous-commit
+          RUN_ROOT: ${{ github.workspace }}/build/mysql-failover-results
+        run: |
+          chmod +x scripts/test/mysql_ambiguous_commit_failover_rehearsal.sh
+          bash scripts/test/mysql_ambiguous_commit_failover_rehearsal.sh
+
+      - name: Upload experiment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-ambiguous-commit-failover-${{ github.run_id }}
+          path: build/mysql-failover-results/
+          if-no-files-found: warn
+          retention-days: 14
