@@ -47,6 +47,8 @@ METRICS_INTERVAL_SECONDS="${METRICS_INTERVAL_SECONDS:-0.2}"
 MYSQL_USE_DOCKER="${MYSQL_USE_DOCKER:-auto}"
 REDIS_USE_DOCKER="${REDIS_USE_DOCKER:-auto}"
 RESET_FIXTURE="${RESET_FIXTURE:-true}"
+MYSQL_RESET_ATTEMPTS="${MYSQL_RESET_ATTEMPTS:-3}"
+MYSQL_RESET_RETRY_SECONDS="${MYSQL_RESET_RETRY_SECONDS:-2}"
 RECONFIGURE_SERVICES="${RECONFIGURE_SERVICES:-true}"
 BUILD_IMAGES="${BUILD_IMAGES:-true}"
 STOP_ON_SLO_FAILURE="${STOP_ON_SLO_FAILURE:-false}"
@@ -212,6 +214,13 @@ waiting_room_active_count() {
     ZCARD "reservation:waiting-room:{${PT_ID}}:active" 2>/dev/null || printf '0'
 }
 
+capture_waiting_room_prometheus() {
+  local output_file="$1"
+  curl -fsS --connect-timeout 1 --max-time 5 \
+    "${WAITING_ROOM_MANAGEMENT_BASE_URL}/actuator/prometheus" \
+    > "${output_file}"
+}
+
 collect_waiting_room_metrics() {
   local run_dir="$1"
   local stop_file="$2"
@@ -315,18 +324,32 @@ waiting_room_admission_rate() {
   local metrics_file="$1"
   awk -F '\t' '
     NR > 1 && $2 ~ /^[0-9]+([.][0-9]+)?$/ && $7 ~ /^[0-9]+([.][0-9]+)?$/ {
-      if (!found) {
-        first_timestamp = $2
-        first_promotions = $7
+      timestamp = $2 + 0
+      promotions = $7 + 0
+      if (!have_previous) {
+        previous_timestamp = timestamp
+        previous_promotions = promotions
+        have_previous = 1
+        next
       }
-      last_timestamp = $2
-      last_promotions = $7
-      found = 1
+
+      delta = promotions - previous_promotions
+      if (delta > 0) {
+        if (!active_started) {
+          active_start = previous_timestamp
+          active_started = 1
+        }
+        active_end = timestamp
+        admitted += delta
+      }
+
+      previous_timestamp = timestamp
+      previous_promotions = promotions
     }
     END {
-      duration = last_timestamp - first_timestamp
-      if (!found || duration <= 0) print "missing"
-      else printf "%.4f", (last_promotions - first_promotions) / duration
+      duration = active_end - active_start
+      if (!active_started || admitted <= 0 || duration <= 0) print "missing"
+      else printf "%.4f", admitted / duration
     }
   ' "${metrics_file}"
 }
@@ -406,16 +429,21 @@ for run_index in 1 2 3; do
     >> "${MANIFEST_FILE}"
 
   echo "[D] run ${run_index}/3: ${run_name}"
+  mkdir -p "${run_dir}"
   if [[ "${RESET_FIXTURE}" == "true" ]]; then
     PT_ID="${PT_ID}" \
     MEMBER_ID_START=$((run_member_id_base + 1)) \
     MEMBER_COUNT="${MEMBER_COUNT}" \
     MYSQL_USE_DOCKER="${MYSQL_USE_DOCKER}" \
+    MYSQL_RESET_ATTEMPTS="${MYSQL_RESET_ATTEMPTS}" \
+    MYSQL_RESET_RETRY_SECONDS="${MYSQL_RESET_RETRY_SECONDS}" \
+    RESET_DIAGNOSTIC_DIR="${run_dir}/fixture-reset-diagnostics" \
     REDIS_USE_DOCKER="${REDIS_USE_DOCKER}" \
     bash "${SCRIPT_DIR}/reset_waiting_room_fixture.sh"
   fi
 
-  mkdir -p "${run_dir}"
+  capture_waiting_room_prometheus "${run_dir}/waiting-room-prometheus-before.txt"
+
   WAITING_ROOM_METRICS_STOP_FILE="${run_dir}/.stop-waiting-room-metrics"
   rm -f "${WAITING_ROOM_METRICS_STOP_FILE}"
   collect_waiting_room_metrics "${run_dir}" "${WAITING_ROOM_METRICS_STOP_FILE}" &
@@ -444,6 +472,7 @@ for run_index in 1 2 3; do
   load_exit=$?
   set -e
   stop_waiting_room_metrics
+  capture_waiting_room_prometheus "${run_dir}/waiting-room-prometheus-after.txt" || true
   if (( load_exit != 0 )); then
     echo "Waiting Room 부하 실행 실패: run=${run_name} exit=${load_exit}" >&2
     exit "${load_exit}"
