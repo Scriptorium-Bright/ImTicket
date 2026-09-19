@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - experiment/mysql-failover-ambiguous-commit
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - scripts/test/mysql_ambiguous_commit_failover_rehearsal.sh
+      - .github/workflows/mysql-ambiguous-commit.yml
   workflow_dispatch:
 
 permissions:
