@@ -196,6 +196,16 @@ docker network disconnect "${NETWORK}" "${PRIMARY}"
 
 # The source is now unreachable to the replica, but the old primary process is still alive.
 sleep 2
+
+set +e
+docker exec -e MYSQL_PWD="${MYSQL_PASSWORD}" "${REPLICA}" \
+  mysql --connect-timeout=2 --host="${PRIMARY}" --port=3306 --protocol=tcp \
+  --user="${MYSQL_USER}" "${MYSQL_DATABASE}" -e "SELECT 1;" \
+  >"${RUN_DIR}/partition-data-plane-probe.stdout" \
+  2>"${RUN_DIR}/partition-data-plane-probe.stderr"
+partition_data_plane_probe_exit=$?
+set -e
+
 root_mysql "${REPLICA}" -e "SHOW REPLICA STATUS\G" >"${PARTITION_STATUS_FILE}" 2>&1 || true
 partition_replica_io="$(replica_status_value "${REPLICA}" 'Replica_IO_Running')"
 partition_replica_last_io_error="$(replica_status_value "${REPLICA}" 'Last_IO_Error' | sed 's/[[:space:]]\+/ /g')"
