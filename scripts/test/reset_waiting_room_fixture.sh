@@ -18,6 +18,9 @@ MYSQL_USER="${MYSQL_USER:-capstone}"
 MYSQL_DATABASE="${MYSQL_DATABASE:-capstone}"
 MYSQL_PASSWORD="${MYSQL_PASSWORD:-${MYSQL_LOCK_TEST_PASSWORD:-}}"
 MYSQL_USE_DOCKER="${MYSQL_USE_DOCKER:-auto}"
+MYSQL_RESET_ATTEMPTS="${MYSQL_RESET_ATTEMPTS:-3}"
+MYSQL_RESET_RETRY_SECONDS="${MYSQL_RESET_RETRY_SECONDS:-2}"
+RESET_DIAGNOSTIC_DIR="${RESET_DIAGNOSTIC_DIR:-}"
 REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
 REDIS_PORT="${REDIS_PORT:-16380}"
 REDIS_USE_DOCKER="${REDIS_USE_DOCKER:-auto}"
@@ -36,7 +39,12 @@ require_positive_integer() {
 require_positive_integer "PT_ID" "${PT_ID}"
 require_positive_integer "MEMBER_ID_START" "${MEMBER_ID_START}"
 require_positive_integer "MEMBER_COUNT" "${MEMBER_COUNT}"
+require_positive_integer "MYSQL_RESET_ATTEMPTS" "${MYSQL_RESET_ATTEMPTS}"
 require_positive_integer "REDIS_RESET_ATTEMPTS" "${REDIS_RESET_ATTEMPTS}"
+if ! [[ "${MYSQL_RESET_RETRY_SECONDS}" =~ ^[0-9]+$ ]]; then
+  echo "MYSQL_RESET_RETRY_SECONDS는 0 이상의 정수여야 합니다: ${MYSQL_RESET_RETRY_SECONDS}" >&2
+  exit 1
+fi
 if ! [[ "${REDIS_RESET_RETRY_SECONDS}" =~ ^[0-9]+$ ]]; then
   echo "REDIS_RESET_RETRY_SECONDS는 0 이상의 정수여야 합니다: ${REDIS_RESET_RETRY_SECONDS}" >&2
   exit 1
@@ -90,6 +98,21 @@ mysql_client() {
   fi
 }
 
+capture_mysql_lock_diagnostics() {
+  local attempt="$1"
+  [[ -z "${RESET_DIAGNOSTIC_DIR}" ]] && return 0
+
+  mkdir -p "${RESET_DIAGNOSTIC_DIR}"
+  mysql_client -e "SELECT NOW(), ID, USER, HOST, DB, COMMAND, TIME, STATE, LEFT(COALESCE(INFO, ''), 500) FROM information_schema.PROCESSLIST ORDER BY TIME DESC;" \
+    > "${RESET_DIAGNOSTIC_DIR}/processlist-attempt-${attempt}.tsv" 2>&1 || true
+  mysql_client -e "SELECT * FROM performance_schema.data_lock_waits;" \
+    > "${RESET_DIAGNOSTIC_DIR}/data-lock-waits-attempt-${attempt}.tsv" 2>&1 || true
+  mysql_client -e "SELECT ENGINE_LOCK_ID, ENGINE_TRANSACTION_ID, THREAD_ID, EVENT_ID, OBJECT_SCHEMA, OBJECT_NAME, INDEX_NAME, LOCK_TYPE, LOCK_MODE, LOCK_STATUS, LOCK_DATA FROM performance_schema.data_locks;" \
+    > "${RESET_DIAGNOSTIC_DIR}/data-locks-attempt-${attempt}.tsv" 2>&1 || true
+  mysql_client -e "SHOW ENGINE INNODB STATUS;" \
+    > "${RESET_DIAGNOSTIC_DIR}/innodb-status-attempt-${attempt}.txt" 2>&1 || true
+}
+
 reservation_ids="$(mysql_client -e "SELECT DISTINCT rs.reservation_id FROM ReservedSeat rs JOIN Seat s ON s.id = rs.seat_id WHERE s.performance_time_id = ${PT_ID} ORDER BY rs.reservation_id;")"
 reservation_id_list="$(printf '%s\n' "${reservation_ids}" | awk '/^[1-9][0-9]*$/ { print }' | paste -sd, -)"
 reservation_id_list="${reservation_id_list:-0}"
@@ -135,7 +158,40 @@ FROM Seat
 WHERE performance_time_id = ${PT_ID};
 SQL
 
-mysql_client < "${MYSQL_SQL_FILE}"
+mysql_reset_complete=false
+for ((mysql_reset_attempt = 1; mysql_reset_attempt <= MYSQL_RESET_ATTEMPTS; mysql_reset_attempt += 1)); do
+  mysql_stdout="$(mktemp)"
+  mysql_stderr="$(mktemp)"
+
+  if mysql_client < "${MYSQL_SQL_FILE}" > "${mysql_stdout}" 2> "${mysql_stderr}"; then
+    cat "${mysql_stdout}"
+    rm -f "${mysql_stdout}" "${mysql_stderr}"
+    mysql_reset_complete=true
+    break
+  fi
+
+  cat "${mysql_stderr}" >&2
+  if grep -q "ERROR 1205" "${mysql_stderr}"; then
+    capture_mysql_lock_diagnostics "${mysql_reset_attempt}"
+    rm -f "${mysql_stdout}" "${mysql_stderr}"
+    if (( mysql_reset_attempt < MYSQL_RESET_ATTEMPTS )); then
+      echo "MySQL fixture reset lock timeout: attempt=${mysql_reset_attempt}/${MYSQL_RESET_ATTEMPTS}, retry_after=${MYSQL_RESET_RETRY_SECONDS}s" >&2
+      sleep "${MYSQL_RESET_RETRY_SECONDS}"
+      continue
+    fi
+  else
+    rm -f "${mysql_stdout}" "${mysql_stderr}"
+    exit 1
+  fi
+
+  rm -f "${mysql_stdout}" "${mysql_stderr}"
+done
+
+if [[ "${mysql_reset_complete}" != "true" ]]; then
+  echo "MySQL fixture reset이 ${MYSQL_RESET_ATTEMPTS}회 시도 후에도 lock timeout으로 실패했습니다." >&2
+  [[ -n "${RESET_DIAGNOSTIC_DIR}" ]] && echo "diagnostics=${RESET_DIAGNOSTIC_DIR}" >&2
+  exit 1
+fi
 
 REDIS_PATTERN="reservation:waiting-room:{${PT_ID}}:*"
 
