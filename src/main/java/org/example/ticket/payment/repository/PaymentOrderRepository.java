@@ -28,4 +28,6 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, Long
     Optional<Long> findReservationIdById(@Param("id") Long id);
 
     Optional<PaymentOrder> findByMemberIdAndIdempotencyKey(Long memberId, String idempotencyKey);
+
+    Optional<PaymentOrder> findByReservation_Id(Long reservationId);
 }

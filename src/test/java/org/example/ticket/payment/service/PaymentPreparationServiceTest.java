@@ -3,6 +3,9 @@ package org.example.ticket.payment.service;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
+import org.example.ticket.lifecycle.event.LifecycleEventDraft;
+import org.example.ticket.lifecycle.event.LifecycleEventType;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.exception.PaymentErrorCode;
 import org.example.ticket.payment.gateway.FakePaymentGatewayClient;
@@ -59,6 +62,9 @@ class PaymentPreparationServiceTest {
     @Mock
     private PaymentGatewayClient paymentGatewayClient;
 
+    @Mock
+    private LifecycleEventWriter lifecycleEventWriter;
+
     @InjectMocks
     private PaymentPreparationService paymentPreparationService;
 
@@ -94,6 +100,12 @@ class PaymentPreparationServiceTest {
         assertThat(response.getProviderPaymentId())
                 .isEqualTo("fake:" + savedOrder.getMerchantOrderId());
         verify(paymentAttemptRepository).save(any());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<LifecycleEventDraft>> eventCaptor = ArgumentCaptor.forClass(List.class);
+        verify(lifecycleEventWriter).recordDecision(org.mockito.ArgumentMatchers.eq(reservation), eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).singleElement()
+                .extracting(LifecycleEventDraft::eventType)
+                .isEqualTo(LifecycleEventType.PAYMENT_PREPARED);
     }
 
     @Test

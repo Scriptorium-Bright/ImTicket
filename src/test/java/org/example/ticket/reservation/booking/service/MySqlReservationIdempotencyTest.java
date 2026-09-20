@@ -5,6 +5,7 @@ import jakarta.persistence.EntityManager;
 import org.hibernate.SessionFactory;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.member.model.Member;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.performance.model.Performance;
 import org.example.ticket.performance.model.PerformanceTime;
@@ -177,6 +178,9 @@ class MySqlReservationIdempotencyTest {
 
     @MockitoBean
     private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
+
+    @MockitoBean
+    private LifecycleEventWriter lifecycleEventWriter;
 
     @MockitoSpyBean
     private ReservationResponseSnapshotCodec snapshotCodec;

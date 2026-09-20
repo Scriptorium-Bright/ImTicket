@@ -2,6 +2,7 @@ package org.example.ticket.reservation.booking.repository;
 
 import jakarta.persistence.LockModeType;
 import org.example.ticket.reservation.booking.dto.response.SeatResponse;
+import org.example.ticket.reservation.booking.dto.ReservationSeatReference;
 import org.example.ticket.reservation.booking.domain.Seat;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -45,6 +46,24 @@ public interface SeatRepository extends JpaRepository<Seat, Long> {
             order by s.id
             """)
     List<Long> findIdsByReservationIds(@Param("reservationIds") List<Long> reservationIds);
+
+    /**
+     * 예약별 좌석 연결을 한 번에 조회해 만료 사건의 좌석 목록을 정확히 구성한다.
+     * 만료 배치가 좌석 잠금 전에 예약별 관계를 고정하는 데 사용한다.
+     */
+    @Query("""
+            select new org.example.ticket.reservation.booking.dto.ReservationSeatReference(
+                rs.reservation.id,
+                s.id
+            )
+            from ReservedSeat rs
+            join rs.seat s
+            where rs.reservation.id in :reservationIds
+            order by rs.reservation.id, s.id
+            """)
+    List<ReservationSeatReference> findReservationSeatReferencesByReservationIds(
+            @Param("reservationIds") List<Long> reservationIds
+    );
 
     /**
      * 좌석 ID 목록을 공연 회차 조건 없이 비관적 lock한다.

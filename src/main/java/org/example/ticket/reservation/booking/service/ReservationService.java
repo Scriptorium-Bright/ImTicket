@@ -7,6 +7,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
+import org.example.ticket.lifecycle.event.LifecycleActorType;
+import org.example.ticket.lifecycle.event.LifecycleEntityType;
+import org.example.ticket.lifecycle.event.LifecycleEventDraft;
+import org.example.ticket.lifecycle.event.LifecycleEventPayload;
+import org.example.ticket.lifecycle.event.LifecycleEventType;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
+import org.example.ticket.lifecycle.event.LifecycleStateChange;
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
 import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.example.ticket.reservation.booking.dto.response.ReservationCreateResponse;
@@ -25,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,6 +48,7 @@ public class ReservationService {
     private final MemberRepository memberRepository;
     private final SeatService seatService;
     private final ReservationExpirationService reservationExpirationService;
+    private final LifecycleEventWriter lifecycleEventWriter;
     private static final int EXPIRED_CLEANUP_BATCH_SIZE = 5000;
 
     /**
@@ -192,6 +201,7 @@ public class ReservationService {
 
         reservation.setReservedSeats(reservedSeats);
         reservationRepository.save(reservation);
+        lifecycleEventWriter.recordReservationCreated(reservation, reservationCreatedEvent(reservation, seats));
 
         return ReservationCreateResponse.from(reservation);
 
@@ -203,6 +213,33 @@ public class ReservationService {
      */
     private String makeReservationCode() {
         return UUID.randomUUID().toString();
+    }
+
+    /**
+     * 좌석 선점과 결제 대기 예약 생성의 상태 전이를 하나의 사건 payload로 만든다.
+     * Reservation 저장 뒤 생성해 영속 식별자를 사건에 함께 보존한다.
+     */
+    private LifecycleEventDraft reservationCreatedEvent(Reservation reservation, List<Seat> seats) {
+        List<Long> seatIds = seats.stream().map(Seat::getId).toList();
+        List<LifecycleStateChange> stateChanges = new ArrayList<>();
+        stateChanges.add(LifecycleStateChange.created(
+                LifecycleEntityType.RESERVATION,
+                reservation.getId(),
+                PENDING_PAYMENT.name()
+        ));
+        seats.forEach(seat -> stateChanges.add(LifecycleStateChange.changed(
+                LifecycleEntityType.SEAT,
+                seat.getId(),
+                AVAILABLE.name(),
+                LOCKED.name()
+        )));
+        return new LifecycleEventDraft(
+                LifecycleEventType.RESERVATION_CREATED,
+                LifecycleActorType.RESERVATION_SERVICE,
+                null,
+                null,
+                new LifecycleEventPayload(seatIds, stateChanges, "RESERVATION_CREATED")
+        );
     }
 
     /**

@@ -1,6 +1,11 @@
 package org.example.ticket.reservation.booking.service;
 
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
+import org.example.ticket.reservation.booking.dto.ReservationSeatReference;
+import org.example.ticket.lifecycle.event.LifecycleActorType;
+import org.example.ticket.lifecycle.event.LifecycleEventDraft;
+import org.example.ticket.lifecycle.event.LifecycleEventType;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
 import org.example.ticket.reservation.booking.cache.SeatMapInvalidationPublisher;
 import org.example.ticket.reservation.booking.domain.Reservation;
 import org.example.ticket.reservation.booking.domain.Seat;
@@ -10,6 +15,7 @@ import org.example.ticket.util.constant.ReservationStatus;
 import org.example.ticket.util.constant.SeatStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,6 +41,9 @@ class ReservationExpirationServiceTest {
     @Mock
     private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
 
+    @Mock
+    private LifecycleEventWriter lifecycleEventWriter;
+
     @InjectMocks
     private ReservationExpirationService reservationExpirationService;
 
@@ -54,8 +63,11 @@ class ReservationExpirationServiceTest {
                 .thenReturn(List.of(10L));
         when(reservationRepository.findByIdInForUpdate(List.of(10L)))
                 .thenReturn(List.of(reservation));
-        when(seatRepository.findIdsByReservationIds(List.of(10L)))
-                .thenReturn(List.of(11L, 12L));
+        when(seatRepository.findReservationSeatReferencesByReservationIds(List.of(10L)))
+                .thenReturn(List.of(
+                        new ReservationSeatReference(10L, 11L),
+                        new ReservationSeatReference(10L, 12L)
+                ));
         when(seatRepository.findByIdsForUpdate(List.of(11L, 12L)))
                 .thenReturn(List.of(firstSeat, secondSeat));
 
@@ -67,6 +79,7 @@ class ReservationExpirationServiceTest {
         assertThat(firstSeat.getSeatStatus()).isEqualTo(SeatStatus.AVAILABLE);
         assertThat(secondSeat.getSeatStatus()).isEqualTo(SeatStatus.AVAILABLE);
         verify(reservationRepository, never()).deleteAll(List.of(reservation));
+        assertExpirationEventRecorded(11L, 12L);
     }
 
     @Test
@@ -89,7 +102,7 @@ class ReservationExpirationServiceTest {
 
         assertThat(result).isEqualTo(ReservationExpirationResult.empty());
         assertThat(completedReservation.getReservationStatus()).isEqualTo(ReservationStatus.SUCCESS);
-        verify(seatRepository, never()).findIdsByReservationIds(List.of(10L));
+        verify(seatRepository, never()).findReservationSeatReferencesByReservationIds(List.of(10L));
     }
 
     @Test
@@ -107,8 +120,8 @@ class ReservationExpirationServiceTest {
                 .thenReturn(List.of(10L));
         when(reservationRepository.findByIdInForUpdate(List.of(10L)))
                 .thenReturn(List.of(reservation));
-        when(seatRepository.findIdsByReservationIds(List.of(10L)))
-                .thenReturn(List.of(11L));
+        when(seatRepository.findReservationSeatReferencesByReservationIds(List.of(10L)))
+                .thenReturn(List.of(new ReservationSeatReference(10L, 11L)));
         when(seatRepository.findByIdsForUpdate(List.of(11L)))
                 .thenReturn(List.of(seat));
 
@@ -118,5 +131,17 @@ class ReservationExpirationServiceTest {
         assertThat(result).isEqualTo(new ReservationExpirationResult(1, 1));
         assertThat(reservation.getReservationStatus()).isEqualTo(ReservationStatus.EXPIRED);
         assertThat(seat.getSeatStatus()).isEqualTo(SeatStatus.AVAILABLE);
+        assertExpirationEventRecorded(11L);
+    }
+
+    private void assertExpirationEventRecorded(Long... seatIds) {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<LifecycleEventDraft>> eventCaptor = ArgumentCaptor.forClass(List.class);
+        verify(lifecycleEventWriter).recordDecision(org.mockito.ArgumentMatchers.any(), eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).singleElement().satisfies(event -> {
+            assertThat(event.eventType()).isEqualTo(LifecycleEventType.RESERVATION_EXPIRED);
+            assertThat(event.actorType()).isEqualTo(LifecycleActorType.EXPIRATION_SCHEDULER);
+            assertThat(event.payload().seatIds()).containsExactly(seatIds);
+        });
     }
 }

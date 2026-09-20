@@ -2,6 +2,9 @@ package org.example.ticket.reservation.booking.service;
 
 import jakarta.persistence.EntityManager;
 import org.example.ticket.member.model.Member;
+import org.example.ticket.lifecycle.event.LifecycleEvent;
+import org.example.ticket.lifecycle.event.LifecycleEventRepository;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
 import org.example.ticket.member.repository.MemberRepository;
 import org.example.ticket.payment.constant.PaymentAttemptStatus;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
@@ -63,9 +66,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
-@DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=create")
+@DataJpaTest(properties = {
+        "spring.jpa.hibernate.ddl-auto=create",
+        "lifecycle.tracing.event-writer.enabled=true"
+})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({ReservationCompletionService.class, ReservationExpirationService.class})
+@Import({
+        ReservationCompletionService.class,
+        ReservationExpirationService.class,
+        LifecycleEventWriter.class
+})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class MySqlReservationStateRaceTest {
 
@@ -105,6 +115,9 @@ class MySqlReservationStateRaceTest {
     private PaymentAttemptRepository paymentAttemptRepository;
 
     @Autowired
+    private LifecycleEventRepository lifecycleEventRepository;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Autowired
@@ -128,6 +141,7 @@ class MySqlReservationStateRaceTest {
     @AfterEach
     void clearFixture() {
         requiresNewTransaction().executeWithoutResult(status -> {
+            lifecycleEventRepository.deleteAllInBatch();
             paymentAttemptRepository.deleteAllInBatch();
             paymentOrderRepository.deleteAllInBatch();
             entityManager.createQuery("delete from ReservedSeat").executeUpdate();
@@ -179,6 +193,8 @@ class MySqlReservationStateRaceTest {
             assertThat(finalState.paymentOrderStatus()).isEqualTo(PaymentOrderStatus.APPLIED);
             assertThat(finalState.paymentAttemptStatus()).isEqualTo(PaymentAttemptStatus.PAID);
             assertThat(finalState.reservationExists()).isTrue();
+            assertThat(eventsFor(fixture)).extracting(LifecycleEvent::getEventType)
+                    .containsExactly("PaymentApproved", "ReservationCompleted");
         } finally {
             allowCompletionCommit.countDown();
             executor.shutdownNow();
@@ -224,6 +240,12 @@ class MySqlReservationStateRaceTest {
             assertThat(finalState.paymentAttemptStatus()).isEqualTo(PaymentAttemptStatus.PAID);
             assertThat(finalState.providerTransactionId()).isEqualTo(fixture.snapshot().providerTransactionId());
             assertThat(finalState.reservationExists()).isTrue();
+            List<LifecycleEvent> events = eventsFor(fixture);
+            assertThat(events).extracting(LifecycleEvent::getEventType)
+                    .containsExactly("ReservationExpired", "PaymentApproved", "PaymentRefundPending");
+            assertThat(events.getFirst().getDecisionVersion()).isLessThan(events.get(1).getDecisionVersion());
+            assertThat(events.get(1).getCommitGroupId()).isEqualTo(events.get(2).getCommitGroupId());
+            assertThat(events.getFirst().getCommitGroupId()).isNotEqualTo(events.get(1).getCommitGroupId());
         } finally {
             allowCleanupCommit.countDown();
             executor.shutdownNow();
@@ -293,6 +315,7 @@ class MySqlReservationStateRaceTest {
                     .totalPrice(45000 * seatCount)
                     .reservationStatus(ReservationStatus.PENDING_PAYMENT)
                     .expiredTime(expiresAt)
+                    .lifecycleVersion(1L)
                     .build();
             reservation.setReservedSeats(seats.stream()
                     .map(seat -> ReservedSeat.builder()
@@ -347,6 +370,11 @@ class MySqlReservationStateRaceTest {
                     true
             );
         });
+    }
+
+    private List<LifecycleEvent> eventsFor(Fixture fixture) {
+        return requiresNewTransaction().execute(status -> lifecycleEventRepository
+                .findByLifecycleIdOrderByDecisionVersionAscEventOrdinalAsc(fixture.reservationId()));
     }
 
     private TransactionTemplate requiresNewTransaction() {

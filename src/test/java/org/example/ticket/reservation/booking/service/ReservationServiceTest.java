@@ -3,6 +3,9 @@ package org.example.ticket.reservation.booking.service;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
+import org.example.ticket.lifecycle.event.LifecycleEventDraft;
+import org.example.ticket.lifecycle.event.LifecycleEventType;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
 import org.example.ticket.reservation.booking.dto.ReservationExpirationResult;
 import org.example.ticket.reservation.booking.constant.ReservationErrorCode;
 import org.example.ticket.reservation.booking.domain.Reservation;
@@ -14,6 +17,7 @@ import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.tracing.TracingConstants;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -48,6 +52,9 @@ class ReservationServiceTest {
 
     @Mock
     private ReservationExpirationService reservationExpirationService;
+
+    @Mock
+    private LifecycleEventWriter lifecycleEventWriter;
 
     @InjectMocks
     private ReservationService reservationService;
@@ -96,6 +103,10 @@ class ReservationServiceTest {
         verify(seatService).findAndLockSeatsByPerformanceTime(10L, List.of(1L, 3L));
         verify(seatService).changeSeatsState(List.of(seat1, seat2), LOCKED);
         verify(reservationRepository).save(any(Reservation.class));
+        ArgumentCaptor<LifecycleEventDraft> eventCaptor = ArgumentCaptor.forClass(LifecycleEventDraft.class);
+        verify(lifecycleEventWriter).recordReservationCreated(any(Reservation.class), eventCaptor.capture());
+        assertThat(eventCaptor.getValue().eventType()).isEqualTo(LifecycleEventType.RESERVATION_CREATED);
+        assertThat(eventCaptor.getValue().payload().seatIds()).containsExactly(1L, 3L);
     }
 
     @Test

@@ -1,6 +1,9 @@
 package org.example.ticket.reservation.booking.service;
 
 import org.example.ticket.member.model.Member;
+import org.example.ticket.lifecycle.event.LifecycleEventDraft;
+import org.example.ticket.lifecycle.event.LifecycleEventType;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
 import org.example.ticket.payment.constant.PaymentAttemptStatus;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.dto.VerifiedPaymentSnapshot;
@@ -21,6 +24,7 @@ import org.example.ticket.util.constant.SeatInfo;
 import org.example.ticket.util.constant.SeatStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -50,6 +54,9 @@ class ReservationCompletionServiceTest {
 
     @Mock
     private SeatMapInvalidationPublisher seatMapInvalidationPublisher;
+
+    @Mock
+    private LifecycleEventWriter lifecycleEventWriter;
 
     @InjectMocks
     private ReservationCompletionService reservationCompletionService;
@@ -127,6 +134,7 @@ class ReservationCompletionServiceTest {
         verify(reservationRepository).findByIdForUpdate(10L);
         verify(seatRepository).findByIdsForUpdate(List.of(11L));
         verify(paymentOrderRepository).findByIdForUpdate(1L);
+        assertRecordedEventTypes(LifecycleEventType.PAYMENT_APPROVED, LifecycleEventType.RESERVATION_COMPLETED);
     }
 
     @Test
@@ -195,5 +203,84 @@ class ReservationCompletionServiceTest {
         assertThat(attempt.getStatus()).isEqualTo(PaymentAttemptStatus.PAID);
         assertThat(attempt.getProviderTransactionId()).isEqualTo("fake:imt-order-1");
         assertThat(response.getPaymentStatus()).isEqualTo(PaymentOrderStatus.REFUND_PENDING);
+        assertRecordedEventTypes(LifecycleEventType.PAYMENT_APPROVED, LifecycleEventType.PAYMENT_REFUND_PENDING);
+    }
+
+    @Test
+    void expiresDuringPaymentVerificationAndRecordsTheThreeEventsInOneDecision() {
+        Member owner = Member.builder()
+                .id(7L)
+                .walletAddress("0xowner")
+                .nickname("owner")
+                .role("ROLE_USER")
+                .build();
+        Seat seat = Seat.builder()
+                .id(11L)
+                .seatFloor(1)
+                .seatSection("A")
+                .seatRow(1)
+                .seatNumber(1)
+                .seatType(SeatInfo.VIP)
+                .price(45000)
+                .seatStatus(SeatStatus.LOCKED)
+                .build();
+        Reservation reservation = Reservation.builder()
+                .id(10L)
+                .member(owner)
+                .totalPrice(45000)
+                .reservationStatus(ReservationStatus.PENDING_PAYMENT)
+                .expiredTime(LocalDateTime.now().minusMinutes(1))
+                .build();
+        PaymentOrder order = PaymentOrder.builder()
+                .id(1L)
+                .reservation(reservation)
+                .member(owner)
+                .merchantOrderId("imt-order-1")
+                .amount(45000)
+                .currency("KRW")
+                .status(PaymentOrderStatus.READY)
+                .build();
+        PaymentAttempt attempt = PaymentAttempt.builder()
+                .id(2L)
+                .paymentOrder(order)
+                .attemptId("attempt-1")
+                .provider("FAKE")
+                .status(PaymentAttemptStatus.READY)
+                .build();
+
+        when(paymentOrderRepository.findReservationIdById(1L)).thenReturn(Optional.of(10L));
+        when(reservationRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(reservation));
+        when(seatRepository.findIdsByReservationIds(List.of(10L))).thenReturn(List.of(11L));
+        when(seatRepository.findByIdsForUpdate(List.of(11L))).thenReturn(List.of(seat));
+        when(paymentOrderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+        when(paymentAttemptRepository.findByProviderTransactionId("fake:imt-order-1"))
+                .thenReturn(Optional.empty());
+        when(paymentAttemptRepository.findTopByPaymentOrderIdOrderByCreatedAtDesc(1L))
+                .thenReturn(Optional.of(attempt));
+
+        reservationCompletionService.complete(
+                1L,
+                "0xOWNER",
+                new VerifiedPaymentSnapshot(
+                        "imt-order-1", "fake:imt-order-1", 45000, "KRW", LocalDateTime.now()
+                )
+        );
+
+        assertThat(reservation.getReservationStatus()).isEqualTo(ReservationStatus.EXPIRED);
+        assertThat(seat.getSeatStatus()).isEqualTo(SeatStatus.AVAILABLE);
+        assertThat(order.getStatus()).isEqualTo(PaymentOrderStatus.REFUND_PENDING);
+        assertRecordedEventTypes(
+                LifecycleEventType.PAYMENT_APPROVED,
+                LifecycleEventType.RESERVATION_EXPIRED,
+                LifecycleEventType.PAYMENT_REFUND_PENDING
+        );
+    }
+
+    private void assertRecordedEventTypes(LifecycleEventType... expected) {
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<LifecycleEventDraft>> eventCaptor = ArgumentCaptor.forClass(List.class);
+        verify(lifecycleEventWriter).recordDecision(org.mockito.ArgumentMatchers.any(), eventCaptor.capture());
+        assertThat(eventCaptor.getValue()).extracting(LifecycleEventDraft::eventType)
+                .containsExactly(expected);
     }
 }

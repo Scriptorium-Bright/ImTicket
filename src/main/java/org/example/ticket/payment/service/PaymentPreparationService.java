@@ -4,6 +4,13 @@ import lombok.RequiredArgsConstructor;
 import org.example.ticket.common.exception.BusinessException;
 import org.example.ticket.member.model.Member;
 import org.example.ticket.member.repository.MemberRepository;
+import org.example.ticket.lifecycle.event.LifecycleActorType;
+import org.example.ticket.lifecycle.event.LifecycleEntityType;
+import org.example.ticket.lifecycle.event.LifecycleEventDraft;
+import org.example.ticket.lifecycle.event.LifecycleEventPayload;
+import org.example.ticket.lifecycle.event.LifecycleEventType;
+import org.example.ticket.lifecycle.event.LifecycleEventWriter;
+import org.example.ticket.lifecycle.event.LifecycleStateChange;
 import org.example.ticket.payment.constant.PaymentAttemptStatus;
 import org.example.ticket.payment.constant.PaymentOrderStatus;
 import org.example.ticket.payment.exception.PaymentErrorCode;
@@ -26,6 +33,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +46,7 @@ public class PaymentPreparationService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final PaymentGatewayClient paymentGatewayClient;
+    private final LifecycleEventWriter lifecycleEventWriter;
 
     @Transactional
     public PaymentPrepareResponse prepare(String walletAddress, PaymentPrepareRequest request, String idempotencyKey) {
@@ -74,12 +83,14 @@ public class PaymentPreparationService {
                 .build();
         paymentOrderRepository.save(order);
 
-        paymentAttemptRepository.save(PaymentAttempt.builder()
+        PaymentAttempt attempt = PaymentAttempt.builder()
                 .paymentOrder(order)
                 .attemptId(UUID.randomUUID().toString())
                 .provider(paymentGatewayClient.provider())
                 .status(PaymentAttemptStatus.READY)
-                .build());
+                .build();
+        paymentAttemptRepository.save(attempt);
+        lifecycleEventWriter.recordDecision(reservation, List.of(paymentPreparedEvent(order, attempt)));
 
         return response(order);
     }
@@ -107,5 +118,27 @@ public class PaymentPreparationService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is unavailable", e);
         }
+    }
+
+    private LifecycleEventDraft paymentPreparedEvent(PaymentOrder order, PaymentAttempt attempt) {
+        List<LifecycleStateChange> stateChanges = List.of(
+                LifecycleStateChange.created(
+                        LifecycleEntityType.PAYMENT_ORDER,
+                        order.getId(),
+                        PaymentOrderStatus.READY.name()
+                ),
+                LifecycleStateChange.created(
+                        LifecycleEntityType.PAYMENT_ATTEMPT,
+                        attempt.getId(),
+                        PaymentAttemptStatus.READY.name()
+                )
+        );
+        return new LifecycleEventDraft(
+                LifecycleEventType.PAYMENT_PREPARED,
+                LifecycleActorType.PAYMENT_PREPARATION,
+                order.getId(),
+                attempt.getId(),
+                new LifecycleEventPayload(List.of(), stateChanges, "PAYMENT_PREPARED")
+        );
     }
 }

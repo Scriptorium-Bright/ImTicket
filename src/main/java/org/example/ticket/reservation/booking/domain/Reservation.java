@@ -46,6 +46,11 @@ public class Reservation {
     @Column(name = "reservation_expired_time")
     private LocalDateTime expiredTime;
 
+    /** Lifecycle 사건 기록이 활성화된 뒤 예약별 업무 결정을 정렬하는 단조 증가 순번이다. */
+    @Builder.Default
+    @Column(name = "lifecycle_version", nullable = false)
+    private Long lifecycleVersion = 0L;
+
     @Builder.Default
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL)
     private List<ReservedSeat> reservedSeats = new ArrayList<>();
@@ -84,6 +89,41 @@ public class Reservation {
             throw new IllegalStateException("결제 대기 예약만 만료할 수 있습니다.");
         }
         this.reservationStatus = ReservationStatus.EXPIRED;
+    }
+
+    /**
+     * 신규 예약을 추적 대상으로 전환하고 첫 업무 결정 순번을 반환한다.
+     * 생성 사건과 이 값은 같은 트랜잭션에서 저장된다.
+     */
+    public long startLifecycleTracking() {
+        if (lifecycleVersion == null || lifecycleVersion != 0L) {
+            throw new IllegalStateException("새 Reservation의 Lifecycle 순번은 0에서 시작해야 합니다.");
+        }
+        lifecycleVersion = 1L;
+        return lifecycleVersion;
+    }
+
+    /**
+     * 사건 이력이 있는 예약의 다음 업무 결정 순번을 증가시킨다.
+     * Reservation 쓰기 잠금 경계 안에서만 호출해 Lifecycle별 순서를 보존한다.
+     */
+    public long advanceLifecycleVersion() {
+        if (!isLifecycleTracked()) {
+            throw new IllegalStateException("추적 시작 전 Reservation의 Lifecycle 순번을 증가시킬 수 없습니다.");
+        }
+        if (lifecycleVersion == Long.MAX_VALUE) {
+            throw new IllegalStateException("Reservation Lifecycle 순번이 최대값에 도달했습니다.");
+        }
+        lifecycleVersion++;
+        return lifecycleVersion;
+    }
+
+    /**
+     * 이 예약이 사건 Writer 활성화 뒤 생성되어 완전한 Timeline을 가질 수 있는지 확인한다.
+     * 버전 0은 기존 데이터이므로 부분 사건을 기록하지 않는다.
+     */
+    public boolean isLifecycleTracked() {
+        return lifecycleVersion != null && lifecycleVersion > 0;
     }
 
 /*
