@@ -2,7 +2,7 @@
 
 작성일: 2026-09-20(KST)  
 기준 코드: `develop`, `47f97298cebf0fa3426a464d87b6b88b4b8e88b2`  
-현재 단계: Phase 2 사건 생성·비용 측정, Phase 3 Lifecycle 재구성 및 Phase 4 복구·Replay·원천 대조 구현 완료, 프로세스 중단·대규모 성능 검증 전
+현재 단계: Phase 2 사건 생성·비용 측정, Phase 3 Lifecycle 재구성 및 Phase 4 복구·Replay·원천 대조 구현 완료, 30,000건 Replay 성능 측정 완료, 프로세스 중단·MySQL 연결 장애 검증 전
 
 ## 1. 핵심 기준 문서
 

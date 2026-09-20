@@ -14,7 +14,7 @@
 | 4 | 실패 조건 처리와 재처리 | [계획](phase-4-failure-recovery/plan.md) | [결과](phase-4-failure-recovery/result.md) | 부분 완료 |
 | 5 | 조회 및 최종 검증 | [계획](phase-5-query-validation/plan.md) | [결과](phase-5-query-validation/result.md) | 미실행 |
 
-Phase 0은 현재 진단 비용 측정을 완료했다. 실제 업무 실행에서 사건 발생량을 계측하는 작업이 남아 있어 부분 완료로 관리한다. Phase 1은 기술 선택과 목표 구조를 승인해 완료로 기록한다. Phase 2는 트랜잭션 아웃박스 사건 원본과 결정 단위 Reader를 구현하고 MySQL 사건량·Writer 비용을 측정했다. Phase 3은 조회 모델, 멱등 적용, 순서 역전 보류와 경로 A/B 판정을 구현했다. Phase 4는 계약 오류 기록·재시도 차단, 별도 조회 모델 버전 Replay, 원천 MySQL 대조와 `CONSISTENT`·`INCOMPLETE`·`MISMATCH` 판정을 구현했다. 실제 프로세스 중단과 MySQL 연결 장애 주입, 30,000건 처리량 측정은 별도 실행이 남아 있어 부분 완료로 관리한다.
+Phase 0은 현재 진단 비용 측정을 완료했다. 실제 업무 실행에서 사건 발생량을 계측하는 작업이 남아 있어 부분 완료로 관리한다. Phase 1은 기술 선택과 목표 구조를 승인해 완료로 기록한다. Phase 2는 트랜잭션 아웃박스 사건 원본과 결정 단위 Reader를 구현하고 MySQL 사건량·Writer 비용을 측정했다. Phase 3은 조회 모델, 멱등 적용, 순서 역전 보류와 경로 A/B 판정을 구현했다. Phase 4는 계약 오류 기록·재시도 차단, 별도 조회 모델 버전 Replay, 원천 MySQL 대조와 `CONSISTENT`·`INCOMPLETE`·`MISMATCH` 판정을 구현했고, H2 격리 시험에서 30,000건 Replay 처리량을 측정했다. 실제 프로세스 중단과 MySQL 연결 장애 주입은 별도 실행이 남아 있어 부분 완료로 관리한다.
 
 ## 2. 계획 문서의 필수 내용
 

@@ -4,7 +4,7 @@
 상태: 부분 완료  
 진행 전 계획: [Phase 4 계획](plan.md)
 
-이번 실행은 조회 모델의 실패 근거, 순서·중복·지연 처리, Replay과 원천 대조를 코드와 격리된 JPA 시험으로 검증했다. 실제 프로세스 종료, MySQL 연결 장애와 30,000건 처리량은 아직 실행하지 않았다.
+이번 실행은 조회 모델의 실패 근거, 순서·중복·지연 처리, Replay과 원천 대조를 코드와 격리된 JPA 시험으로 검증했다. 30,000건 Replay 처리량도 같은 격리 시험에서 측정했다. 실제 프로세스 종료와 MySQL 연결 장애 주입은 아직 실행하지 않았다.
 
 ## 1. 실행 요약
 
@@ -14,7 +14,7 @@
 | 추가 스키마 | `V20260920_03__add_lifecycle_recovery_metadata.sql` |
 | 실행 환경 | H2 `@DataJpaTest`, Java 21, Spring Boot 3.4.4 |
 | 완료 범위 | 중복·순서 역전·지연·계약 오류·Replay·Reconciliation |
-| 미실행 범위 | 프로세스 중단 지점별 복구, MySQL 일시 연결 실패, 30,000건 Replay 성능 |
+| 미실행 범위 | 프로세스 중단 지점별 복구, MySQL 일시 연결 실패 |
 
 ## 2. 실제 변경
 
@@ -41,15 +41,33 @@
 | F-09 | 허용 전이를 벗어난 계약 사건 | `FAILED`, `CONTRACT`, 시도 횟수 1, Snapshot `MISMATCH`, 상태 부분 적용 없음 |
 | F-10 | 원천 Lifecycle 버전보다 사건 버전이 부족 | `INCOMPLETE`, 누락 결정 버전 저장 |
 | F-11 | 원천 Seat 상태를 Snapshot과 다르게 변경 | `MISMATCH`, `seatStatuses` 차이 저장 |
-| F-12 | 정상 사건 4건을 `projectionVersion=2`로 Replay | `COMPLETED`, 처리 4건, 실패 0건, 기존 버전과 상태 일치 |
+| F-12 | 정상 사건 30,000건을 `projectionVersion=2`로 Replay | `COMPLETED` 7,500건, 처리 30,000건, 실패 0건, 결과 일치율 100% |
 
 실행한 명령:
 
 ```text
 ./gradlew test --tests org.example.ticket.lifecycle.projection.LifecycleReconstructionJpaTest --tests org.example.ticket.lifecycle.projection.LifecycleRecoveryJpaTest
+./gradlew test --tests org.example.ticket.lifecycle.projection.LifecycleReplayPhase4MeasurementTest
 ```
 
-결과: 대상 시험 9건 통과.
+결과: 기존 복구 시험 9건과 30,000건 Replay 측정 시험 1건 통과.
+
+30,000건 Replay 측정 결과:
+
+| 지표 | 결과 |
+| --- | ---: |
+| 입력 사건 수 | 30,000건 |
+| Lifecycle 수 | 7,500건 |
+| Replay 완료·실패 | 7,500건·0건 |
+| 전체 처리 시간(3회 범위) | 16.949~24.000초 |
+| 처리량(3회 범위) | 초당 1,250.0~1,770.0건 |
+| Replay 지연 p50(3회 범위) | 1.413~1.701ms |
+| Replay 지연 p95(3회 범위) | 5.605~9.368ms |
+| Replay 지연 p99(3회 범위) | 14.115~21.409ms |
+| 결과 일치율 | 100% |
+| 최대 입력 대기량 | 30,000건 |
+
+처리량 시험은 H2 기반 `@DataJpaTest`에서 원본 사건을 먼저 적재한 뒤 실행했다. 동일 조건을 3회 실행해 범위로 기록했으며, 최대 입력 대기량은 큐의 운영 측정값이 아니라 Replay 시작 시점에 준비된 시험 입력량이다. 측정값은 제품 SLO가 아니라 구현 비용 기준선이다.
 
 ## 4. 저장되는 복구 근거
 
@@ -69,15 +87,15 @@
 | --- | --- |
 | F-05, F-07 | Consumer를 별도 프로세스로 실행하고 적용 전·커밋 직후 종료 지점을 주입한다. 재시작 뒤 누락·중복·부분 상태를 측정한다. |
 | F-08 | MySQL Testcontainers에 일시 연결 실패를 주입하고 오류 기록과 재연결 후 처리 재개를 확인한다. |
-| F-12 30,000건 | 동일 사건 생성기를 사용해 30,000건을 별도 Projection에 Replay하고 p95 지연·최대 대기량·결과 일치율을 측정한다. |
+| F-12 30,000건 | 완료. 30,000건을 별도 Projection에 Replay하고 p95 지연·최대 입력 대기량·결과 일치율을 측정했다. |
 | 자동 재시도 간격 | 실제 일시 오류 결과를 얻은 뒤 최대 재시도 횟수와 백오프를 확정한다. |
 
 ## 6. 판정
 
-- Phase 4의 결정적 데이터 처리 범위는 부분 완료다.
-- 중복·순서 역전·지연·계약 오류·원천 대조·소규모 Replay의 결과를 재현할 수 있다.
-- 프로세스 장애 복구와 대규모 Replay 성능은 수치 근거가 없어 완료로 표시하지 않는다.
-- 다음 실행에서는 F-05~F-08과 30,000건 Replay를 수행한 뒤 [Phase 5 계획](../phase-5-query-validation/plan.md)의 단일 조회 검증으로 이동한다.
+- Phase 4의 결정적 데이터 처리와 30,000건 Replay 성능 측정 범위는 완료했다.
+- 중복·순서 역전·지연·계약 오류·원천 대조·30,000건 Replay의 결과를 재현할 수 있다.
+- 프로세스 장애 복구와 MySQL 연결 장애는 수치 근거가 없어 남은 검증으로 관리한다.
+- 다음 실행에서는 F-05·F-07·F-08을 수행한 뒤 [Phase 5 계획](../phase-5-query-validation/plan.md)의 단일 조회 검증으로 이동한다.
 
 ## 7. 근거 문서
 
@@ -86,3 +104,4 @@
 - [Lifecycle 재구성 명세](../../lifecycle-reconstruction-spec.md)
 - `src/test/java/org/example/ticket/lifecycle/projection/LifecycleReconstructionJpaTest.java`
 - `src/test/java/org/example/ticket/lifecycle/projection/LifecycleRecoveryJpaTest.java`
+- `src/test/java/org/example/ticket/lifecycle/projection/LifecycleReplayPhase4MeasurementTest.java`
